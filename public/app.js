@@ -4,10 +4,7 @@
   const fmt = new Intl.NumberFormat("es-AR");
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* ---------- Fondo: estelas de luz suaves con parallax (tipo dark.netflix.io) ----------
-     Negro casi total + manchas de luz difusas (un sprite radial estirado) que derivan
-     lento y se separan en capas: al mover el mouse cada capa se corre distinto => parallax
-     con sensación de profundidad. */
+  /* ---------- Fondo: estelas de luz suaves con parallax (tipo dark.netflix.io) ---------- */
   const canvas = document.getElementById("bg");
   if (canvas) {
     const ctx = canvas.getContext("2d");
@@ -19,24 +16,24 @@
     (function buildSprite() {
       const S = 256; sprite.width = S; sprite.height = S;
       const g = sctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
-      g.addColorStop(0, "rgba(196,208,255,0.9)");
-      g.addColorStop(0.35, "rgba(150,170,225,0.30)");
-      g.addColorStop(1, "rgba(150,170,225,0)");
+      g.addColorStop(0, "rgba(232,233,238,0.95)");
+      g.addColorStop(0.35, "rgba(200,202,210,0.32)");
+      g.addColorStop(1, "rgba(200,202,210,0)");
       sctx.fillStyle = g;
       sctx.beginPath(); sctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); sctx.fill();
     })();
 
     function seed() {
-      const n = Math.max(8, Math.min(22, Math.round((w * h) / 90000)));
+      const n = Math.max(10, Math.min(30, Math.round((w * h) / 60000)));
       streaks = [];
       for (let i = 0; i < n; i++) {
         const depth = 0.25 + Math.random() * 0.85;
         streaks.push({
           x: Math.random() * w, y: Math.random() * h,
-          len: 180 + Math.random() * 340,
+          len: 220 + Math.random() * 420,
           thick: 0.10 + Math.random() * 0.16,
           ang: Math.random() * 0.8 - 0.4,
-          alpha: 0.05 + Math.random() * 0.10,
+          alpha: 0.06 + Math.random() * 0.11,
           depth: depth,
           vx: (Math.random() - 0.5) * 0.10 * depth,
           vy: (Math.random() - 0.5) * 0.05 * depth,
@@ -57,14 +54,14 @@
       mouse.y += (mouse.ty - mouse.y) * 0.05;
       const ox = (mouse.x / w - 0.5), oy = (mouse.y / h - 0.5);
       ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = "#06060a"; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "#060606"; ctx.fillRect(0, 0, w, h);
       ctx.globalCompositeOperation = "lighter";
       for (const s of streaks) {
         s.x += s.vx; s.y += s.vy;
         const m = s.len;
         if (s.x < -m) s.x = w + m; else if (s.x > w + m) s.x = -m;
         if (s.y < -m) s.y = h + m; else if (s.y > h + m) s.y = -m;
-        const px = s.x + ox * 130 * s.depth, py = s.y + oy * 130 * s.depth;
+        const px = s.x + ox * 160 * s.depth, py = s.y + oy * 160 * s.depth;
         ctx.save();
         ctx.translate(px, py); ctx.rotate(s.ang); ctx.globalAlpha = s.alpha;
         ctx.drawImage(sprite, -s.len / 2, -(s.len * s.thick) / 2, s.len, s.len * s.thick);

@@ -382,5 +382,6 @@
   function scheduleEgg() { setTimeout(spawnEgg, 7000 + Math.random() * 9000); }
 
   window.clickeame = openGame;
-  setTimeout(spawnEgg, 4000);
+  var _nav = document.getElementById("navGame");
+  if (_nav) _nav.addEventListener("click", function (e) { e.preventDefault(); openGame(); });
 })();
