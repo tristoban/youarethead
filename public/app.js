@@ -40,6 +40,19 @@
     if (reduce) { render(); } else { start(); }
   }
 
+  /* ---------- Glitch del título: "YOU ARE THE AD" -> "YOU ARE DEAD" cada 6s ---------- */
+  (() => {
+    if (reduce) return;
+    const heads = Array.prototype.slice.call(document.querySelectorAll(".headline, .reflection"));
+    if (!heads.length) return;
+    const NORMAL = "YOU ARE THE AD", DEAD = "YOU ARE DEAD";
+    setInterval(() => {
+      if (document.hidden) return;
+      heads.forEach((el) => { el.textContent = DEAD; el.classList.add("dead"); });
+      setTimeout(() => { heads.forEach((el) => { el.textContent = NORMAL; el.classList.remove("dead"); }); }, 500);
+    }, 6000);
+  })();
+
   /* ---------- Contador en vivo + Wishlist con OTP ---------- */
   const remainingEl = document.getElementById("remaining");
   const counterEl = document.getElementById("counter");
