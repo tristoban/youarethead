@@ -4,9 +4,8 @@
   const fmt = new Intl.NumberFormat("es-AR");
 
   const PHRASES = [
-    "YOU ARE THE AD", "PEDÍ LA REMERA", "ANOTATE", "ES TUYA",
-    "VOS QUERÉS\nLA REMERA", "NO EMPEZÓ\nEN VOS", "CLICKEAME", "A.D.",
-    "FUNCIONA MEJOR\nCUANDO CREÉS\nQUE EMPEZÓ EN VOS",
+    "OBEDECÉ", "CONSUMÍ", "CONFORMATE", "SOMETETE", "COMPRÁ", "DORMÍ",
+    "SCROLLEÁ", "YOU ARE THE AD", "REMERA", "ANOTATE", "ES TUYA", "A.D.",
   ];
   const WORDS = ["YOU", "ARE", "THE", "AD"];
 
