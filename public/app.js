@@ -66,6 +66,41 @@
     schedule();
   })();
 
+  /* ---------- Música ambiente + botón ecualizador ---------- */
+  (() => {
+    const audio = document.getElementById("snd-audio");
+    const btn = document.getElementById("snd");
+    if (!audio || !btn) return;
+    audio.volume = 0.5;
+    audio.muted = true;
+    let want = true, unlocked = false, justUnlocked = false;
+    try { if (localStorage.getItem("yath-muted") === "1") want = false; } catch (_) {}
+    function play() { const p = audio.play(); if (p && p.catch) p.catch(() => {}); }
+    function apply() {
+      audio.muted = !(want && unlocked);
+      btn.classList.toggle("playing", want);
+      btn.setAttribute("aria-pressed", want ? "true" : "false");
+      btn.setAttribute("aria-label", want ? "Silenciar música" : "Activar música");
+    }
+    function save() { try { localStorage.setItem("yath-muted", want ? "0" : "1"); } catch (_) {} }
+    if (want) play();
+    apply();
+    function unlock() {
+      if (unlocked) return;
+      unlocked = true;
+      if (want) { audio.muted = false; play(); justUnlocked = true; setTimeout(() => { justUnlocked = false; }, 350); }
+      ["pointerdown", "keydown", "touchstart", "scroll"].forEach((ev) => window.removeEventListener(ev, unlock));
+    }
+    ["pointerdown", "keydown", "touchstart", "scroll"].forEach((ev) => window.addEventListener(ev, unlock, { passive: true }));
+    btn.addEventListener("click", () => {
+      if (justUnlocked) { justUnlocked = false; apply(); return; }
+      want = !want;
+      if (want) { unlocked = true; play(); }
+      apply();
+      save();
+    });
+  })();
+
   /* ---------- Contador en vivo + Wishlist con OTP ---------- */
   const remainingEl = document.getElementById("remaining");
   const counterEl = document.getElementById("counter");
