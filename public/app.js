@@ -36,7 +36,7 @@
     }
     function fbm(x,y,z){ let v=0, amp=0.6, f=1; for(let o=0;o<3;o++){ v+=amp*noise3(x*f,y*f,z*f); f*=2; amp*=0.5; } return v; }
 
-    const SC = 12;
+    const SC = 16;
     let w=0,h=0,dpr=1,raf=0,zt=0,fw=0,fh=0;
     const fog = document.createElement("canvas");
     const fctx = fog.getContext("2d");
@@ -61,12 +61,12 @@
       const d = img.data; let p = 0;
       for (let j = 0; j < fh; j++) {
         for (let i = 0; i < fw; i++) {
-          const v = 0.6 * fbm(i * 0.065 + ox * 3.0, j * 0.065 + oy * 3.0, zt)
-                  + 0.4 * fbm(i * 0.022 + ox * 1.3, j * 0.022 + oy * 1.3, zt * 0.7);
+          const v = 0.6 * fbm(i * 0.045 + ox * 3.0, j * 0.045 + oy * 3.0, zt)
+                  + 0.4 * fbm(i * 0.016 + ox * 1.3, j * 0.016 + oy * 1.3, zt * 0.7);
           let a = (v + 1) * 0.5; a = (a - 0.5) / 0.5;
           if (a < 0) a = 0; else if (a > 1) a = 1;
           a = a * a * (3 - 2 * a);
-          d[p] = 206; d[p + 1] = 209; d[p + 2] = 216; d[p + 3] = (a * 0.42 * 255) | 0;
+          d[p] = 206; d[p + 1] = 209; d[p + 2] = 216; d[p + 3] = (a * 0.24 * 255) | 0;
           p += 4;
         }
       }
@@ -75,7 +75,7 @@
       ctx.fillStyle = "#060606"; ctx.fillRect(0, 0, w, h);
       ctx.globalCompositeOperation = "lighter";
       ctx.imageSmoothingEnabled = true;
-      ctx.filter = "blur(6px)";
+      ctx.filter = "blur(18px)";
       ctx.drawImage(fog, 0, 0, fw, fh, 0, 0, w, h);
       ctx.filter = "none";
       ctx.globalCompositeOperation = "source-over";
