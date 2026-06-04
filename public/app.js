@@ -57,16 +57,18 @@
       mouse.x += (mouse.tx - mouse.x) * 0.05;
       mouse.y += (mouse.ty - mouse.y) * 0.05;
       const ox = (mouse.x / w - 0.5), oy = (mouse.y / h - 0.5);
+      const ar = h / w;
       zt += 0.0016;
       const d = img.data; let p = 0;
       for (let j = 0; j < fh; j++) {
         for (let i = 0; i < fw; i++) {
-          const v = 0.6 * fbm(i * 0.045 + ox * 3.0, j * 0.045 + oy * 3.0, zt)
-                  + 0.4 * fbm(i * 0.016 + ox * 1.3, j * 0.016 + oy * 1.3, zt * 0.7);
-          let a = (v + 1) * 0.5; a = (a - 0.5) / 0.5;
+          const u = i / fw, vv = j / fh;
+          const v = 0.6 * fbm(u * 2.6 + ox * 0.6, vv * 2.6 * ar + oy * 0.6, zt)
+                  + 0.4 * fbm(u * 1.1 + ox * 0.25, vv * 1.1 * ar + oy * 0.25, zt * 0.7 + 11.3);
+          let a = (v + 1) * 0.5; a = (a - 0.42) / 0.58;
           if (a < 0) a = 0; else if (a > 1) a = 1;
           a = a * a * (3 - 2 * a);
-          d[p] = 206; d[p + 1] = 209; d[p + 2] = 216; d[p + 3] = (a * 0.24 * 255) | 0;
+          d[p] = 206; d[p + 1] = 209; d[p + 2] = 216; d[p + 3] = (a * 0.28 * 255) | 0;
           p += 4;
         }
       }
