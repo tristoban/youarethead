@@ -12,6 +12,27 @@ const ONE_PER_IP = (process.env.ONE_PER_IP ?? 'true').toLowerCase() !== 'false';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Filtro de alias del leaderboard: nada ofensivo. Única excepción permitida: CULOS / CULO / ASS.
+const ALLOWED_RUDE = new Set(['culos', 'culo', 'ass']);
+const BANNED = [
+  'puto', 'puta', 'ptm', 'reputo', 'trolo', 'trola', 'concha', 'conchud', 'conchetu', 'ctm',
+  'pija', 'pijud', 'verga', 'vergon', 'choto', 'chota', 'forro', 'forra', 'pelotud', 'boludo',
+  'sorete', 'mogolic', 'subnormal', 'imbecil', 'idiota', 'estupid', 'tarado', 'tarada',
+  'maricon', 'marica', 'putazo', 'trava', 'cornud', 'violad', 'pedofil', 'zoofil',
+  'nazi', 'hitler', 'genocid', 'culiao', 'culiado', 'culeao', 'mamahuevo', 'mierda', 'cabron',
+  'gilipolla', 'huevon', 'fuck', 'fuk', 'fck', 'shit', 'bitch', 'cunt', 'nigger', 'nigga',
+  'faggot', 'whore', 'slut', 'retard', 'rapist', 'rape', 'asshole',
+];
+function offensiveAlias(s: string): boolean {
+  const norm = s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[1!|]/g, 'i').replace(/0/g, 'o').replace(/3/g, 'e').replace(/4/g, 'a')
+    .replace(/5/g, 's').replace(/7/g, 't').replace(/@/g, 'a').replace(/\$/g, 's')
+    .replace(/[^a-z]/g, '');
+  if (!norm) return false;
+  if (ALLOWED_RUDE.has(norm)) return false;
+  return BANNED.some((w) => norm.includes(w));
+}
+
 export interface Db {
   query(text: string, params?: unknown[]): Promise<{ rows: Array<Record<string, unknown>> }>;
 }
@@ -134,6 +155,9 @@ export function buildApp(db: Db): FastifyInstance {
       ? body.alias.trim().replace(/[^\p{L}\p{N} _.\-]/gu, '').slice(0, 12).trim()
       : '';
     if (!alias) alias = 'ANON';
+    if (offensiveAlias(alias)) {
+      return reply.code(400).send({ ok: false, error: 'bad_alias', message: 'Ese alias no se puede usar.' });
+    }
     const score = typeof body.score === 'number' && Number.isFinite(body.score) ? Math.floor(body.score) : NaN;
     const emailRaw = typeof body.email === 'string' ? body.email.trim() : '';
 
