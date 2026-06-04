@@ -172,15 +172,16 @@ export function buildApp(db: Db): FastifyInstance {
     const ua = (req.headers['user-agent'] ?? '').toString().slice(0, 300);
 
     await db.query('INSERT INTO scores (alias, score, email_norm, ip_hash) VALUES ($1, $2, $3, $4)', [alias, score, emailNorm, ipHash]);
-    await db.query(
-      'INSERT INTO wishlist (email, email_norm, ip_hash, user_agent) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+    const wlRes = await db.query(
+      'INSERT INTO wishlist (email, email_norm, ip_hash, user_agent) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING id',
       [emailRaw, emailNorm, ONE_PER_IP ? ipHash : null, ua],
     );
+    const wishlistAdded = wlRes.rows.length > 0;
 
     const rankRes = await db.query('SELECT count(*) AS c FROM scores WHERE score > $1', [score]);
     const rank = Number((rankRes.rows[0]?.c as string | number | bigint | undefined) ?? 0) + 1;
     const stats = await getStats(db);
-    return reply.code(201).send({ ok: true, rank, alias, score, scores: await topScores(db), wishlist: stats });
+    return reply.code(201).send({ ok: true, rank, alias, score, scores: await topScores(db), wishlist: stats, wishlistAdded });
   });
 
   app.register(fastifyStatic, { root: join(__dirname, '..', 'public'), index: ['index.html'] });
