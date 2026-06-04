@@ -174,7 +174,6 @@
       '<div class="yg-final">PUNTOS: ' + fmt.format(finalScore) + '</div>' +
       '<div class="yg-form">' +
         '<input id="yg-alias" maxlength="12" placeholder="tu alias" autocomplete="off">' +
-        '<input id="yg-email" type="email" placeholder="tu@email.com" autocomplete="email">' +
         '<button class="yg-btn" id="yg-save">GUARDAR RÉCORD</button>' +
         '<div class="yg-msg" id="yg-save-msg"></div>' +
       '</div>' +
@@ -203,20 +202,14 @@
   async function saveScore() {
     if (savedThisRun) return;
     const alias = (document.getElementById("yg-alias").value || "").trim();
-    const email = (document.getElementById("yg-email").value || "").trim();
     const msg = document.getElementById("yg-save-msg");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msg.className = "yg-msg err"; msg.textContent = "Poné un mail válido."; return; }
     const btn = document.getElementById("yg-save"); btn.disabled = true; const lbl = btn.textContent; btn.textContent = "...";
     try {
-      const r = await fetch("/api/score", { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ alias, email, score: finalScore }) });
+      const r = await fetch("/api/score", { method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ alias, score: finalScore }) });
       const d = await r.json();
       if (r.ok) {
         savedThisRun = true; btn.textContent = "GUARDADO"; msg.className = "yg-msg ok";
-        let extra = "";
-        if (d.wishlistPending) extra = " Te mandamos un mail para confirmar y sumar a la lista.";
-        else if (d.wishlistConfirmed) extra = " Tu mail ya estaba confirmado.";
-        if (d.wishlist) updateLanding(d.wishlist);
-        msg.textContent = "¡Puesto #" + d.rank + "!" + extra;
+        msg.textContent = "¡Puesto #" + d.rank + "!";
         renderLB(d.scores || []);
       } else { btn.disabled = false; btn.textContent = lbl; msg.className = "yg-msg err"; msg.textContent = d.message || "No se pudo guardar."; }
     } catch (_) { btn.disabled = false; btn.textContent = lbl; msg.className = "yg-msg err"; msg.textContent = "Algo se rompió. Probá de nuevo."; }

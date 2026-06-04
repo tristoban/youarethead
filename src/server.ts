@@ -229,18 +229,12 @@ export function buildApp(db: Db): FastifyInstance {
     if (!alias) alias = 'ANON';
     if (offensiveAlias(alias)) return reply.code(400).send({ ok: false, error: 'bad_alias', message: 'Ese alias no se puede usar.' });
     const score = typeof body.score === 'number' && Number.isFinite(body.score) ? Math.floor(body.score) : NaN;
-    const emailRaw = typeof body.email === 'string' ? body.email.trim() : '';
     if (!Number.isInteger(score) || score < 0 || score > 10000000) return reply.code(400).send({ ok: false, error: 'bad_score', message: 'Puntaje inválido.' });
-    if (!emailRaw || emailRaw.length > 254 || !EMAIL_RE.test(emailRaw)) return reply.code(400).send({ ok: false, error: 'invalid_email', message: 'Ese mail no parece válido.' });
     const ipHash = hashIp(getClientIp(req));
-    const ua = (req.headers['user-agent'] ?? '').toString().slice(0, 300);
-    await db.query('INSERT INTO scores (alias, score, email_norm, ip_hash) VALUES ($1, $2, $3, $4)', [alias, score, emailRaw.toLowerCase(), ipHash]);
-    const wl = await upsertPending(db, emailRaw, getClientIp(req), ua);
-    if (wl.code && wl.token) await sendConfirmEmail(emailRaw, wl.code, wl.token);
+    await db.query('INSERT INTO scores (alias, score, ip_hash) VALUES ($1, $2, $3)', [alias, score, ipHash]);
     const rankRes = await db.query('SELECT count(*) AS c FROM scores WHERE score > $1', [score]);
     const rank = Number((rankRes.rows[0]?.c as string | number | bigint | undefined) ?? 0) + 1;
-    const stats = await getStats(db);
-    return reply.code(201).send({ ok: true, rank, alias, score, scores: await topScores(db), wishlist: stats, wishlistPending: wl.status === 'created' || wl.status === 'resent', wishlistConfirmed: wl.status === 'confirmed' });
+    return reply.code(201).send({ ok: true, rank, alias, score, scores: await topScores(db) });
   });
 
   app.get('/api/confirm', async (req, reply) => {
