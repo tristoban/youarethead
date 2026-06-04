@@ -334,6 +334,12 @@
         else if (act === "down") softDrop(); else if (act === "rot") rotate(); else if (act === "drop") hardDrop();
       });
     });
+
+    var _tx = 0, _ty = 0, _tt = 0, _ax = 0, _ay = 0, _mv = false;
+    function _sp() { const r = canvas.getBoundingClientRect(); return Math.max(18, r.width / COLS); }
+    canvas.addEventListener("touchstart", function (e) { const t = e.touches[0]; _tx = t.clientX; _ty = t.clientY; _tt = Date.now(); _ax = 0; _ay = 0; _mv = false; }, { passive: true });
+    canvas.addEventListener("touchmove", function (e) { if (over || paused) return; const t = e.touches[0]; const sp = _sp(); _ax += t.clientX - _tx; _ay += t.clientY - _ty; _tx = t.clientX; _ty = t.clientY; while (_ax >= sp) { move(1); _ax -= sp; _mv = true; } while (_ax <= -sp) { move(-1); _ax += sp; _mv = true; } while (_ay >= sp) { softDrop(); _ay -= sp; _mv = true; } e.preventDefault(); }, { passive: false });
+    canvas.addEventListener("touchend", function () { if (!_mv && (Date.now() - _tt) < 220) rotate(); }, { passive: true });
   }
 
   function openGame() {

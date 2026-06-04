@@ -4,24 +4,20 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>YOU ARE THE AD</title>
-  <meta name="description" content="La remera que solo se lee en el espejo. Anotate en la lista: cuando lleguemos a 10.000, sale a la venta." />
+  <meta name="description" content="La remera que te muestra lo que realmente sos. Anotate: cuando lleguemos a 10.000, sale a la venta." />
   <meta name="theme-color" content="#06060a" />
 
-  <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="YOU ARE THE AD" />
-  <meta property="og:description" content="La remera que solo se lee en el espejo. Faltan los que faltan para que vos seas la AD." />
+  <meta property="og:description" content="La remera que te muestra lo que realmente sos. Faltan los que faltan para que vos seas la AD." />
   <meta property="og:url" content="https://youarethead.com.ar" />
-  <meta property="og:image" content="/og.png" />
+  <meta property="og:image" content="/pic1.png" />
   <meta name="twitter:card" content="summary_large_image" />
 
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-
-  <!-- Montserrat (Inter-ish fallback) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap" rel="stylesheet" />
-
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/game.css" />
 </head>
@@ -30,77 +26,117 @@
   <div class="grain" aria-hidden="true"></div>
   <div class="vignette" aria-hidden="true"></div>
 
+  <header class="nav">
+    <a class="brand" href="#inicio">youarethead.com.ar</a>
+    <nav class="nav-links">
+      <a href="#inicio">Inicio</a>
+      <a href="#producto">Producto</a>
+      <a class="nav-cta" href="#inicio">Anotarme</a>
+    </nav>
+  </header>
+
   <main>
-    <section class="hero">
-      <p class="eyebrow">youarethead.com.ar</p>
+    <section class="hero" id="inicio">
+      <div class="inner hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">No es ropa. Es un espejo.</p>
+          <h1 class="headline">YOU ARE THE AD</h1>
+          <div class="reflection" aria-hidden="true">YOU ARE THE AD</div>
+          <p class="sub">La remera que te muestra lo que realmente sos.</p>
 
-      <div class="title-wrap">
-        <h1 class="headline">YOU ARE THE AD</h1>
-        <div class="reflection" aria-hidden="true">YOU ARE THE AD</div>
-      </div>
+          <div class="counter" id="counter">
+            <span class="counter-pre">Faltan</span>
+            <span class="counter-num" id="remaining">10.000</span>
+            <span class="counter-post">para que vos seas <span class="ad">la AD</span></span>
+          </div>
+          <div class="counter unlocked hidden" id="unlocked">
+            <span class="counter-pre">Ya está.</span>
+            <span class="counter-post">Salió a la venta.</span>
+            <a class="buy" id="buyBtn" href="#comprar">Comprar la mía</a>
+          </div>
 
-      <p class="sub">La remera que solo se lee en el espejo.</p>
+          <form id="form" class="form" novalidate>
+            <input id="email" class="email" type="email" inputmode="email" autocomplete="email"
+                   placeholder="tucorreo@email.com" aria-label="Tu email" required />
+            <button id="submit" class="submit" type="submit">Anotarme</button>
+          </form>
+          <p class="msg" id="msg" role="status" aria-live="polite"></p>
+          <p class="micro">Un mail por persona. Cuando el contador llegue a 0, sale a la venta. Pauta.</p>
+        </div>
 
-      <div class="counter" id="counter">
-        <span class="counter-pre">Faltan</span>
-        <span class="counter-num" id="remaining">—</span>
-        <span class="counter-post">para que vos seas <span class="ad">la AD</span></span>
-      </div>
-
-      <div class="counter unlocked hidden" id="unlocked">
-        <span class="counter-pre">Ya está.</span>
-        <span class="counter-post">Salió a la venta.</span>
-        <a class="buy" id="buyBtn" href="#comprar">Comprar la mía</a>
-      </div>
-
-      <form id="form" class="form" novalidate>
-        <input id="email" class="email" type="email" inputmode="email" autocomplete="email"
-               placeholder="tu@email.com" aria-label="Tu email" required />
-        <button id="submit" class="submit" type="submit">Anotarme</button>
-      </form>
-
-      <p class="msg" id="msg" role="status" aria-live="polite"></p>
-      <p class="micro">Un mail por persona. Cuando el contador llega a 0, sale a la venta. Posta.</p>
-    </section>
-
-    <section class="shirt" id="remera">
-      <div class="tee-wrap">
-        <svg class="tee" viewBox="0 0 520 560" role="img"
-             aria-label="Remera negra con la frase YOU ARE THE AD impresa al revés">
-          <defs>
-            <linearGradient id="teeShade" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#16161f" />
-              <stop offset="1" stop-color="#0a0a0f" />
-            </linearGradient>
-          </defs>
-          <path class="tee-body"
-            d="M150,110 L205,100 C225,135 295,135 315,100 L370,110 L470,150 L500,235 L440,262 L408,238 L408,520 C408,528 402,534 394,534 L126,534 C118,534 112,528 112,520 L112,238 L80,262 L20,235 L50,150 Z"
-            fill="url(#teeShade)" stroke="rgba(255,255,255,.14)" stroke-width="1.5" />
-          <path class="tee-collar" d="M205,100 C225,135 295,135 315,100"
-            fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2" />
-          <g transform="translate(260,288) scale(-1,1)">
-            <text class="tee-text" text-anchor="middle" font-size="40" font-weight="800"
-                  letter-spacing="1.5" fill="#f5f5f7">
-              <tspan x="0" dy="0">YOU ARE</tspan>
-              <tspan x="0" dy="44">THE AD</tspan>
-            </text>
-          </g>
-        </svg>
-        <p class="tee-caption">(se lee en el espejo)</p>
-      </div>
-
-      <div class="shirt-copy">
-        <h2>La remera</h2>
-        <p>Negra. La frase en blanco, chiquita en el pecho. Impresa al revés: solo se lee
-           de verdad cuando te mirás al espejo.</p>
-        <p class="muted">Si la piden 10.000 personas, sale a la venta. Pedir una es levantar
-           la mano para anotarte en la próxima campaña.</p>
+        <div class="hero-art">
+          <img src="/pic1.png" alt="Remera negra con la frase YOU ARE THE AD impresa al revés" />
+        </div>
       </div>
     </section>
 
-    <footer>
-      <p class="footer-line">"Funciona mejor cuando creés que empezó en vos."</p>
-      <p class="footer-meta">youarethead.com.ar &middot; A.D.</p>
+    <section class="features">
+      <div class="inner features-grid">
+        <div class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <ellipse cx="12" cy="12" rx="6.5" ry="9" /><path d="M9 7.5c-1.4 1.3-1.4 3.7 0 5" />
+          </svg>
+          <h3>Solo se lee en el espejo</h3>
+          <p>Un recordatorio diario que empieza por vos.</p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2.5 21 7v10l-9 4.5L3 17V7z" /><path d="M3.3 7 12 11.7 20.7 7" /><path d="M12 11.7V21.5" />
+          </svg>
+          <h3>Edición limitada</h3>
+          <p>No hay stock. Hay intención.</p>
+        </div>
+        <div class="feature">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 14.2A8 8 0 1 1 9.8 4 6.3 6.3 0 0 0 20 14.2z" />
+          </svg>
+          <h3>Primera merch de InsomnioCrónico</h3>
+          <p>Empezó en un video. Termina en vos.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="product" id="producto">
+      <div class="inner product-grid">
+        <div class="product-art">
+          <img src="/pic2.png" alt="Detalle de la estampa de la remera, legible en el espejo" />
+        </div>
+        <div class="product-copy">
+          <p class="eyebrow">La remera</p>
+          <h2>Hecha para recordar<br>quién sos.</h2>
+          <p class="lead">Pesada, cómoda y real. Como los mensajes que importan. Cada detalle pensado para que dure.</p>
+          <dl class="specs">
+            <div class="spec"><dt>Material</dt><dd>100% algodón</dd></div>
+            <div class="spec"><dt>Gramaje</dt><dd>240 GSM</dd></div>
+            <div class="spec"><dt>Calce</dt><dd>Oversize</dd></div>
+            <div class="spec"><dt>Color</dt><dd>Negro profundo</dd></div>
+            <div class="spec"><dt>Estampa</dt><dd>Frontal, solo legible en espejo</dd></div>
+            <div class="spec"><dt>Origen</dt><dd>Hecha con intención</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <section class="manifesto">
+      <div class="inner manifesto-grid">
+        <div class="manifesto-copy">
+          <p class="eyebrow">Manifiesto</p>
+          <h2>No buscamos atención.<br>Buscamos reflejo.</h2>
+          <p>Vivimos en un mundo lleno de ruido y mensajes que no nos representan. Esta remera no
+             grita nada. Funciona mejor cuando creés que empezó en vos. Subí una selfie a tu red
+             social favorita aceptando que la publicidad sos vos.</p>
+        </div>
+        <div class="manifesto-art">
+          <img src="/pic3.png" alt="La remera reflejada en un espejo" />
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="inner">
+        <p class="footer-line">"Funciona mejor cuando creés que empezó en vos."</p>
+        <p class="footer-meta">youarethead.com.ar &middot; A.D.</p>
+      </div>
     </footer>
   </main>
 
