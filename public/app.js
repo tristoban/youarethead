@@ -16,24 +16,24 @@
     (function buildSprite() {
       const S = 256; sprite.width = S; sprite.height = S;
       const g = sctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
-      g.addColorStop(0, "rgba(232,233,238,0.95)");
-      g.addColorStop(0.35, "rgba(200,202,210,0.32)");
-      g.addColorStop(1, "rgba(200,202,210,0)");
+      g.addColorStop(0, "rgba(236,238,243,1)");
+      g.addColorStop(0.32, "rgba(206,209,217,0.45)");
+      g.addColorStop(1, "rgba(206,209,217,0)");
       sctx.fillStyle = g;
       sctx.beginPath(); sctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); sctx.fill();
     })();
 
     function seed() {
-      const n = Math.max(10, Math.min(30, Math.round((w * h) / 60000)));
+      const n = Math.max(14, Math.min(40, Math.round((w * h) / 70000)));
       streaks = [];
       for (let i = 0; i < n; i++) {
         const depth = 0.25 + Math.random() * 0.85;
         streaks.push({
           x: Math.random() * w, y: Math.random() * h,
-          len: 220 + Math.random() * 420,
+          len: 400 + Math.random() * 900,
           thick: 0.10 + Math.random() * 0.16,
           ang: Math.random() * 0.8 - 0.4,
-          alpha: 0.06 + Math.random() * 0.11,
+          alpha: 0.08 + Math.random() * 0.14,
           depth: depth,
           vx: (Math.random() - 0.5) * 0.10 * depth,
           vy: (Math.random() - 0.5) * 0.05 * depth,
@@ -61,7 +61,7 @@
         const m = s.len;
         if (s.x < -m) s.x = w + m; else if (s.x > w + m) s.x = -m;
         if (s.y < -m) s.y = h + m; else if (s.y > h + m) s.y = -m;
-        const px = s.x + ox * 160 * s.depth, py = s.y + oy * 160 * s.depth;
+        const px = s.x + ox * 200 * s.depth, py = s.y + oy * 200 * s.depth;
         ctx.save();
         ctx.translate(px, py); ctx.rotate(s.ang); ctx.globalAlpha = s.alpha;
         ctx.drawImage(sprite, -s.len / 2, -(s.len * s.thick) / 2, s.len, s.len * s.thick);
