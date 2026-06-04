@@ -12,9 +12,11 @@
 }
 
 * { box-sizing: border-box; }
+html { background: var(--bg); }
+body { background: transparent; }
 html, body {
   margin: 0; padding: 0;
-  background: var(--bg); color: var(--ink);
+  color: var(--ink);
   font-family: "Montserrat", system-ui, -apple-system, Segoe UI, sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
