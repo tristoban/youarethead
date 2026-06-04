@@ -1,0 +1,191 @@
+/* ====== CLICKEAME — Tetris arcade (estilo Scott Pilgrim) ====== */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+/* ---- Ficha flotante (easter egg) ---- */
+.yg-egg {
+  position: fixed;
+  z-index: 6;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.yg-egg svg { pointer-events: auto; cursor: pointer; filter: drop-shadow(0 0 10px currentColor); }
+.yg-egg .yg-word {
+  font-family: "Press Start 2P", monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #2ee6ff;
+  text-shadow: 0 0 8px rgba(46,230,255,.7);
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* ---- Overlay del juego ---- */
+#yg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: radial-gradient(120% 120% at 50% 20%, #14091f 0%, #06060a 70%);
+  font-family: "Montserrat", system-ui, sans-serif;
+  color: #fff;
+  overflow: auto;
+}
+#yg-overlay.yg-open { display: flex; }
+#yg-overlay::before {
+  content: "";
+  position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 1px, transparent 1px 3px);
+  mix-blend-mode: overlay;
+}
+
+.yg-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 220px;
+  gap: 18px;
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(8,7,16,.7);
+  border: 2px solid #a05cff;
+  box-shadow: 0 0 0 2px #06060a, 0 0 40px rgba(160,92,255,.4), inset 0 0 30px rgba(46,230,255,.06);
+}
+.yg-shake { animation: yg-shake .18s linear; }
+@keyframes yg-shake {
+  0%,100% { transform: translate(0,0); }
+  25% { transform: translate(-4px,2px); }
+  50% { transform: translate(3px,-3px); }
+  75% { transform: translate(-2px,-2px); }
+}
+
+.yg-boardwrap { position: relative; }
+#yg-board {
+  display: block;
+  width: auto;
+  height: min(74vh, 600px);
+  aspect-ratio: 1 / 2;
+  background: #04040a;
+  border: 2px solid #2ee6ff;
+  border-radius: 6px;
+  box-shadow: inset 0 0 24px rgba(46,230,255,.12), 0 0 18px rgba(46,230,255,.25);
+  image-rendering: pixelated;
+  touch-action: none;
+}
+
+/* popup de combos */
+.yg-pop {
+  position: absolute; left: 50%; top: 42%;
+  transform: translate(-50%,-50%) scale(.6) rotate(-6deg);
+  font-family: "Press Start 2P", monospace;
+  font-size: 22px; color: #ffe94d;
+  text-shadow: 0 0 12px #ff2e88, 3px 3px 0 #ff2e88;
+  opacity: 0; pointer-events: none; white-space: nowrap;
+}
+.yg-pop.yg-go { animation: yg-pop .7s ease-out; }
+@keyframes yg-pop {
+  0% { opacity: 0; transform: translate(-50%,-50%) scale(.4) rotate(-12deg); }
+  30% { opacity: 1; transform: translate(-50%,-50%) scale(1.15) rotate(4deg); }
+  100% { opacity: 0; transform: translate(-50%,-90%) scale(1) rotate(-2deg); }
+}
+
+/* panel lateral */
+.yg-side { display: flex; flex-direction: column; gap: 14px; }
+.yg-title {
+  font-family: "Press Start 2P", monospace; font-size: 16px; line-height: 1.5;
+  color: #ff2e88; text-shadow: 2px 2px 0 #2ee6ff;
+}
+.yg-stat { font-family: "Press Start 2P", monospace; font-size: 10px; color: #9a9aae; line-height: 1.7; }
+.yg-stat b { display: block; font-size: 18px; color: #fff; margin-top: 3px; text-shadow: 0 0 8px rgba(255,255,255,.4); }
+#yg-next { display: block; background: #04040a; border: 1px solid rgba(255,255,255,.15); border-radius: 6px; }
+
+.yg-hint { font-size: 11px; color: #6c6c80; line-height: 1.6; }
+.yg-hint kbd {
+  font-family: "Press Start 2P", monospace; font-size: 8px;
+  background: #1a1726; border: 1px solid #3a3550; border-radius: 4px; padding: 2px 4px; color: #cfd3ff;
+}
+
+/* botones */
+.yg-btn {
+  font-family: "Press Start 2P", monospace; font-size: 10px;
+  background: #ff2e88; color: #06060a; border: 0; border-radius: 8px;
+  padding: 12px 14px; cursor: pointer; text-transform: uppercase;
+  box-shadow: 0 4px 0 #a01a56; transition: transform .06s, box-shadow .06s;
+}
+.yg-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #a01a56; }
+.yg-btn.yg-cyan { background: #2ee6ff; box-shadow: 0 4px 0 #157a8c; }
+.yg-btn.yg-cyan:active { box-shadow: 0 1px 0 #157a8c; }
+.yg-btn.yg-ghost { background: transparent; color: #cfd3ff; border: 1px solid #3a3550; box-shadow: none; }
+
+.yg-close { position: absolute; top: 10px; right: 12px; background: none; border: 0; color: #9a9aae; font-size: 24px; cursor: pointer; z-index: 3; }
+.yg-close:hover { color: #fff; }
+
+/* controles touch */
+.yg-pad { display: none; grid-template-columns: repeat(4,1fr); gap: 8px; margin-top: 12px; }
+.yg-pad button {
+  font-size: 18px; padding: 14px 0; border-radius: 10px;
+  background: #1a1726; color: #fff; border: 1px solid #3a3550; cursor: pointer;
+}
+.yg-pad button:active { background: #2a2540; }
+
+/* pantalla de game over / start */
+.yg-screen {
+  position: absolute; inset: 0; z-index: 2;
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; text-align: center; padding: 18px;
+  background: rgba(4,4,10,.88); border-radius: 12px;
+}
+.yg-screen.yg-show { display: flex; }
+.yg-screen h2 { font-family: "Press Start 2P", monospace; font-size: 20px; margin: 0; color: #ff2e88; text-shadow: 2px 2px 0 #2ee6ff; }
+.yg-screen .yg-final { font-family: "Press Start 2P", monospace; font-size: 14px; color: #ffe94d; }
+.yg-warn { font-size: 10px; color: #6c6c80; max-width: 280px; }
+
+.yg-form { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 280px; }
+.yg-form input {
+  background: rgba(255,255,255,.05); border: 1px solid #3a3550; border-radius: 8px;
+  padding: 10px 12px; color: #fff; font: inherit; outline: none; text-align: center;
+}
+.yg-form input:focus { border-color: #2ee6ff; box-shadow: 0 0 0 3px rgba(46,230,255,.15); }
+.yg-msg { font-size: 12px; min-height: 1.2em; }
+.yg-msg.ok { color: #8cff3a; }
+.yg-msg.err { color: #ff6b6b; }
+
+/* leaderboard */
+.yg-lb { width: 100%; max-width: 300px; text-align: left; font-size: 13px; }
+.yg-lb h3 { font-family: "Press Start 2P", monospace; font-size: 11px; color: #2ee6ff; margin: 0 0 8px; }
+.yg-lb ol { margin: 0; padding: 0; list-style: none; counter-reset: r; }
+.yg-lb li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.08); counter-increment: r; }
+.yg-lb li::before { content: counter(r) "."; color: #6c6c80; width: 22px; }
+.yg-lb .yg-a { flex: 1; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yg-lb .yg-s { color: #ffe94d; font-variant-numeric: tabular-nums; }
+
+/* flash subliminal */
+#yg-flash {
+  position: fixed; inset: 0; z-index: 10001; pointer-events: none;
+  display: none; align-items: center; justify-content: center;
+  background: #fff;
+}
+#yg-flash.yg-on { display: flex; }
+#yg-flash.yg-inv { background: #06060a; }
+#yg-flash span {
+  font-family: "Press Start 2P", monospace; font-size: clamp(20px, 6vw, 64px);
+  color: #06060a; text-align: center; padding: 0 20px; letter-spacing: 1px;
+}
+#yg-flash.yg-inv span { color: #fff; }
+
+@media (max-width: 720px) {
+  .yg-shell { grid-template-columns: 1fr; }
+  .yg-side { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .yg-pad { display: grid; }
+  .yg-hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .yg-shake, .yg-pop.yg-go { animation: none; }
+}

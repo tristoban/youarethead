@@ -69,7 +69,27 @@ WISHLIST_GOAL = 10000
 
 ---
 
-## 3) Dominio en Cloudflare (youarethead.com.ar)
+## 3) Dominio: Cloudflare + nic.ar (youarethead.com.ar)
+
+Tu dominio está en nic.ar, así que primero hay que delegárselo a Cloudflare (cambiar los
+nameservers) y después cargar los registros. Arrancá esto en paralelo al deploy: la
+propagación en .ar puede tardar de minutos a unas horas.
+
+### 3.1 — Sumá el dominio a Cloudflare
+
+1. cloudflare.com → login → **Add a site** → `youarethead.com.ar` → plan **Free**.
+2. Cloudflare te da **2 nameservers** (tipo `gina.ns.cloudflare.com` y `rick.ns.cloudflare.com`).
+   Anotá esos dos.
+
+### 3.2 — Cambiá los nameservers en nic.ar
+
+1. Entrá a **nic.ar** con tu Clave Fiscal (AFIP).
+2. **Mis dominios** → `youarethead.com.ar` → **Editar delegación** (servidores DNS).
+3. Borrá los DNS que tenga y poné los **2 de Cloudflare**. Guardá.
+4. Esperá: Cloudflare te manda un mail cuando el dominio queda **Active** (ahí ya maneja
+   el DNS Cloudflare).
+
+### 3.3 — Apuntá a Railway
 
 1. En Railway, servicio web → **Settings** → **Networking** → **Custom Domain** →
    escribí `youarethead.com.ar` y (opcional) `www.youarethead.com.ar`.
