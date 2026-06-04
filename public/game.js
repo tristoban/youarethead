@@ -213,11 +213,9 @@
       if (r.ok) {
         savedThisRun = true; btn.textContent = "GUARDADO"; msg.className = "yg-msg ok";
         let extra = "";
-        if (d.wishlist && typeof d.wishlist.remaining === "number") {
-          if (d.wishlistAdded) extra = d.wishlist.unlocked ? " ¡Ya salió a la venta!" : " Sumaste tu mail: faltan " + fmt.format(d.wishlist.remaining) + ".";
-          else extra = " Tu mail ya estaba en la lista.";
-          updateLanding(d.wishlist);
-        }
+        if (d.wishlistPending) extra = " Te mandamos un mail para confirmar y sumar a la lista.";
+        else if (d.wishlistConfirmed) extra = " Tu mail ya estaba confirmado.";
+        if (d.wishlist) updateLanding(d.wishlist);
         msg.textContent = "¡Puesto #" + d.rank + "!" + extra;
         renderLB(d.scores || []);
       } else { btn.disabled = false; btn.textContent = lbl; msg.className = "yg-msg err"; msg.textContent = d.message || "No se pudo guardar."; }
