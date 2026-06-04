@@ -30,6 +30,9 @@
   let best = Number(localStorage.getItem("yg_best") || 0);
   let raf = 0, running = false, paused = false, over = false, savedThisRun = false, lastDrop = 0;
 
+  const vpMeta = document.querySelector('meta[name="viewport"]');
+  const vpDefault = vpMeta ? vpMeta.getAttribute("content") : null;
+
   function resetBoard() { board = []; for (let y=0;y<ROWS;y++) board.push(new Array(COLS).fill(0)); }
   function bagNext() {
     if (bag.length === 0) { bag = KEYS.slice(); for (let i=bag.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=bag[i]; bag[i]=bag[j]; bag[j]=t; } }
@@ -97,15 +100,28 @@
     setTimeout(() => { flashEl.classList.remove("yg-on"); setTimeout(runFlash, 300); }, 80);
   }
   function shake() { if (reduce || !shell) return; shell.classList.remove("yg-shake"); void shell.offsetWidth; shell.classList.add("yg-shake"); }
-  function popup(n) { if (!popEl) return; popEl.textContent = ["", "¡LÍNEA!", "¡DOBLE!", "¡TRIPLE!", "¡CLICKEADA!"][n] || ""; popEl.classList.remove("yg-go"); void popEl.offsetWidth; popEl.classList.add("yg-go"); }
+  function popup(n) { if (!popEl) return; popEl.textContent = ["", "¡LÍNEA!", "¡DOBLE!", "¡TRIPLE!", "¡TETRISTO!"][n] || ""; popEl.classList.remove("yg-go"); void popEl.offsetWidth; popEl.classList.add("yg-go"); }
 
   function drawCell(x, y, word, ghost) {
     if (y < 0) return;
     const s = cell, gx = x*s, gy = y*s;
     if (ghost) { ctx.strokeStyle = "rgba(255,255,255,.16)"; ctx.lineWidth = 1; ctx.strokeRect(gx+2.5, gy+2.5, s-5, s-5); return; }
-    ctx.fillStyle = "rgba(255,255,255,.10)"; ctx.fillRect(gx+1, gy+1, s-2, s-2);
+    ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fillRect(gx+1, gy+1, s-2, s-2);
     ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 1.5; ctx.strokeRect(gx+1.75, gy+1.75, s-3.5, s-3.5);
-    if (word) { ctx.fillStyle = "#fff"; ctx.font = "700 " + Math.round(s*0.32) + "px Montserrat, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(word, gx+s/2, gy+s/2+0.5); }
+    if (word) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(gx+2, gy+2, s-4, s-4); ctx.clip();
+      ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const base = 26; ctx.font = "800 " + base + "px Montserrat, sans-serif";
+      const m = ctx.measureText(word);
+      const tw = Math.max(1, m.width);
+      const th = Math.max(1, (m.actualBoundingBoxAscent || base * 0.72) + (m.actualBoundingBoxDescent || base * 0.06));
+      const pad = 3.5;
+      ctx.translate(gx + s/2, gy + s/2);
+      ctx.scale((s - pad*2) / tw, (s - pad*2) / th);
+      ctx.fillText(word, 0, 0);
+      ctx.restore();
+    }
   }
   function drawMatrix(m, px, py, word, ghost) { for (let y=0;y<m.length;y++) for (let x=0;x<m.length;x++) if (m[y][x]) drawCell(px+x, py+y, word, ghost); }
   function draw() {
@@ -144,8 +160,8 @@
   function hideScreen() { screenEl.classList.remove("yg-show"); screenEl.innerHTML = ""; }
   function showStart() {
     screenEl.innerHTML =
-      '<h2>CLICKEAME</h2>' +
-      '<div class="yg-final">¿podés clickearla?</div>' +
+      '<h2>TeTristo</h2>' +
+      '<div class="yg-final">¿Podés ser el N°1?</div>' +
       '<button class="yg-btn" id="yg-play">JUGAR</button>' +
       '<div class="yg-warn">Aviso: el juego tiene destellos rápidos. Si sos sensible a las luces, mejor no juegues.</div>' +
       '<div class="yg-lb" id="yg-lb"></div>';
@@ -231,7 +247,7 @@
           '<div class="yg-screen" id="yg-screen"></div>' +
         '</div>' +
         '<div class="yg-side">' +
-          '<div class="yg-title">CLICKEAME</div>' +
+          '<div class="yg-title">TeTristo</div>' +
           '<div class="yg-stat">Puntos<b id="yg-score">0</b></div>' +
           '<div class="yg-stat">Nivel<b id="yg-level">1</b></div>' +
           '<div class="yg-stat">Líneas<b id="yg-lines">0</b></div>' +
@@ -239,12 +255,12 @@
           '<canvas id="yg-next" width="96" height="96"></canvas>' +
           '<div class="yg-stat">Récord<b id="yg-best">0</b></div>' +
           '<div class="yg-hint">← → mover · ↑ rotar · ↓ bajar<br>espacio: caída · P: pausa · Esc: salir</div>' +
-          '<div class="yg-pad">' +
-            '<button data-act="left">◀</button>' +
-            '<button data-act="down">▼</button>' +
-            '<button data-act="rot">⟳</button>' +
-            '<button data-act="right">▶</button>' +
-            '<button data-act="drop" style="grid-column:1/-1">⤓ CAÍDA</button>' +
+          '<div class="yg-mobilectrl">' +
+            '<div class="yg-stick" id="yg-stick"><div class="yg-knob" id="yg-knob"></div></div>' +
+            '<div class="yg-actions">' +
+              '<button data-act="rot" aria-label="Rotar">⟳</button>' +
+              '<button data-act="drop" aria-label="Caída">⤓</button>' +
+            '</div>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -262,29 +278,49 @@
 
     overlay.querySelector(".yg-close").onclick = closeGame;
     overlay.addEventListener("click", (e) => { if (e.target === overlay) closeGame(); });
-    overlay.querySelectorAll(".yg-pad button").forEach((b) => {
+    overlay.querySelectorAll(".yg-actions button").forEach((b) => {
       const act = b.getAttribute("data-act");
-      b.addEventListener("click", () => {
-        if (act === "left") move(-1); else if (act === "right") move(1);
-        else if (act === "down") softDrop(); else if (act === "rot") rotate(); else if (act === "drop") hardDrop();
-      });
+      b.addEventListener("click", () => { if (act === "rot") rotate(); else if (act === "drop") hardDrop(); });
     });
 
-    let _tx = 0, _ty = 0, _tt = 0, _ax = 0, _ay = 0, _mv = false;
-    function _sp() { const r = canvas.getBoundingClientRect(); return Math.max(18, r.width / COLS); }
-    canvas.addEventListener("touchstart", function (e) { const t = e.touches[0]; _tx = t.clientX; _ty = t.clientY; _tt = Date.now(); _ax = 0; _ay = 0; _mv = false; }, { passive: true });
-    canvas.addEventListener("touchmove", function (e) { if (over || paused) return; const t = e.touches[0]; const sp = _sp(); _ax += t.clientX - _tx; _ay += t.clientY - _ty; _tx = t.clientX; _ty = t.clientY; while (_ax >= sp) { move(1); _ax -= sp; _mv = true; } while (_ax <= -sp) { move(-1); _ax += sp; _mv = true; } while (_ay >= sp) { softDrop(); _ay -= sp; _mv = true; } e.preventDefault(); }, { passive: false });
-    canvas.addEventListener("touchend", function () { if (!_mv && (Date.now() - _tt) < 220) rotate(); }, { passive: true });
+    // --- Joystick (mobile) ---
+    const stick = overlay.querySelector("#yg-stick"), knob = overlay.querySelector("#yg-knob");
+    let stActive = false, scx = 0, scy = 0, dirX = 0, dirY = 0, lastMv = 0, lastDp = 0;
+    const R = 42;
+    function stUpdate(t) {
+      let dx = t.clientX - scx, dy = t.clientY - scy;
+      const dist = Math.hypot(dx, dy), cl = Math.min(dist, R), ang = Math.atan2(dy, dx);
+      const kx = Math.cos(ang) * cl, ky = Math.sin(ang) * cl;
+      knob.style.transform = "translate(" + kx + "px," + ky + "px)";
+      dirX = Math.max(-1, Math.min(1, dx / R)); dirY = Math.max(-1, Math.min(1, dy / R));
+    }
+    stick.addEventListener("touchstart", (e) => { const t = e.touches[0]; const r = stick.getBoundingClientRect(); scx = r.left + r.width/2; scy = r.top + r.height/2; stActive = true; lastMv = 0; lastDp = 0; stUpdate(t); e.preventDefault(); }, { passive: false });
+    stick.addEventListener("touchmove", (e) => { if (!stActive) return; stUpdate(e.touches[0]); e.preventDefault(); }, { passive: false });
+    const stEnd = () => { stActive = false; dirX = 0; dirY = 0; knob.style.transform = "translate(0,0)"; };
+    stick.addEventListener("touchend", stEnd); stick.addEventListener("touchcancel", stEnd);
+    setInterval(() => {
+      if (!stActive || over || paused || !running) return;
+      const now = performance.now();
+      if (dirX <= -0.45) { if (now - lastMv > 110) { move(-1); lastMv = now; } }
+      else if (dirX >= 0.45) { if (now - lastMv > 110) { move(1); lastMv = now; } }
+      else lastMv = 0;
+      if (dirY >= 0.55) { if (now - lastDp > 55) { softDrop(); lastDp = now; } } else lastDp = 0;
+    }, 16);
   }
 
   function hideSite(h) {
     const m = document.querySelector("main"); if (m) m.style.display = h ? "none" : "";
     const hd = document.querySelector("header"); if (hd) hd.style.display = h ? "none" : "";
   }
+  function setNoZoom(on) {
+    if (!vpMeta) return;
+    if (on) vpMeta.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover");
+    else if (vpDefault) vpMeta.setAttribute("content", vpDefault);
+  }
   function openGame() {
     if (!built) { buildOverlay(); built = true; }
     overlay.classList.add("yg-open");
-    hideSite(true);
+    hideSite(true); setNoZoom(true);
     document.documentElement.style.overflow = "hidden";
     document.addEventListener("keydown", onKey);
     over = false; running = false; resetBoard(); piece = null; draw();
@@ -293,7 +329,7 @@
   function closeGame() {
     running = false; window.cancelAnimationFrame(raf);
     if (overlay) overlay.classList.remove("yg-open");
-    hideSite(false);
+    hideSite(false); setNoZoom(false);
     document.documentElement.style.overflow = "";
     document.removeEventListener("keydown", onKey);
   }
