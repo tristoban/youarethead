@@ -65,7 +65,7 @@
 .hd-msg { min-height: 1em; margin: 2px 0 0; font-size: .82rem; color: var(--muted); }
 .hd-msg.err { color: var(--err); }
 
-.hd-footer { flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 24px 16px 138px; }
+.hd-footer { flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 24px 16px 88px; }
 .hd-logo-sm { width: clamp(110px, 15vw, 150px); height: auto; opacity: .85; }
 .hd-by { margin: 0; font-size: .72rem; letter-spacing: .26em; text-transform: uppercase; color: var(--faint); }
 

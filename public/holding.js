@@ -108,7 +108,18 @@
     const B = String.fromCharCode(92);
     const TREE = ["  /" + B + "  ", " /__" + B + " ", "/____" + B, "  ||  "];
     const HOUSE = [" ____ ", "/    " + B, "|[]  |", "|_||_|"];
-    const PHR = ["quiero salir de acá", "¿dónde estoy?", "estoy atrapado", "déjenme salir", "esto no es real", "¿alguien me ve?", "no encuentro la salida", "no puedo despertar", "ayúdenme", "¿esto es la publicidad?", "tengo frío"];
+    const PHR = [
+      "Avisenme si ven una salida", "sáquenme de acá", "déjenme salir", "no encuentro la salida", "Llevo caminando un rato y no hay salida",
+      "Okey... esto dejó de ser gracioso", "¿por qué no me puedo ir?", "¿dónde estoy?", "¿cómo llegué acá?", "¿qué es este lugar?",
+      "¿esto es un sueño?", "esto no es real", "ayudame", "¿alguien me ve?", "¿hay alguien ahí?",
+      "Si... te veo", "sé que me estás viendo", "nos están mirando", "NO HABLES EN EL CHAT", "¿sos real?",
+      "no puedo despertar", "no puedo dormir", "hace días que no duermo", "tengo mucho sueño", "otra noche más acá",
+      "acá siempre es de noche", "Solamente era un fan de un canal...", "¿esto es la publicidad?", "creo que soy un anuncio", "No debí ver ese video",
+      "No. Pongas. Tu. Nombre", "¿cuándo sale el video?", "cuando salga el video... ¿muero?", "el video nos libera", "falta poco, aguanten",
+      "tengo frío", "está muy oscuro", "escuché algo", "no estamos solos", "alguien dijo mi nombre",
+      "no mires atrás", "ya me acostumbré", "me quiero ir a casa", "extraño el sol", "¿Soy esto?",
+      "¿y mis cosas?", "guardame un lugar afuera", "contá que estuve acá", "no apaguen la luz", '¿Ese botón de arriba "Tetristo" será la salida?',
+    ];
     const CELL = 13, LH = 14, SLOTW = 132, LANEGAP = 54; let MAX = 12;
     let W = 0, H = 0, DPR = 1, ground = 0, laneY = [0, 0], trees = [], houses = [], raf = 0, last = 0, spk = 0;
     const people = [];
@@ -121,8 +132,8 @@
       cv.width = Math.floor(W * DPR); cv.height = Math.floor(H * DPR);
       cv.style.width = W + "px"; cv.style.height = H + "px";
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-      ground = H - 20; laneY = [ground - LANEGAP, ground];
-      MAX = Math.max(4, Math.min(12, Math.floor(W / SLOTW) * 2));
+      ground = H - 24; laneY = [ground, ground];
+      MAX = Math.max(3, Math.min(10, Math.floor(W / SLOTW)));
       while (people.length > MAX) people.shift();
       trees = []; houses = [];
       const n = Math.max(4, Math.round(W / 170));
@@ -132,7 +143,7 @@
     }
     function laneCount(l) { let c = 0; for (const p of people) if (p.lane === l) c++; return c; }
     function spawn(name, seed) {
-      const lane = laneCount(0) <= laneCount(1) ? 0 : 1;
+      const lane = 0;
       const left = Math.random() < 0.5;
       people.push({ name: (name || "").trim().slice(0, 14), seed: !!seed, lane, x: left ? -14 : W + 14, tgt: rnd(W * 0.12, W * 0.88), leg: false, legT: 0, bob: Math.random() * 6.28, a: 0, st: "walk", timer: 0, ph: "", pUntil: 0, head: Math.random() < 0.18 ? "O" : "o", spd: rnd(10, 18), goHouse: false, seen: performance.now() });
     }
@@ -173,7 +184,7 @@
       ctx.font = CELL + 'px "Courier New", monospace'; ctx.textBaseline = "alphabetic";
       ctx.textAlign = "left"; ctx.fillStyle = "rgba(210,213,220,0.10)";
       const cw = ctx.measureText("=").width || 7.8;
-      ctx.fillText("=".repeat(Math.ceil(W / cw) + 2), 0, ground + 12);
+      ctx.fillText("=".repeat(Math.ceil(W / cw) + 2), 0, ground + 3);
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(200,205,215,0.13)";
       for (const t of trees) for (let i = 0; i < TREE.length; i++) ctx.fillText(TREE[i], t.x, ground - (TREE.length - 1 - i) * LH);
@@ -182,13 +193,17 @@
       const order = people.slice().sort((a, b) => a.lane - b.lane);
       for (const p of order) {
         if (p.a < 0.02) continue;
-        const depth = p.lane === 0 ? 0.72 : 1;
+        const depth = 1;
         const by = laneY[p.lane];
         ctx.fillStyle = "rgba(228,231,238," + (0.30 * p.a * depth) + ")";
         ctx.fillText(p.leg ? ("/" + B) : "||", p.x, by);
         ctx.fillText(p.head, p.x, by - LH);
         if (p.name) { ctx.fillStyle = "rgba(255,255,255," + (0.6 * p.a * depth) + ")"; ctx.fillText(p.name, p.x, by - LH * 2 - 6); }
-        if (p.ph && performance.now() < p.pUntil && p.st === "walk") { ctx.fillStyle = "rgba(255,255,255," + (0.9 * p.a) + ")"; ctx.fillText("« " + p.ph + " »", p.x, by - LH * 3 - 12); }
+        if (p.ph && performance.now() < p.pUntil && p.st === "walk") {
+          const bub = "« " + p.ph + " »", half = ctx.measureText(bub).width / 2;
+          let bx = p.x; if (bx - half < 6) bx = half + 6; if (bx + half > W - 6) bx = W - half - 6;
+          ctx.fillStyle = "rgba(255,255,255," + (0.9 * p.a) + ")"; ctx.fillText(bub, bx, by - LH * 3 - 12);
+        }
       }
     }
     function loop(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; step(dt, now); draw(); raf = window.requestAnimationFrame(loop); }
