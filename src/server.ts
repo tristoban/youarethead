@@ -11,6 +11,7 @@ const IP_SALT = process.env.IP_SALT ?? 'youarethead-default-salt-cambiame';
 const ONE_PER_IP = (process.env.ONE_PER_IP ?? 'true').toLowerCase() !== 'false';
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? 'https://youarethead.com.ar').replace(/\/+$/, '');
 const FROM_EMAIL = process.env.FROM_EMAIL ?? 'YOU ARE THE AD <noreply@youarethead.com.ar>';
+const LAUNCHED = (process.env.LAUNCHED ?? 'false').toLowerCase() === 'true';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -32,6 +33,9 @@ function offensiveAlias(s: string): boolean {
   if (!norm) return false;
   if (ALLOWED_RUDE.has(norm)) return false;
   return BANNED.some((w) => norm.includes(w));
+}
+function offensiveText(s: string): boolean {
+  return s.split(/\s+/).some((tok) => tok.length > 0 && offensiveAlias(tok));
 }
 
 export interface Db {
@@ -84,6 +88,16 @@ export async function initDb(db: Db): Promise<void> {
     );
   `);
   await db.query(`CREATE INDEX IF NOT EXISTS scores_score_idx ON scores (score DESC, created_at ASC);`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id          BIGSERIAL PRIMARY KEY,
+      name        TEXT        NOT NULL DEFAULT 'ANÓN',
+      body        TEXT        NOT NULL,
+      ip_hash     TEXT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS chat_id_idx ON chat_messages (id);`);
 }
 
 interface Stats { count: number; goal: number; remaining: number; unlocked: boolean; }
@@ -96,6 +110,9 @@ async function getStats(db: Db): Promise<Stats> {
 async function topScores(db: Db): Promise<Array<{ alias: unknown; score: number }>> {
   const { rows } = await db.query('SELECT alias, score FROM scores ORDER BY score DESC, created_at ASC LIMIT 10');
   return rows.map((r) => ({ alias: r.alias, score: Number(r.score) }));
+}
+function mapMsg(r: Record<string, unknown>): { id: number; name: unknown; body: unknown; t: unknown } {
+  return { id: Number(r.id), name: r.name, body: r.body, t: r.created_at };
 }
 function getClientIp(req: FastifyRequest): string {
   const cf = req.headers['cf-connecting-ip'];
@@ -173,6 +190,17 @@ function page(title: string, body: string): string {
 export function buildApp(db: Db): FastifyInstance {
   const app = Fastify({ trustProxy: true, bodyLimit: 16 * 1024 });
 
+  const chatRate = new Map<string, number>();
+  const GATED = new Set(['/index.html', '/tshirt.png', '/pic1.png', '/pic2.png', '/pic3.png']);
+  app.addHook('onRequest', async (req, reply) => {
+    if (LAUNCHED) return;
+    const p = req.url.split('?')[0] ?? '';
+    if (GATED.has(p)) {
+      reply.code(404).header('content-type', 'text/html; charset=utf-8').send(page('404', '<h1>404</h1><p>No hay nada acá… todavía.</p>'));
+      return reply;
+    }
+  });
+
   app.get('/healthz', async () => ({ ok: true }));
   app.get('/api/stats', async (_req, reply) => { const stats = await getStats(db); reply.header('cache-control', 'no-store'); return { ok: true, ...stats }; });
 
@@ -237,6 +265,35 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.code(201).send({ ok: true, rank, alias, score, scores: await topScores(db) });
   });
 
+  app.get('/api/chat', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const sinceRaw = ((req.query ?? {}) as { since?: unknown }).since;
+    const since = Math.floor(Number(sinceRaw));
+    if (Number.isFinite(since) && since > 0) {
+      const { rows } = await db.query('SELECT id, name, body, created_at FROM chat_messages WHERE id > $1 ORDER BY id ASC LIMIT 100', [since]);
+      return { ok: true, messages: rows.map(mapMsg) };
+    }
+    const { rows } = await db.query('SELECT id, name, body, created_at FROM chat_messages ORDER BY id DESC LIMIT 60');
+    return { ok: true, messages: rows.reverse().map(mapMsg) };
+  });
+
+  app.post('/api/chat', async (req, reply) => {
+    const body = (req.body ?? {}) as { name?: unknown; body?: unknown };
+    let name = typeof body.name === 'string' ? body.name.replace(/\s+/g, ' ').trim().slice(0, 20).trim() : '';
+    const text = typeof body.body === 'string' ? body.body.replace(/\s+/g, ' ').trim().slice(0, 200).trim() : '';
+    if (!text) return reply.code(400).send({ ok: false, error: 'empty', message: 'Escribí algo.' });
+    if (!name) name = 'ANÓN';
+    if (offensiveAlias(name) || offensiveText(text)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Esa no va.' });
+    const ipHash = hashIp(getClientIp(req));
+    const now = Date.now();
+    const last = chatRate.get(ipHash) ?? 0;
+    if (now - last < 1500) return reply.code(429).send({ ok: false, error: 'slow', message: 'Pará un toque.' });
+    chatRate.set(ipHash, now);
+    const ins = await db.query('INSERT INTO chat_messages (name, body, ip_hash) VALUES ($1, $2, $3) RETURNING id, created_at', [name, text, ipHash]);
+    const row = ins.rows[0];
+    return reply.code(201).send({ ok: true, message: { id: Number(row?.id ?? 0), name, body: text, t: row?.created_at } });
+  });
+
   app.get('/api/confirm', async (req, reply) => {
     const token = ((req.query ?? {}) as { token?: unknown }).token;
     reply.header('content-type', 'text/html; charset=utf-8');
@@ -247,7 +304,11 @@ export function buildApp(db: Db): FastifyInstance {
     return page('Ya confirmado', '<h1>Ya estabas</h1><p>Este mail ya estaba confirmado (o el link ya se usó). No hace falta nada más.</p><a href="/">Ir al sitio</a>');
   });
 
-  app.register(fastifyStatic, { root: join(__dirname, '..', 'public'), index: ['index.html'] });
+  app.get('/', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return reply.sendFile(LAUNCHED ? 'index.html' : 'holding.html');
+  });
+  app.register(fastifyStatic, { root: join(__dirname, '..', 'public'), index: false });
   return app;
 }
 
