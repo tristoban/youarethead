@@ -109,7 +109,7 @@
     const TREE = ["  /" + B + "  ", " /__" + B + " ", "/____" + B, "  ||  "];
     const HOUSE = [" ____ ", "/    " + B, "|[]  |", "|_||_|"];
     const PHR = ["quiero salir de acá", "¿dónde estoy?", "estoy atrapado", "déjenme salir", "esto no es real", "¿alguien me ve?", "no encuentro la salida", "no puedo despertar", "ayúdenme", "¿esto es la publicidad?", "tengo frío"];
-    const CELL = 13, LH = 14, SLOTW = 132, LANEGAP = 60; let MAX = 12;
+    const CELL = 13, LH = 14, SLOTW = 132, LANEGAP = 54; let MAX = 12;
     let W = 0, H = 0, DPR = 1, ground = 0, laneY = [0, 0], trees = [], houses = [], raf = 0, last = 0, spk = 0;
     const people = [];
     const rnd = (a, b) => a + Math.random() * (b - a);
@@ -121,7 +121,7 @@
       cv.width = Math.floor(W * DPR); cv.height = Math.floor(H * DPR);
       cv.style.width = W + "px"; cv.style.height = H + "px";
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-      ground = H - 42; laneY = [ground - LANEGAP, ground];
+      ground = H - 20; laneY = [ground - LANEGAP, ground];
       MAX = Math.max(4, Math.min(12, Math.floor(W / SLOTW) * 2));
       while (people.length > MAX) people.shift();
       trees = []; houses = [];
@@ -166,7 +166,7 @@
       }
       const speaking = people.some((p) => p.ph && now < p.pUntil);
       spk -= dt;
-      if (!speaking && spk <= 0) { spk = rnd(1.6, 3.4); const cand = people.filter((p) => p.a > 0.6 && p.st === "walk"); if (cand.length) { const s = pick(cand); s.ph = pick(PHR); s.pUntil = now + rnd(2600, 4200); } }
+      if (!speaking && spk <= 0) { spk = rnd(6, 12); const cand = people.filter((p) => p.a > 0.6 && p.st === "walk"); if (cand.length) { const s = pick(cand); s.ph = pick(PHR); s.pUntil = now + rnd(2600, 4200); } }
     }
     function draw() {
       ctx.clearRect(0, 0, W, H);
@@ -183,7 +183,7 @@
       for (const p of order) {
         if (p.a < 0.02) continue;
         const depth = p.lane === 0 ? 0.72 : 1;
-        const by = laneY[p.lane] + ((p.st === "walk") ? Math.sin(p.bob) * 1.4 : 0);
+        const by = laneY[p.lane];
         ctx.fillStyle = "rgba(228,231,238," + (0.30 * p.a * depth) + ")";
         ctx.fillText(p.leg ? ("/" + B) : "||", p.x, by);
         ctx.fillText(p.head, p.x, by - LH);
@@ -269,7 +269,10 @@
       try {
         const r = await fetch("/api/chat", { method: "POST", headers: JH, body: JSON.stringify({ name, body: text }) });
         const d = await r.json();
-        if (r.ok && d.message) { render([d.message]); log.scrollTop = log.scrollHeight; if (textEl) textEl.value = ""; }
+        if (r.ok && d.message) {
+          render([d.message]); log.scrollTop = log.scrollHeight; if (textEl) textEl.value = "";
+          if (d.nameLocked && nameEl && !nameEl.readOnly) { nameEl.value = d.message.name; nameEl.readOnly = true; nameEl.classList.add("locked"); nameEl.title = "Tu nombre quedó fijo"; try { localStorage.setItem("yath-chat-name", d.message.name); } catch (_) {} }
+        }
         else setMsg(d.message || "No se pudo enviar.", "err");
       } catch (_) { setMsg("Algo se rompió. Probá de nuevo.", "err"); }
       finally { sending = false; if (sendEl) sendEl.disabled = false; if (textEl) textEl.focus(); }

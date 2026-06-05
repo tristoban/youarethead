@@ -191,6 +191,7 @@ export function buildApp(db: Db): FastifyInstance {
   const app = Fastify({ trustProxy: true, bodyLimit: 16 * 1024 });
 
   const chatRate = new Map<string, number>();
+  const chatNames = new Map<string, string>();
   const GATED = new Set(['/index.html', '/tshirt.png', '/pic1.png', '/pic2.png', '/pic3.png']);
   app.addHook('onRequest', async (req, reply) => {
     if (LAUNCHED) return;
@@ -283,15 +284,18 @@ export function buildApp(db: Db): FastifyInstance {
     const text = typeof body.body === 'string' ? body.body.replace(/\s+/g, ' ').trim().slice(0, 200).trim() : '';
     if (!text) return reply.code(400).send({ ok: false, error: 'empty', message: 'Escribí algo.' });
     if (!name) name = 'ANÓN';
-    if (offensiveAlias(name) || offensiveText(text)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Esa no va.' });
     const ipHash = hashIp(getClientIp(req));
+    const lockedName = chatNames.get(ipHash);
+    if (lockedName) name = lockedName;
+    if (offensiveAlias(name) || offensiveText(text)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Esa no va.' });
     const now = Date.now();
     const last = chatRate.get(ipHash) ?? 0;
     if (now - last < 1500) return reply.code(429).send({ ok: false, error: 'slow', message: 'Pará un toque.' });
     chatRate.set(ipHash, now);
+    if (!lockedName && name !== 'ANÓN') chatNames.set(ipHash, name);
     const ins = await db.query('INSERT INTO chat_messages (name, body, ip_hash) VALUES ($1, $2, $3) RETURNING id, created_at', [name, text, ipHash]);
     const row = ins.rows[0];
-    return reply.code(201).send({ ok: true, message: { id: Number(row?.id ?? 0), name, body: text, t: row?.created_at } });
+    return reply.code(201).send({ ok: true, message: { id: Number(row?.id ?? 0), name, body: text, t: row?.created_at }, nameLocked: chatNames.has(ipHash) });
   });
 
   app.get('/api/confirm', async (req, reply) => {
