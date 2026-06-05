@@ -2,6 +2,7 @@
   "use strict";
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const JH = { "content-type": "application/json", accept: "application/json" };
+  let worldAdd = function () {};
 
   /* ---------- Fondo: niebla de ruido (igual que la landing) ---------- */
   const canvas = document.getElementById("bg");
@@ -99,6 +100,108 @@
     });
   })();
 
+  /* ---------- Mundo ASCII (delante de la niebla, detrás del chat; 2 niveles) ---------- */
+  (() => {
+    const cv = document.getElementById("world");
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    const B = String.fromCharCode(92);
+    const TREE = ["  /" + B + "  ", " /__" + B + " ", "/____" + B, "  ||  "];
+    const HOUSE = [" ____ ", "/    " + B, "|[]  |", "|_||_|"];
+    const PHR = ["quiero salir de acá", "¿dónde estoy?", "estoy atrapado", "déjenme salir", "esto no es real", "¿alguien me ve?", "no encuentro la salida", "no puedo despertar", "ayúdenme", "¿esto es la publicidad?", "tengo frío"];
+    const CELL = 13, LH = 14, SLOTW = 132, LANEGAP = 60; let MAX = 12;
+    let W = 0, H = 0, DPR = 1, ground = 0, laneY = [0, 0], trees = [], houses = [], raf = 0, last = 0, spk = 0;
+    const people = [];
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    const pick = (a) => a[(Math.random() * a.length) | 0];
+
+    function layout() {
+      DPR = Math.min(window.devicePixelRatio || 1, 2);
+      W = window.innerWidth; H = window.innerHeight;
+      cv.width = Math.floor(W * DPR); cv.height = Math.floor(H * DPR);
+      cv.style.width = W + "px"; cv.style.height = H + "px";
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ground = H - 42; laneY = [ground - LANEGAP, ground];
+      MAX = Math.max(4, Math.min(12, Math.floor(W / SLOTW) * 2));
+      while (people.length > MAX) people.shift();
+      trees = []; houses = [];
+      const n = Math.max(4, Math.round(W / 170));
+      for (let i = 0; i < n; i++) trees.push({ x: rnd(20, W - 20) });
+      const hn = Math.max(2, Math.round(W / 420));
+      for (let i = 0; i < hn; i++) houses.push({ x: (i + 1) * W / (hn + 1) + rnd(-24, 24) });
+    }
+    function laneCount(l) { let c = 0; for (const p of people) if (p.lane === l) c++; return c; }
+    function spawn(name, seed) {
+      const lane = laneCount(0) <= laneCount(1) ? 0 : 1;
+      const left = Math.random() < 0.5;
+      people.push({ name: (name || "").trim().slice(0, 14), seed: !!seed, lane, x: left ? -14 : W + 14, tgt: rnd(W * 0.12, W * 0.88), leg: false, legT: 0, bob: Math.random() * 6.28, a: 0, st: "walk", timer: 0, ph: "", pUntil: 0, head: Math.random() < 0.18 ? "O" : "o", spd: rnd(10, 18), goHouse: false, seen: performance.now() });
+    }
+    worldAdd = function (name) {
+      name = (name || "").trim().slice(0, 14);
+      if (!name) return;
+      const ex = people.find((p) => !p.seed && p.name.toLowerCase() === name.toLowerCase());
+      if (ex) { ex.seen = performance.now(); return; }
+      if (people.length >= MAX) {
+        let idx = people.findIndex((p) => p.seed);
+        if (idx < 0) { let oldest = Infinity; for (let i = 0; i < people.length; i++) if (people[i].seen < oldest) { oldest = people[i].seen; idx = i; } }
+        if (idx >= 0) people.splice(idx, 1);
+      }
+      spawn(name, false);
+    };
+
+    function step(dt, now) {
+      for (let l = 0; l < 2; l++) {
+        const arr = people.filter((p) => p.lane === l && p.a > 0.05).sort((a, b) => a.x - b.x);
+        for (let i = 1; i < arr.length; i++) { const A = arr[i - 1], C = arr[i], gap = C.x - A.x; if (gap < SLOTW) { const push = (SLOTW - gap) / 2; A.x -= push; C.x += push; } }
+      }
+      for (const p of people) {
+        if (p.x < -20) p.x = -20; if (p.x > W + 20) p.x = W + 20;
+        const ta = (p.st === "inside") ? 0 : 1; p.a += (ta - p.a) * Math.min(1, dt * 4);
+        if (p.st === "walk") {
+          if (Math.abs(p.tgt - p.x) > 2) { p.x += Math.sign(p.tgt - p.x) * p.spd * dt; p.legT += dt; if (p.legT > 0.16) { p.legT = 0; p.leg = !p.leg; } p.bob += dt * 8; }
+          else if (p.goHouse) { p.goHouse = false; p.st = "inside"; p.timer = rnd(3, 7); p.ph = ""; }
+          else if (p.lane === 1 && houses.length && Math.random() < 0.3) { p.tgt = pick(houses).x; p.goHouse = true; }
+          else p.tgt = rnd(W * 0.1, W * 0.9);
+        } else if (p.st === "inside") { p.timer -= dt; if (p.timer <= 0) { p.st = "walk"; p.tgt = rnd(W * 0.1, W * 0.9); } }
+      }
+      const speaking = people.some((p) => p.ph && now < p.pUntil);
+      spk -= dt;
+      if (!speaking && spk <= 0) { spk = rnd(1.6, 3.4); const cand = people.filter((p) => p.a > 0.6 && p.st === "walk"); if (cand.length) { const s = pick(cand); s.ph = pick(PHR); s.pUntil = now + rnd(2600, 4200); } }
+    }
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.font = CELL + 'px "Courier New", monospace'; ctx.textBaseline = "alphabetic";
+      ctx.textAlign = "left"; ctx.fillStyle = "rgba(210,213,220,0.10)";
+      const cw = ctx.measureText("=").width || 7.8;
+      ctx.fillText("=".repeat(Math.ceil(W / cw) + 2), 0, ground + 12);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(200,205,215,0.13)";
+      for (const t of trees) for (let i = 0; i < TREE.length; i++) ctx.fillText(TREE[i], t.x, ground - (TREE.length - 1 - i) * LH);
+      ctx.fillStyle = "rgba(205,208,216,0.15)";
+      for (const h of houses) for (let i = 0; i < HOUSE.length; i++) ctx.fillText(HOUSE[i], h.x, ground - (HOUSE.length - 1 - i) * LH);
+      const order = people.slice().sort((a, b) => a.lane - b.lane);
+      for (const p of order) {
+        if (p.a < 0.02) continue;
+        const depth = p.lane === 0 ? 0.72 : 1;
+        const by = laneY[p.lane] + ((p.st === "walk") ? Math.sin(p.bob) * 1.4 : 0);
+        ctx.fillStyle = "rgba(228,231,238," + (0.30 * p.a * depth) + ")";
+        ctx.fillText(p.leg ? ("/" + B) : "||", p.x, by);
+        ctx.fillText(p.head, p.x, by - LH);
+        if (p.name) { ctx.fillStyle = "rgba(255,255,255," + (0.6 * p.a * depth) + ")"; ctx.fillText(p.name, p.x, by - LH * 2 - 6); }
+        if (p.ph && performance.now() < p.pUntil && p.st === "walk") { ctx.fillStyle = "rgba(255,255,255," + (0.9 * p.a) + ")"; ctx.fillText("« " + p.ph + " »", p.x, by - LH * 3 - 12); }
+      }
+    }
+    function loop(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; step(dt, now); draw(); raf = window.requestAnimationFrame(loop); }
+    layout();
+    window.addEventListener("resize", layout);
+    for (let i = 0; i < 4; i++) spawn("", true);
+    if (reduce) { for (const p of people) p.a = 1; step(0.016, performance.now()); draw(); }
+    else {
+      document.addEventListener("visibilitychange", () => { if (document.hidden) { if (raf) { window.cancelAnimationFrame(raf); raf = 0; } } else if (!raf) { last = performance.now(); raf = window.requestAnimationFrame(loop); } });
+      last = performance.now(); raf = window.requestAnimationFrame(loop);
+    }
+  })();
+
   /* ---------- Chat en vivo (shoutbox con polling) ---------- */
   (() => {
     const log = document.getElementById("chat-log");
@@ -126,6 +229,7 @@
       if (!m || (m.id && seen.has(m.id))) return;
       if (m.id) seen.add(m.id);
       clearEmpty();
+      if (m.name) worldAdd(m.name);
       const row = document.createElement("div"); row.className = "hd-m";
       const who = document.createElement("b"); who.className = "hd-who"; who.textContent = (m.name || "ANÓN") + ":";
       const bd = document.createElement("span"); bd.className = "hd-b"; bd.textContent = m.body || "";

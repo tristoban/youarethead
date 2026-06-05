@@ -1,5 +1,7 @@
 /* ====== Pantalla de espera (teaser) — misma estética que la landing ====== */
 
+#world { position: fixed; inset: 0; z-index: -1; display: block; pointer-events: none; }
+
 .hd-nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 50;
   height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px;
