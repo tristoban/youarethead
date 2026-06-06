@@ -4,6 +4,14 @@
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const JH = { "content-type": "application/json", accept: "application/json" };
 
+  /* ---------- Salir del preview admin (solo si entraste con la clave) ---------- */
+  if (document.cookie.split(";").some((c) => c.trim() === "yath_preview=1") && document.body) {
+    const ax = document.createElement("a");
+    ax.href = "/admin?key=salir"; ax.textContent = "← Volver a la espera";
+    ax.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:200;background:rgba(8,8,10,.85);border:1px solid rgba(255,255,255,.28);color:#fff;font:700 12px Montserrat,system-ui,sans-serif;padding:8px 14px;border-radius:8px;text-decoration:none";
+    document.body.appendChild(ax);
+  }
+
   /* ---------- Fondo: niebla de ruido (tipo dark.netflix.io) ---------- */
   const canvas = document.getElementById("bg");
   if (canvas) {

@@ -325,7 +325,7 @@ export function buildApp(db: Db): FastifyInstance {
       return reply.code(302).header('location', '/').send();
     }
     if (key === 'salir') {
-      reply.header('set-cookie', 'yath_admin=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+      reply.header('set-cookie', ['yath_admin=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax', 'yath_preview=; Path=/; Max-Age=0; SameSite=Lax']);
       return reply.code(302).header('location', '/').send();
     }
     reply.code(401).header('content-type', 'text/html; charset=utf-8');
@@ -333,7 +333,9 @@ export function buildApp(db: Db): FastifyInstance {
   });
   app.get('/', async (req, reply) => {
     reply.header('cache-control', 'no-store');
-    return reply.sendFile((LAUNCHED || isAdmin(req)) ? 'index.html' : 'holding.html');
+    const admin = isAdmin(req);
+    if (admin && !LAUNCHED) reply.header('set-cookie', 'yath_preview=1; Path=/; Max-Age=28800; SameSite=Lax');
+    return reply.sendFile((LAUNCHED || admin) ? 'index.html' : 'holding.html');
   });
   app.register(fastifyStatic, { root: join(__dirname, '..', 'public'), index: false });
   return app;
