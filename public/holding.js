@@ -217,6 +217,17 @@
     }
   })();
 
+  /* ---------- Botón admin (preview de la landing real) ---------- */
+  (() => {
+    const adm = document.getElementById("navAdmin");
+    if (!adm) return;
+    adm.addEventListener("click", (e) => {
+      e.preventDefault();
+      const k = window.prompt("Clave de admin:");
+      if (k) window.location.href = "/admin?key=" + encodeURIComponent(k);
+    });
+  })();
+
   /* ---------- Chat en vivo (shoutbox con polling) ---------- */
   (() => {
     const log = document.getElementById("chat-log");

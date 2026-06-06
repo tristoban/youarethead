@@ -7,12 +7,15 @@
   height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px;
 }
 .hd-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--hi); opacity: .45; }
+.hd-links { display: flex; gap: 8px; align-items: center; }
 .hd-links a {
   font-size: .72rem; letter-spacing: .2em; text-transform: uppercase; color: var(--ink);
   border: 1px solid var(--line); padding: 9px 16px; border-radius: 8px;
   transition: background .15s, color .15s; cursor: pointer;
 }
 .hd-links a:hover { background: var(--ink); color: var(--bg); }
+.hd-links .hd-admin { opacity: .45; }
+.hd-links .hd-admin:hover { opacity: 1; }
 
 .hd-main { min-height: 100svh; display: flex; flex-direction: column; padding: 72px 20px 0; }
 .hd-center { flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 30px; padding: 24px 0; }

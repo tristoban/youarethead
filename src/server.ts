@@ -12,6 +12,8 @@ const ONE_PER_IP = (process.env.ONE_PER_IP ?? 'true').toLowerCase() !== 'false';
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? 'https://youarethead.com.ar').replace(/\/+$/, '');
 const FROM_EMAIL = process.env.FROM_EMAIL ?? 'YOU ARE THE AD <noreply@youarethead.com.ar>';
 const LAUNCHED = (process.env.LAUNCHED ?? 'false').toLowerCase() === 'true';
+const ADMIN_KEY = process.env.ADMIN_KEY ?? '';
+const ADMIN_TOKEN = ADMIN_KEY ? createHash('sha256').update('yath-admin:' + ADMIN_KEY + ':' + IP_SALT).digest('hex').slice(0, 32) : '';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -122,6 +124,12 @@ function getClientIp(req: FastifyRequest): string {
   return req.ip;
 }
 function hashIp(ip: string): string { return createHash('sha256').update(`${IP_SALT}:${ip}`).digest('hex'); }
+function isAdmin(req: FastifyRequest): boolean {
+  if (!ADMIN_TOKEN) return false;
+  const c = req.headers.cookie;
+  if (typeof c !== 'string') return false;
+  return c.split(';').some((s) => s.trim() === 'yath_admin=' + ADMIN_TOKEN);
+}
 function newToken(): string { return randomBytes(24).toString('hex'); }
 function newCode(): string { return String(randomInt(0, 1000000)).padStart(6, '0'); }
 
@@ -194,7 +202,7 @@ export function buildApp(db: Db): FastifyInstance {
   const chatNames = new Map<string, string>();
   const GATED = new Set(['/index.html', '/tshirt.png', '/pic1.png', '/pic2.png', '/pic3.png']);
   app.addHook('onRequest', async (req, reply) => {
-    if (LAUNCHED) return;
+    if (LAUNCHED || isAdmin(req)) return;
     const p = req.url.split('?')[0] ?? '';
     if (GATED.has(p)) {
       reply.code(404).header('content-type', 'text/html; charset=utf-8').send(page('404', '<h1>404</h1><p>No hay nada acá… todavía.</p>'));
@@ -308,9 +316,24 @@ export function buildApp(db: Db): FastifyInstance {
     return page('Ya confirmado', '<h1>Ya estabas</h1><p>Este mail ya estaba confirmado (o el link ya se usó). No hace falta nada más.</p><a href="/">Ir al sitio</a>');
   });
 
-  app.get('/', async (_req, reply) => {
+  app.get('/admin', async (req, reply) => {
+    const key = ((req.query ?? {}) as { key?: unknown }).key;
     reply.header('cache-control', 'no-store');
-    return reply.sendFile(LAUNCHED ? 'index.html' : 'holding.html');
+    if (!ADMIN_TOKEN) { reply.code(503).header('content-type', 'text/html; charset=utf-8'); return page('Admin', '<h1>Admin sin configurar</h1><p>Falta la variable ADMIN_KEY en el server.</p>'); }
+    if (typeof key === 'string' && key === ADMIN_KEY) {
+      reply.header('set-cookie', 'yath_admin=' + ADMIN_TOKEN + '; Path=/; Max-Age=28800; HttpOnly; SameSite=Lax');
+      return reply.code(302).header('location', '/').send();
+    }
+    if (key === 'salir') {
+      reply.header('set-cookie', 'yath_admin=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+      return reply.code(302).header('location', '/').send();
+    }
+    reply.code(401).header('content-type', 'text/html; charset=utf-8');
+    return page('Admin', '<h1>Clave incorrecta</h1><p>Probá de nuevo desde el sitio.</p><a href="/">Volver</a>');
+  });
+  app.get('/', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return reply.sendFile((LAUNCHED || isAdmin(req)) ? 'index.html' : 'holding.html');
   });
   app.register(fastifyStatic, { root: join(__dirname, '..', 'public'), index: false });
   return app;
