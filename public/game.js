@@ -23,11 +23,13 @@
 
   function rot(m) { const N = m.length, r = []; for (let y=0;y<N;y++){ r.push([]); for (let x=0;x<N;x++) r[y].push(m[N-1-x][y]); } return r; }
 
-  let built = false, overlay, flashEl, shell, canvas, ctx, nextCanvas, nctx, cell, screenEl, popEl;
+  let built = false, overlay, flashEl, shell, canvas, ctx, nextCanvas, nctx, holdCanvas, hctx, cell, screenEl, popEl;
   let board, piece, nextType, bag = [];
   let score = 0, lines = 0, level = 1, dropInt = 800, finalScore = 0;
   let best = Number(localStorage.getItem("yg_best") || 0);
   let raf = 0, running = false, paused = false, over = false, savedThisRun = false, lastDrop = 0;
+  let holdType = null, holdUsed = false, lockTimer = 0, lockResets = 0;
+  const LOCK_DELAY = 500, LOCK_MAX_RESETS = 15;
 
   const vpMeta = document.querySelector('meta[name="viewport"]');
   const vpDefault = vpMeta ? vpMeta.getAttribute("content") : null;
@@ -37,13 +39,18 @@
     if (bag.length === 0) { bag = KEYS.slice(); for (let i=bag.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=bag[i]; bag[i]=bag[j]; bag[j]=t; } }
     return bag.pop();
   }
+  function makePiece(type) {
+    const m = SHAPES[type];
+    piece = { type, m: m.map((r) => r.slice()), x: Math.floor((COLS - m.length) / 2), y: 0, word: WORDS[Math.floor(Math.random() * WORDS.length)] };
+    lockTimer = 0; lockResets = 0;
+    if (collide(piece.m, piece.x, piece.y)) endGame();
+  }
   function spawn() {
     const type = nextType || bagNext();
     nextType = bagNext();
-    const m = SHAPES[type];
-    piece = { type, m: m.map((r) => r.slice()), x: Math.floor((COLS - m.length) / 2), y: 0, word: WORDS[Math.floor(Math.random() * WORDS.length)] };
-    drawNext();
-    if (collide(piece.m, piece.x, piece.y)) endGame();
+    holdUsed = false;
+    makePiece(type);
+    drawNext(); drawHold();
   }
   function collide(m, px, py) {
     for (let y=0;y<m.length;y++) for (let x=0;x<m.length;x++) {
@@ -70,11 +77,17 @@
     return n;
   }
   function lock() { const ko = merge(); const n = clearLines(); if (n>0) onClear(n); if (ko) { endGame(); return; } spawn(); }
-  function move(dx) { if (over||paused) return; if (!collide(piece.m, piece.x+dx, piece.y)) { piece.x+=dx; draw(); } }
-  function rotate() { if (over||paused) return; const r = rot(piece.m); for (const k of [0,-1,1,-2,2]) { if (!collide(r, piece.x+k, piece.y)) { piece.m=r; piece.x+=k; draw(); return; } } }
-  function softDrop() { if (over||paused) return; if (!collide(piece.m, piece.x, piece.y+1)) { piece.y++; score+=1; updateHud(); } else lock(); lastDrop = performance.now(); draw(); }
-  function hardDrop() { if (over||paused) return; let d=0; while (!collide(piece.m, piece.x, piece.y+1)) { piece.y++; d++; } score+=d*2; updateHud(); lock(); draw(); }
-  function gravity() { if (!collide(piece.m, piece.x, piece.y+1)) piece.y++; else lock(); draw(); }
+  function resetLock() { if (lockTimer && lockResets < LOCK_MAX_RESETS && piece && collide(piece.m, piece.x, piece.y+1)) { lockTimer = performance.now(); lockResets++; } }
+  function move(dx) { if (over||paused||!piece) return; if (!collide(piece.m, piece.x+dx, piece.y)) { piece.x+=dx; resetLock(); draw(); } }
+  function rotate() { if (over||paused||!piece) return; const r = rot(piece.m); for (const k of [0,-1,1,-2,2]) { if (!collide(r, piece.x+k, piece.y)) { piece.m=r; piece.x+=k; resetLock(); draw(); return; } } }
+  function softDrop() { if (over||paused||!piece) return; if (!collide(piece.m, piece.x, piece.y+1)) { piece.y++; score+=1; updateHud(); lastDrop = performance.now(); } draw(); }
+  function hardDrop() { if (over||paused||!piece) return; let d=0; while (!collide(piece.m, piece.x, piece.y+1)) { piece.y++; d++; } score+=d*2; updateHud(); lock(); draw(); }
+  function hold() {
+    if (over||paused||!piece||holdUsed) return;
+    const cur = piece.type;
+    if (holdType == null) { holdType = cur; spawn(); } else { const t = holdType; holdType = cur; makePiece(t); }
+    holdUsed = true; lastDrop = 0; drawHold(); draw();
+  }
 
   function onClear(n) {
     const wasRecord = score > best;
@@ -141,13 +154,39 @@
       nctx.strokeStyle = "rgba(255,255,255,.8)"; nctx.lineWidth = 1.5; nctx.strokeRect(ox+x*u+1.5, oy+y*u+1.5, u-3, u-3);
     }
   }
+  function drawHold() {
+    if (!hctx) return;
+    hctx.clearRect(0, 0, holdCanvas.width, holdCanvas.height);
+    const m = SHAPES[holdType]; if (!m) return;
+    const N = m.length, u = Math.floor(holdCanvas.width/4);
+    const ox = Math.floor((holdCanvas.width - N*u)/2), oy = Math.floor((holdCanvas.height - N*u)/2);
+    const a = holdUsed ? 0.32 : 1;
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) if (m[y][x]) {
+      hctx.fillStyle = "rgba(255,255,255," + (0.10*a) + ")"; hctx.fillRect(ox+x*u+1, oy+y*u+1, u-2, u-2);
+      hctx.strokeStyle = "rgba(255,255,255," + (0.8*a) + ")"; hctx.lineWidth = 1.5; hctx.strokeRect(ox+x*u+1.5, oy+y*u+1.5, u-3, u-3);
+    }
+  }
   function updateHud() { setText("yg-score", fmt.format(score)); setText("yg-level", String(level)); setText("yg-lines", String(lines)); setText("yg-best", fmt.format(best)); }
   function setText(id, t) { const el = document.getElementById(id); if (el) el.textContent = t; }
 
-  function loop(t) { if (!running) return; if (!paused && !over) { if (!lastDrop) lastDrop = t; if (t-lastDrop > dropInt) { gravity(); lastDrop = t; } } raf = window.requestAnimationFrame(loop); }
+  function loop(t) {
+    if (!running) return;
+    if (!paused && !over && piece) {
+      if (!lastDrop) lastDrop = t;
+      if (collide(piece.m, piece.x, piece.y + 1)) {
+        if (!lockTimer) lockTimer = t;
+        if (t - lockTimer >= LOCK_DELAY) lock();
+      } else {
+        lockTimer = 0; lockResets = 0;
+        if (t - lastDrop >= dropInt) { piece.y++; lastDrop = t; draw(); }
+      }
+    }
+    raf = window.requestAnimationFrame(loop);
+  }
 
   function startGame() {
     resetBoard(); score=0; lines=0; level=1; dropInt=800; over=false; paused=false; savedThisRun=false;
+    holdType=null; holdUsed=false; lockTimer=0; lockResets=0;
     nextType=null; bag=[]; spawn(); updateHud(); hideScreen(); running=true; lastDrop=0;
     window.cancelAnimationFrame(raf); raf = window.requestAnimationFrame(loop); draw();
   }
@@ -223,6 +262,7 @@
       case "ArrowDown": softDrop(); break;
       case "ArrowUp": case "x": case "X": rotate(); break;
       case " ": hardDrop(); break;
+      case "c": case "C": case "Shift": hold(); break;
       case "p": case "P": paused = !paused; draw(); break;
       case "Escape": closeGame(); break;
       default: return;
@@ -247,12 +287,15 @@
           '<div class="yg-stat">Líneas<b id="yg-lines">0</b></div>' +
           '<div class="yg-stat">Siguiente</div>' +
           '<canvas id="yg-next" width="96" height="96"></canvas>' +
+          '<div class="yg-stat">Reserva</div>' +
+          '<canvas id="yg-hold" width="96" height="96" title="Guardar en reserva"></canvas>' +
           '<div class="yg-stat">Récord<b id="yg-best">0</b></div>' +
-          '<div class="yg-hint">← → mover · ↑ rotar · ↓ bajar<br>espacio: caída · P: pausa · Esc: salir</div>' +
+          '<div class="yg-hint">← → mover · ↑ rotar · ↓ bajar<br>espacio: caída · C: reserva · P: pausa · Esc: salir</div>' +
           '<div class="yg-mobilectrl">' +
             '<div class="yg-stick" id="yg-stick"><div class="yg-knob" id="yg-knob"></div></div>' +
             '<div class="yg-actions">' +
               '<button data-act="rot" aria-label="Rotar">⟳</button>' +
+              '<button data-act="hold" aria-label="Reserva">⇄</button>' +
               '<button data-act="drop" aria-label="Caída">⤓</button>' +
             '</div>' +
           '</div>' +
@@ -267,6 +310,7 @@
     shell = overlay.querySelector("#yg-shell");
     canvas = overlay.querySelector("#yg-board"); ctx = canvas.getContext("2d"); cell = canvas.width / COLS;
     nextCanvas = overlay.querySelector("#yg-next"); nctx = nextCanvas.getContext("2d");
+    holdCanvas = overlay.querySelector("#yg-hold"); hctx = holdCanvas.getContext("2d"); holdCanvas.addEventListener("click", hold);
     screenEl = overlay.querySelector("#yg-screen"); popEl = overlay.querySelector("#yg-pop");
     resetBoard();
 
@@ -274,7 +318,7 @@
     overlay.addEventListener("click", (e) => { if (e.target === overlay) closeGame(); });
     overlay.querySelectorAll(".yg-actions button").forEach((b) => {
       const act = b.getAttribute("data-act");
-      b.addEventListener("click", () => { if (act === "rot") rotate(); else if (act === "drop") hardDrop(); });
+      b.addEventListener("click", () => { if (act === "rot") rotate(); else if (act === "drop") hardDrop(); else if (act === "hold") hold(); });
     });
 
     // --- Joystick (mobile) ---
