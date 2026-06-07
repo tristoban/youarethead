@@ -291,7 +291,7 @@ export function buildApp(db: Db): FastifyInstance {
   const chatNames = new Map<string, string>();
   const muralRate = new Map<string, number>();
   const hubMailRate = new Map<string, number>();
-  const GATED = new Set(['/index.html', '/tshirt.png', '/pic1.png', '/pic2.png', '/pic3.png']);
+  const GATED = new Set(['/index.html', '/tshirt.png', '/pic1.png', '/pic2.png', '/pic3.png', '/pic3.jpg']);
   app.addHook('onRequest', async (req, reply) => {
     if (LAUNCHED || isAdmin(req)) return;
     const p = req.url.split('?')[0] ?? '';
