@@ -1,0 +1,91 @@
+/* ====== Tristo's Game Hub ====== */
+
+#th-overlay {
+  position: fixed; inset: 0; z-index: 9000; display: none;
+  align-items: flex-start; justify-content: center; padding: 24px 14px;
+  background: rgba(4, 4, 6, 0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  font-family: "Montserrat", system-ui, sans-serif; color: #f5f5f7; overflow-y: auto;
+}
+#th-overlay.th-open { display: flex; }
+
+.th-shell {
+  position: relative; width: 100%; max-width: 680px; margin-top: 4vh;
+  background: rgba(8, 8, 10, 0.92); border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px; padding: 20px 22px 26px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+.th-close { position: absolute; top: 10px; right: 12px; background: none; border: 0; color: #9a9aa2; font-size: 26px; cursor: pointer; line-height: 1; }
+.th-close:hover { color: #fff; }
+
+.th-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; padding-right: 28px; }
+.th-logo { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+.th-ident { font-size: 12px; color: #9a9aa2; }
+.th-ident b { color: #fff; }
+.th-ident a { color: #fff; border-bottom: 1px solid rgba(255, 255, 255, 0.3); cursor: pointer; }
+
+.th-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.th-card {
+  display: flex; flex-direction: column; gap: 6px; text-align: left;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px; padding: 18px 16px; color: #f5f5f7; cursor: pointer; font: inherit;
+  transition: background .15s, border-color .15s, transform .08s;
+}
+.th-card:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.35); }
+.th-card:active { transform: translateY(1px); }
+.th-card b { font-size: 15px; font-weight: 800; }
+.th-card span { font-size: 12px; color: #9a9aa2; line-height: 1.45; }
+
+.th-back { display: inline-block; font-size: 12px; color: #9a9aa2; margin-bottom: 12px; cursor: pointer; }
+.th-back:hover { color: #fff; }
+.th-view h3 { margin: 0 0 8px; font-size: 18px; font-weight: 800; }
+.th-p { margin: 0 0 12px; font-size: 13px; color: #cfcfd6; }
+.th-dim { color: #6c6c72; }
+.th-msg { min-height: 1.2em; margin: 10px 0 0; font-size: 13px; color: #cfcfd6; }
+.th-big { font-size: 26px; font-weight: 800; margin: 12px 0 0; }
+.th-hide { display: none !important; }
+
+.th-row { display: flex; gap: 8px; margin-top: 10px; }
+.th-row input {
+  flex: 1; min-width: 0; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px; padding: 11px 12px; color: #fff; font: inherit; outline: none;
+}
+.th-row input:focus { border-color: rgba(255, 255, 255, 0.5); }
+.th-btn {
+  font-weight: 700; font-size: 13px; background: #f5f5f7; color: #060606; border: 0;
+  border-radius: 8px; padding: 11px 16px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.th-btn:hover { background: #d9d9de; }
+.th-btn.th-ghost { background: transparent; color: #f5f5f7; border: 1px solid rgba(255, 255, 255, 0.25); margin-top: 10px; }
+
+.th-boton { text-align: center; }
+.th-nopress { font-size: 12px; letter-spacing: 0.3em; color: #9a9aa2; text-transform: uppercase; margin: 14px 0 18px; }
+#th-bigbtn {
+  width: 130px; height: 130px; border-radius: 50%; cursor: pointer;
+  background: #f5f5f7; border: 6px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 14px 50px rgba(255, 255, 255, 0.12), inset 0 -8px 18px rgba(0, 0, 0, 0.25);
+  transition: transform .08s;
+}
+#th-bigbtn:active { transform: scale(0.94); }
+
+.th-parp { text-align: center; }
+.th-stage { min-height: 190px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; padding: 18px; }
+.th-flashw { font-size: clamp(26px, 6vw, 44px); font-weight: 800; letter-spacing: 0.02em; }
+.th-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; max-width: 380px; }
+.th-opt { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; color: #fff; font: inherit; font-weight: 700; padding: 12px 8px; cursor: pointer; }
+.th-opt:hover { background: rgba(255, 255, 255, 0.14); }
+.th-lb { text-align: left; margin-top: 16px; font-size: 13px; }
+.th-lb h4 { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #9a9aa2; margin: 0 0 8px; }
+.th-lb ol { margin: 0; padding-left: 22px; }
+.th-lb li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+
+.th-mural { text-align: center; }
+#th-mcv { width: 100%; height: auto; image-rendering: pixelated; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 6px; cursor: crosshair; background: #000; }
+.th-pal { display: flex; gap: 6px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
+.th-sw { width: 30px; height: 30px; border-radius: 6px; border: 2px solid rgba(255, 255, 255, 0.25); cursor: pointer; }
+.th-sw.on { border-color: #fff; transform: scale(1.12); }
+
+@media (max-width: 540px) {
+  .th-shell { padding: 16px 14px 20px; margin-top: 2vh; }
+  .th-grid { grid-template-columns: 1fr; }
+  .th-row { flex-direction: column; }
+}

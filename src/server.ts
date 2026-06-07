@@ -100,6 +100,49 @@ export async function initDb(db: Db): Promise<void> {
     );
   `);
   await db.query(`CREATE INDEX IF NOT EXISTS chat_id_idx ON chat_messages (id);`);
+  await db.query(`ALTER TABLE scores ADD COLUMN IF NOT EXISTS game TEXT NOT NULL DEFAULT 'tetristo';`);
+  await db.query(`CREATE INDEX IF NOT EXISTS scores_game_idx ON scores (game, score DESC, created_at ASC);`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS hub_users (
+      id BIGSERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      email_norm TEXT NOT NULL,
+      nick TEXT,
+      nick_norm TEXT,
+      code TEXT,
+      code_expires TIMESTAMPTZ,
+      code_attempts INTEGER NOT NULL DEFAULT 0,
+      session TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS hub_users_email_uidx ON hub_users (email_norm);`);
+  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS hub_users_nick_uidx ON hub_users (nick_norm) WHERE nick_norm IS NOT NULL;`);
+  await db.query(`CREATE INDEX IF NOT EXISTS hub_users_session_idx ON hub_users (session);`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS boton_caidos (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL UNIQUE,
+      nick TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS mural_px (
+      x SMALLINT NOT NULL,
+      y SMALLINT NOT NULL,
+      v SMALLINT NOT NULL,
+      nick TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (x, y)
+    );
+  `);
+  const mp = await db.query('SELECT x, y, v FROM mural_px');
+  for (const r of mp.rows) {
+    const x = Number(r.x), y = Number(r.y), v = Number(r.v);
+    if (x >= 0 && x < MURAL_W && y >= 0 && y < MURAL_H) muralGrid[y * MURAL_W + x] = Math.max(0, Math.min(7, v));
+  }
+  muralDirty = true;
 }
 
 interface Stats { count: number; goal: number; remaining: number; unlocked: boolean; }
@@ -109,12 +152,58 @@ async function getStats(db: Db): Promise<Stats> {
   const remaining = Math.max(0, GOAL - count);
   return { count, goal: GOAL, remaining, unlocked: count >= GOAL };
 }
-async function topScores(db: Db): Promise<Array<{ alias: unknown; score: number }>> {
-  const { rows } = await db.query('SELECT alias, score FROM scores ORDER BY score DESC, created_at ASC LIMIT 10');
+async function topScores(db: Db, game = 'tetristo'): Promise<Array<{ alias: unknown; score: number }>> {
+  const { rows } = await db.query('SELECT alias, score FROM scores WHERE game = $1 ORDER BY score DESC, created_at ASC LIMIT 10', [game]);
   return rows.map((r) => ({ alias: r.alias, score: Number(r.score) }));
 }
 function mapMsg(r: Record<string, unknown>): { id: number; name: unknown; body: unknown; t: unknown } {
   return { id: Number(r.id), name: r.name, body: r.body, t: r.created_at };
+}
+
+const MURAL_W = 100, MURAL_H = 56;
+const muralGrid = new Uint8Array(MURAL_W * MURAL_H);
+let muralDirty = true, muralCache = '';
+function muralString(): string {
+  if (muralDirty) {
+    const a: string[] = new Array(muralGrid.length);
+    for (let i = 0; i < muralGrid.length; i++) a[i] = (muralGrid[i] ?? 0).toString(16);
+    muralCache = a.join(''); muralDirty = false;
+  }
+  return muralCache;
+}
+
+async function hubUserBySession(db: Db, req: FastifyRequest): Promise<{ id: number; nick: string | null } | null> {
+  const c = req.headers.cookie;
+  if (typeof c !== 'string') return null;
+  const m = c.split(';').map((s) => s.trim()).find((s) => s.startsWith('yath_sess='));
+  if (!m) return null;
+  const tok = m.slice(10);
+  if (!tok || tok.length < 20) return null;
+  const { rows } = await db.query('SELECT id, nick FROM hub_users WHERE session = $1', [tok]);
+  const r = rows[0];
+  if (!r) return null;
+  return { id: Number(r.id), nick: (r.nick as string | null) ?? null };
+}
+
+async function sendHubCode(to: string, code: string): Promise<boolean> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) { console.warn('[mail] RESEND_API_KEY ausente: no se envía'); return false; }
+  const html =
+    '<div style="background:#060606;color:#f5f5f7;font-family:Arial,Helvetica,sans-serif;padding:40px 24px;text-align:center">' +
+    '<div style="max-width:480px;margin:0 auto">' +
+    '<h1 style="font-size:26px;letter-spacing:-.02em;margin:0 0 6px">Tristo&#39;s</h1>' +
+    '<p style="color:#9a9aa2;margin:0 0 22px">Tu código para entrar:</p>' +
+    `<div style="font-size:40px;font-weight:800;letter-spacing:10px;background:#101014;border:1px solid #2a2a30;border-radius:12px;padding:18px 12px;margin:0 0 18px">${code}</div>` +
+    '<p style="color:#6c6c72;font-size:12px;margin:24px 0 0">Si no fuiste vos, ignorá este mail.<br>youarethead.com.ar</p>' +
+    '</div></div>';
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ from: FROM_EMAIL, to, subject: `Tu código: ${code} — Tristo's`, html }),
+    });
+    return r.ok;
+  } catch { return false; }
 }
 function getClientIp(req: FastifyRequest): string {
   const cf = req.headers['cf-connecting-ip'];
@@ -200,6 +289,8 @@ export function buildApp(db: Db): FastifyInstance {
 
   const chatRate = new Map<string, number>();
   const chatNames = new Map<string, string>();
+  const muralRate = new Map<string, number>();
+  const hubMailRate = new Map<string, number>();
   const GATED = new Set(['/index.html', '/tshirt.png', '/pic1.png', '/pic2.png', '/pic3.png']);
   app.addHook('onRequest', async (req, reply) => {
     if (LAUNCHED || isAdmin(req)) return;
@@ -258,20 +349,21 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.code(200).send({ ok: true, confirmed: true, message: '¡Confirmado! Sos parte.', ...stats });
   });
 
-  app.get('/api/scores', async (_req, reply) => { reply.header('cache-control', 'no-store'); return { ok: true, scores: await topScores(db) }; });
+  app.get('/api/scores', async (req, reply) => { reply.header('cache-control', 'no-store'); const g = ((req.query ?? {}) as { game?: unknown }).game; return { ok: true, scores: await topScores(db, g === 'parpadeo' ? 'parpadeo' : 'tetristo') }; });
 
   app.post('/api/score', async (req, reply) => {
-    const body = (req.body ?? {}) as { alias?: unknown; score?: unknown; email?: unknown };
+    const body = (req.body ?? {}) as { alias?: unknown; score?: unknown; game?: unknown };
+    const game = body.game === 'parpadeo' ? 'parpadeo' : 'tetristo';
     let alias = typeof body.alias === 'string' ? body.alias.trim().replace(/[^\p{L}\p{N} _.\-]/gu, '').slice(0, 12).trim() : '';
     if (!alias) alias = 'ANON';
     if (offensiveAlias(alias)) return reply.code(400).send({ ok: false, error: 'bad_alias', message: 'Ese alias no se puede usar.' });
     const score = typeof body.score === 'number' && Number.isFinite(body.score) ? Math.floor(body.score) : NaN;
     if (!Number.isInteger(score) || score < 0 || score > 10000000) return reply.code(400).send({ ok: false, error: 'bad_score', message: 'Puntaje inválido.' });
     const ipHash = hashIp(getClientIp(req));
-    await db.query('INSERT INTO scores (alias, score, ip_hash) VALUES ($1, $2, $3)', [alias, score, ipHash]);
-    const rankRes = await db.query('SELECT count(*) AS c FROM scores WHERE score > $1', [score]);
+    await db.query('INSERT INTO scores (alias, score, ip_hash, game) VALUES ($1, $2, $3, $4)', [alias, score, ipHash, game]);
+    const rankRes = await db.query('SELECT count(*) AS c FROM scores WHERE score > $1 AND game = $2', [score, game]);
     const rank = Number((rankRes.rows[0]?.c as string | number | bigint | undefined) ?? 0) + 1;
-    return reply.code(201).send({ ok: true, rank, alias, score, scores: await topScores(db) });
+    return reply.code(201).send({ ok: true, rank, alias, score, scores: await topScores(db, game) });
   });
 
   app.get('/api/chat', async (req, reply) => {
@@ -304,6 +396,110 @@ export function buildApp(db: Db): FastifyInstance {
     const ins = await db.query('INSERT INTO chat_messages (name, body, ip_hash) VALUES ($1, $2, $3) RETURNING id, created_at', [name, text, ipHash]);
     const row = ins.rows[0];
     return reply.code(201).send({ ok: true, message: { id: Number(row?.id ?? 0), name, body: text, t: row?.created_at }, nameLocked: chatNames.has(ipHash) });
+  });
+
+  app.post('/api/hub/login', async (req, reply) => {
+    const body = (req.body ?? {}) as { email?: unknown };
+    const emailRaw = typeof body.email === 'string' ? body.email.trim() : '';
+    if (!emailRaw || emailRaw.length > 254 || !EMAIL_RE.test(emailRaw)) return reply.code(400).send({ ok: false, error: 'invalid_email', message: 'Ese mail no parece válido.' });
+    const ipHash = hashIp(getClientIp(req));
+    const now = Date.now();
+    const last = hubMailRate.get(ipHash) ?? 0;
+    if (now - last < 20000) return reply.code(429).send({ ok: false, error: 'slow', message: 'Esperá unos segundos y probá de nuevo.' });
+    hubMailRate.set(ipHash, now);
+    const code = newCode();
+    await db.query("INSERT INTO hub_users (email, email_norm, code, code_expires, code_attempts) VALUES ($1, $2, $3, now() + interval '30 minutes', 0) ON CONFLICT (email_norm) DO UPDATE SET code = $3, code_expires = now() + interval '30 minutes', code_attempts = 0", [emailRaw, emailRaw.toLowerCase(), code]);
+    await sendHubCode(emailRaw, code);
+    return reply.code(201).send({ ok: true, pending: true, message: 'Te mandamos un código al mail.' });
+  });
+
+  app.post('/api/hub/verify', async (req, reply) => {
+    const body = (req.body ?? {}) as { email?: unknown; code?: unknown };
+    const emailRaw = typeof body.email === 'string' ? body.email.trim() : '';
+    const code = typeof body.code === 'string' ? body.code.replace(/\D/g, '') : '';
+    if (!EMAIL_RE.test(emailRaw) || code.length !== 6) return reply.code(400).send({ ok: false, error: 'bad_code', message: 'Datos inválidos.' });
+    const { rows } = await db.query('SELECT id, nick, code, code_attempts, (code_expires > now()) AS valid FROM hub_users WHERE email_norm = $1', [emailRaw.toLowerCase()]);
+    const row = rows[0];
+    if (!row) return reply.code(404).send({ ok: false, error: 'not_found', message: 'Pedí un código primero.' });
+    const attempts = Number(row.code_attempts ?? 0);
+    if (!row.code || row.valid === false) return reply.code(400).send({ ok: false, error: 'expired', message: 'El código venció. Pedí otro.' });
+    if (attempts >= 5) return reply.code(429).send({ ok: false, error: 'too_many', message: 'Demasiados intentos. Pedí otro código.' });
+    if (String(row.code) !== code) { await db.query('UPDATE hub_users SET code_attempts = $2 WHERE id = $1', [row.id, attempts + 1]); return reply.code(400).send({ ok: false, error: 'bad_code', message: 'Código incorrecto.' }); }
+    const sess = newToken();
+    await db.query('UPDATE hub_users SET session = $2, code = NULL WHERE id = $1', [row.id, sess]);
+    reply.header('set-cookie', 'yath_sess=' + sess + '; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax');
+    return reply.code(200).send({ ok: true, logged: true, nick: (row.nick as string | null) ?? null });
+  });
+
+  app.post('/api/hub/nick', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login', message: 'Entrá primero.' });
+    const body = (req.body ?? {}) as { nick?: unknown };
+    const nick = typeof body.nick === 'string' ? body.nick.replace(/\s+/g, ' ').trim().slice(0, 14).trim() : '';
+    if (nick.length < 2) return reply.code(400).send({ ok: false, error: 'bad_nick', message: 'Muy corto.' });
+    if (offensiveAlias(nick) || offensiveText(nick)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Ese nick no va.' });
+    try {
+      await db.query('UPDATE hub_users SET nick = $2, nick_norm = $3 WHERE id = $1', [u.id, nick, nick.toLowerCase()]);
+    } catch {
+      return reply.code(409).send({ ok: false, error: 'taken', message: 'Ese nick ya está tomado.' });
+    }
+    return reply.code(200).send({ ok: true, nick });
+  });
+
+  app.get('/api/hub/me', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    return { ok: true, logged: !!u, nick: u ? u.nick : null };
+  });
+
+  app.post('/api/hub/logout', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (u) await db.query('UPDATE hub_users SET session = NULL WHERE id = $1', [u.id]);
+    reply.header('set-cookie', 'yath_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+    return { ok: true };
+  });
+
+  app.get('/api/boton', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const { rows } = await db.query('SELECT count(*) AS c FROM boton_caidos');
+    const total = Number((rows[0]?.c as string | number | bigint | undefined) ?? 0);
+    const rec = await db.query('SELECT nick FROM boton_caidos ORDER BY id DESC LIMIT 5');
+    return { ok: true, total, ultimos: rec.rows.map((r) => r.nick) };
+  });
+
+  app.post('/api/boton', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login', message: 'Solo los logueados pueden caer.' });
+    const ins = await db.query('INSERT INTO boton_caidos (user_id, nick) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING RETURNING id', [u.id, u.nick ?? 'anónimo']);
+    const tot = await db.query('SELECT count(*) AS c FROM boton_caidos');
+    const total = Number((tot.rows[0]?.c as string | number | bigint | undefined) ?? 0);
+    const first = ins.rows[0];
+    if (!first) {
+      const mine = await db.query('SELECT count(*) AS n FROM boton_caidos b WHERE b.id <= (SELECT id FROM boton_caidos WHERE user_id = $1)', [u.id]);
+      return reply.code(200).send({ ok: true, caido: true, ya: true, numero: Number((mine.rows[0]?.n as string | number | bigint | undefined) ?? 0), total });
+    }
+    const pos = await db.query('SELECT count(*) AS n FROM boton_caidos WHERE id <= $1', [first.id]);
+    return reply.code(201).send({ ok: true, caido: true, ya: false, numero: Number((pos.rows[0]?.n as string | number | bigint | undefined) ?? 0), total });
+  });
+
+  app.get('/api/mural', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return { ok: true, w: MURAL_W, h: MURAL_H, cooldown: 5, d: muralString() };
+  });
+
+  app.post('/api/mural', async (req, reply) => {
+    const body = (req.body ?? {}) as { x?: unknown; y?: unknown; v?: unknown };
+    const x = Math.floor(Number(body.x)), y = Math.floor(Number(body.y)), v = Math.floor(Number(body.v));
+    if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(v) || x < 0 || x >= MURAL_W || y < 0 || y >= MURAL_H || v < 0 || v > 7) return reply.code(400).send({ ok: false, error: 'bad_px', message: 'Pixel inválido.' });
+    const ipHash = hashIp(getClientIp(req));
+    const now = Date.now();
+    const last = muralRate.get(ipHash) ?? 0;
+    if (now - last < 5000) return reply.code(429).send({ ok: false, error: 'slow', wait: Math.ceil((5000 - (now - last)) / 1000), message: 'Esperá para pintar otro.' });
+    muralRate.set(ipHash, now);
+    const u = await hubUserBySession(db, req);
+    muralGrid[y * MURAL_W + x] = v; muralDirty = true;
+    await db.query('INSERT INTO mural_px (x, y, v, nick, updated_at) VALUES ($1, $2, $3, $4, now()) ON CONFLICT (x, y) DO UPDATE SET v = $3, nick = $4, updated_at = now()', [x, y, v, u ? u.nick : null]);
+    return reply.code(201).send({ ok: true });
   });
 
   app.get('/api/confirm', async (req, reply) => {
