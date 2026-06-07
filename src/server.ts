@@ -137,6 +137,19 @@ export async function initDb(db: Db): Promise<void> {
       PRIMARY KEY (x, y)
     );
   `);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS pueblo_chars (
+      user_id BIGINT PRIMARY KEY,
+      head TEXT NOT NULL DEFAULT 'o',
+      vida REAL NOT NULL DEFAULT 100,
+      hambre REAL NOT NULL DEFAULT 100,
+      sueno REAL NOT NULL DEFAULT 100,
+      x REAL NOT NULL DEFAULT 0.5,
+      y REAL NOT NULL DEFAULT 0.6,
+      last_tick TIMESTAMPTZ NOT NULL DEFAULT now(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
   const mp = await db.query('SELECT x, y, v FROM mural_px');
   for (const r of mp.rows) {
     const x = Number(r.x), y = Number(r.y), v = Number(r.v);
@@ -183,6 +196,48 @@ async function hubUserBySession(db: Db, req: FastifyRequest): Promise<{ id: numb
   const r = rows[0];
   if (!r) return null;
   return { id: Number(r.id), nick: (r.nick as string | null) ?? null };
+}
+
+const HEADS = ['o', 'O', 'ö', 'ø', '@', '°'];
+const NPC_LINES = [
+  'Tristo: "¿Café? Acá la noche no termina nunca."',
+  'Tristo: "El primero es gratis. Todos son gratis. Nadie sale igual."',
+  'Tristo: "Yo solo atiendo. No preguntes desde cuándo."',
+  'Tristo: "Si escuchás un teléfono, no atiendas."',
+  'Tristo: "El video sale cuando tenga que salir."',
+  'Tristo: "Tomá. Te va a mantener despierto. Para siempre."',
+  'Tristo: "¿Dormiste? Acá eso es un lujo."',
+  'Tristo: "¿Viste el mural? Algo están dibujando entre todos."',
+];
+const PUEBLO_SAYS = ['hola', 'jaja', '¿y el video?', 'seguime', 'quiero salir de acá', 'tengo hambre', 'tengo sueño', '¿alguien tiene café?', 'no puedo dormir', 'estamos atrapados'];
+const CAFE_X0 = 0.68, CAFE_X1 = 0.97, CASA_X0 = 0.03, CASA_X1 = 0.3;
+interface PuebloP { id: number; nick: string; head: string; x: number; y: number; say: string; sayUntil: number; vida: number; hambre: number; sueno: number; lastTick: number; lastSave: number; last: number; cdComer: number; cdDormir: number; }
+const pueblo = new Map<number, PuebloP>();
+function decay(p: PuebloP, now: number): void {
+  const h = Math.max(0, (now - p.lastTick) / 3600000);
+  if (h <= 0) { p.lastTick = now; return; }
+  p.hambre = Math.max(0, p.hambre - 25 * h);
+  p.sueno = Math.max(0, p.sueno - 18 * h);
+  let dv = 0;
+  if (p.hambre <= 0) dv -= 20 * h;
+  if (p.sueno <= 0) dv -= 15 * h;
+  if (p.hambre > 30 && p.sueno > 30) dv += 10 * h;
+  p.vida = Math.max(1, Math.min(100, p.vida + dv));
+  p.lastTick = now;
+}
+async function puebloLoad(db: Db, u: { id: number; nick: string | null }): Promise<PuebloP | null> {
+  const got = pueblo.get(u.id);
+  if (got) return got;
+  const { rows } = await db.query('SELECT head, vida, hambre, sueno, x, y FROM pueblo_chars WHERE user_id = $1', [u.id]);
+  const r = rows[0];
+  if (!r) return null;
+  const p: PuebloP = { id: u.id, nick: u.nick ?? 'anón', head: String(r.head ?? 'o'), x: Number(r.x ?? 0.5), y: Number(r.y ?? 0.6), say: '', sayUntil: 0, vida: Number(r.vida ?? 100), hambre: Number(r.hambre ?? 100), sueno: Number(r.sueno ?? 100), lastTick: Date.now(), lastSave: Date.now(), last: Date.now(), cdComer: 0, cdDormir: 0 };
+  pueblo.set(u.id, p);
+  return p;
+}
+async function puebloSave(db: Db, p: PuebloP): Promise<void> {
+  p.lastSave = Date.now();
+  await db.query('UPDATE pueblo_chars SET vida = $2, hambre = $3, sueno = $4, x = $5, y = $6, last_tick = now() WHERE user_id = $1', [p.id, p.vida, p.hambre, p.sueno, p.x, p.y]);
 }
 
 async function sendHubCode(to: string, code: string): Promise<boolean> {
@@ -530,6 +585,84 @@ export function buildApp(db: Db): FastifyInstance {
     reply.code(401).header('content-type', 'text/html; charset=utf-8');
     return page('Admin', '<h1>Clave incorrecta</h1><p>Probá de nuevo desde el sitio.</p><a href="/">Volver</a>');
   });
+  app.get('/api/pueblo/me', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return { ok: true, logged: false };
+    const p = await puebloLoad(db, u);
+    if (!p) return { ok: true, logged: true, char: null, heads: HEADS };
+    decay(p, Date.now());
+    return { ok: true, logged: true, char: { nick: p.nick, head: p.head, vida: Math.round(p.vida), hambre: Math.round(p.hambre), sueno: Math.round(p.sueno), x: p.x, y: p.y } };
+  });
+
+  app.post('/api/pueblo/crear', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const body = (req.body ?? {}) as { head?: unknown };
+    const head = typeof body.head === 'string' && HEADS.indexOf(body.head) >= 0 ? body.head : 'o';
+    await db.query('INSERT INTO pueblo_chars (user_id, head) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING', [u.id, head]);
+    pueblo.delete(u.id);
+    const p = await puebloLoad(db, u);
+    return reply.code(201).send({ ok: true, char: p ? { nick: p.nick, head: p.head, vida: Math.round(p.vida), hambre: Math.round(p.hambre), sueno: Math.round(p.sueno) } : null });
+  });
+
+  app.post('/api/pueblo/tick', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const p = await puebloLoad(db, u);
+    if (!p) return reply.code(404).send({ ok: false, error: 'sin_personaje' });
+    const body = (req.body ?? {}) as { x?: unknown; y?: unknown; say?: unknown };
+    const now = Date.now();
+    decay(p, now);
+    const x = Number(body.x), y = Number(body.y);
+    if (Number.isFinite(x)) p.x = Math.max(0, Math.min(1, x));
+    if (Number.isFinite(y)) p.y = Math.max(0, Math.min(1, y));
+    const si = Math.floor(Number(body.say));
+    if (Number.isInteger(si) && si >= 0 && si < PUEBLO_SAYS.length) { p.say = PUEBLO_SAYS[si] ?? ''; p.sayUntil = now + 4000; }
+    p.nick = u.nick ?? p.nick;
+    p.last = now;
+    if (now - p.lastSave > 30000) await puebloSave(db, p);
+    for (const [k, v] of pueblo) if (now - v.last > 15000) { await puebloSave(db, v); pueblo.delete(k); }
+    const players: Array<{ nick: string; head: string; x: number; y: number; say: string }> = [];
+    for (const v of pueblo.values()) players.push({ nick: v.nick, head: v.head, x: v.x, y: v.y, say: now < v.sayUntil ? v.say : '' });
+    return { ok: true, you: { vida: Math.round(p.vida), hambre: Math.round(p.hambre), sueno: Math.round(p.sueno) }, players, n: players.length, says: PUEBLO_SAYS };
+  });
+
+  app.post('/api/pueblo/accion', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const p = await puebloLoad(db, u);
+    if (!p) return reply.code(404).send({ ok: false, error: 'sin_personaje' });
+    const tipo = ((req.body ?? {}) as { tipo?: unknown }).tipo;
+    const now = Date.now();
+    decay(p, now);
+    if (tipo === 'comer') {
+      if (p.x < CAFE_X0 || p.x > CAFE_X1) return reply.code(400).send({ ok: false, error: 'lejos', message: 'Acercate a la cafetería.' });
+      if (now < p.cdComer) return reply.code(429).send({ ok: false, error: 'cd', message: 'Tristo: "Recién comiste. Esperá un toque."' });
+      p.hambre = Math.min(100, p.hambre + 45); p.cdComer = now + 60000;
+      await puebloSave(db, p);
+      return { ok: true, hambre: Math.round(p.hambre), npc: NPC_LINES[Math.floor(Math.random() * NPC_LINES.length)] ?? '' };
+    }
+    if (tipo === 'dormir') {
+      if (p.x < CASA_X0 || p.x > CASA_X1) return reply.code(400).send({ ok: false, error: 'lejos', message: 'Andá hasta la casa para dormir.' });
+      if (now < p.cdDormir) return reply.code(429).send({ ok: false, error: 'cd', message: 'Ya dormiste hace nada.' });
+      p.sueno = Math.min(100, p.sueno + 45); p.cdDormir = now + 60000;
+      await puebloSave(db, p);
+      return { ok: true, sueno: Math.round(p.sueno) };
+    }
+    if (tipo === 'hablar') {
+      if (p.x < CAFE_X0 || p.x > CAFE_X1) return reply.code(400).send({ ok: false, error: 'lejos', message: 'Tristo está en la cafetería.' });
+      return { ok: true, npc: NPC_LINES[Math.floor(Math.random() * NPC_LINES.length)] ?? '' };
+    }
+    return reply.code(400).send({ ok: false, error: 'accion' });
+  });
+
+  app.get('/pueblo', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return reply.sendFile('pueblo.html');
+  });
+
   app.get('/tristos', async (_req, reply) => {
     reply.header('cache-control', 'no-store');
     return reply.sendFile('tristos.html');
