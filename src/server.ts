@@ -459,12 +459,15 @@ export function buildApp(db: Db): FastifyInstance {
     return { ok: true };
   });
 
-  app.get('/api/boton', async (_req, reply) => {
+  app.get('/api/boton', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     const { rows } = await db.query('SELECT count(*) AS c FROM boton_caidos');
     const total = Number((rows[0]?.c as string | number | bigint | undefined) ?? 0);
-    const rec = await db.query('SELECT nick FROM boton_caidos ORDER BY id DESC LIMIT 5');
-    return { ok: true, total, ultimos: rec.rows.map((r) => r.nick) };
+    const rec = await db.query('SELECT nick FROM boton_caidos ORDER BY id DESC LIMIT 30');
+    const u = await hubUserBySession(db, req);
+    let vos = false;
+    if (u) { const m = await db.query('SELECT 1 AS x FROM boton_caidos WHERE user_id = $1', [u.id]); vos = m.rows.length > 0; }
+    return { ok: true, total, vos, ultimos: rec.rows.map((r) => r.nick) };
   });
 
   app.post('/api/boton', async (req, reply) => {

@@ -4,14 +4,14 @@
   if (!root) return;
   const JH = { "content-type": "application/json", accept: "application/json" };
   const fmt = new Intl.NumberFormat("es-AR");
-  let viewEl, identEl, muralPoll = 0;
+  let viewEl, identEl, muralPoll = 0, fxInt = 0;
   let me = { logged: false, nick: null };
 
   function esc(s) { return String(s).replace(/[<>&"']/g, ""); }
   function guestNick() { try { return localStorage.getItem("yath-chat-name") || ""; } catch (_) { return ""; } }
   function myNick() { return me.logged && me.nick ? me.nick : guestNick(); }
   async function api(path, opts) { const r = await fetch(path, opts); let d = null; try { d = await r.json(); } catch (_) {} return { r, d }; }
-  function stopMural() { if (muralPoll) { clearInterval(muralPoll); muralPoll = 0; } }
+  function stopMural() { if (muralPoll) { clearInterval(muralPoll); muralPoll = 0; } if (fxInt) { clearInterval(fxInt); fxInt = 0; } }
 
   root.innerHTML =
     '<div class="th-shell">' +
@@ -104,29 +104,55 @@
     stopMural();
     viewEl.innerHTML =
       '<div class="th-boton">' +
+        '<div class="th-fallen" id="th-fallen" aria-hidden="true"></div>' +
         '<a href="#" class="th-back" id="th-back">← volver</a>' +
         '<p class="th-nopress">NO LO APRIETES</p>' +
         '<button id="th-bigbtn" aria-label="El botón"></button>' +
         '<p class="th-big" id="th-btotal">…</p>' +
         '<p class="th-msg" id="th-bmsg"></p>' +
-        '<p class="th-p th-dim" id="th-bult"></p>' +
       '</div>';
     viewEl.querySelector("#th-back").onclick = (e) => { e.preventDefault(); viewMenu(); };
-    const total = viewEl.querySelector("#th-btotal"), bmsg = viewEl.querySelector("#th-bmsg"), ult = viewEl.querySelector("#th-bult");
+    const total = viewEl.querySelector("#th-btotal"), bmsg = viewEl.querySelector("#th-bmsg"), btn = viewEl.querySelector("#th-bigbtn");
+    let names = [];
+    function setFell() { if (btn) btn.classList.add("th-fell"); }
     async function load() {
       const { d } = await api("/api/boton", { headers: { accept: "application/json" } });
-      if (d && d.ok) { total.textContent = fmt.format(d.total) + (d.total === 1 ? " caído" : " caídos"); if (d.ultimos && d.ultimos.length) ult.textContent = "Últimos: " + d.ultimos.filter(Boolean).map(esc).join(", "); }
+      if (d && d.ok) { total.textContent = fmt.format(d.total) + (d.total === 1 ? " caído" : " caídos"); names = (d.ultimos || []).filter(Boolean); if (d.vos) setFell(); }
     }
     load();
-    viewEl.querySelector("#th-bigbtn").onclick = async () => {
+    fxInt = setInterval(() => {
+      const lay = viewEl.querySelector("#th-fallen");
+      if (!lay || !names.length || document.hidden) return;
+      const s = document.createElement("span");
+      s.textContent = names[(Math.random() * names.length) | 0];
+      s.style.left = (4 + Math.random() * 80) + "%";
+      s.style.top = (4 + Math.random() * 86) + "%";
+      lay.appendChild(s);
+      setTimeout(() => s.remove(), 4200);
+    }, 600);
+    btn.onclick = async () => {
       const { r, d } = await api("/api/boton", { method: "POST", headers: JH, body: "{}" });
       if (r.status === 401) { bmsg.textContent = "Solo los logueados pueden caer. Entrá con tu mail y volvé."; return; }
-      if (d && d.ok) { bmsg.textContent = d.ya ? ("Ya habías caído. Sos el N° " + fmt.format(d.numero) + ".") : ("Caíste. Sos el caído N° " + fmt.format(d.numero) + "."); load(); }
+      if (d && d.ok) { setFell(); bmsg.textContent = d.ya ? ("Ya habías caído. Sos el N° " + fmt.format(d.numero) + ".") : ("Caíste. Sos el caído N° " + fmt.format(d.numero) + "."); load(); }
       else bmsg.textContent = (d && d.message) || "No se pudo.";
     };
   }
 
   /* ---------- No Parpadees ---------- */
+  function floatWords(word) {
+    let lay = document.getElementById("th-float");
+    if (!lay) { lay = document.createElement("div"); lay.id = "th-float"; document.body.appendChild(lay); }
+    for (let i = 0; i < 8; i++) {
+      const s = document.createElement("span");
+      s.textContent = word;
+      s.style.left = (4 + Math.random() * 86) + "vw";
+      s.style.top = (6 + Math.random() * 82) + "vh";
+      const dx = (Math.random() * 2 - 1) * 200, dy = (Math.random() * 2 - 1) * 130;
+      lay.appendChild(s);
+      window.requestAnimationFrame(() => { s.style.transform = "translate(" + dx + "px," + dy + "px)"; s.style.opacity = "0"; });
+      setTimeout(() => s.remove(), 1500);
+    }
+  }
   const PW = ["OBEDECÉ", "CONSUMÍ", "COMPRÁ", "DORMÍ", "SOMETETE", "CONFORMATE", "SCROLLEÁ", "DESPERTÁ", "SALÍ", "MIRÁ", "CALLATE", "CORRÉ", "QUEDATE", "DUDÁ", "CREÉ", "PARPADEÁ"];
   function sinTilde(w) { return w.replace(/Á/g, "A").replace(/É/g, "E").replace(/Í/g, "I").replace(/Ó/g, "O").replace(/Ú/g, "U"); }
   function trasponer(w) { if (w.length < 3) return w; const i = 1 + ((Math.random() * (w.length - 2)) | 0); return w.slice(0, i) + w.charAt(i + 1) + w.charAt(i) + w.slice(i + 2); }
@@ -180,7 +206,7 @@
           stage.querySelectorAll(".th-opt").forEach((b) => {
             b.onclick = () => {
               clearTimeout(timer);
-              if (b.textContent === target) { score += 100 + Math.max(0, Math.round((2500 - (performance.now() - t0)) / 100)); scoreEl.textContent = fmt.format(score); next(); }
+              if (b.textContent === target) { floatWords(target); score += 100 + Math.max(0, Math.round((2500 - (performance.now() - t0)) / 100)); scoreEl.textContent = fmt.format(score); next(); }
               else gameOver();
             };
           });
