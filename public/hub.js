@@ -1,29 +1,25 @@
 (() => {
   "use strict";
+  const root = document.getElementById("th-page");
+  if (!root) return;
   const JH = { "content-type": "application/json", accept: "application/json" };
   const fmt = new Intl.NumberFormat("es-AR");
-  let built = false, overlay, viewEl, identEl, muralPoll = 0;
+  let viewEl, identEl, muralPoll = 0;
   let me = { logged: false, nick: null };
 
   function esc(s) { return String(s).replace(/[<>&"']/g, ""); }
   function guestNick() { try { return localStorage.getItem("yath-chat-name") || ""; } catch (_) { return ""; } }
   function myNick() { return me.logged && me.nick ? me.nick : guestNick(); }
   async function api(path, opts) { const r = await fetch(path, opts); let d = null; try { d = await r.json(); } catch (_) {} return { r, d }; }
+  function stopMural() { if (muralPoll) { clearInterval(muralPoll); muralPoll = 0; } }
 
-  function build() {
-    overlay = document.createElement("div"); overlay.id = "th-overlay";
-    overlay.innerHTML =
-      '<div class="th-shell">' +
-        '<button class="th-close" aria-label="Cerrar">×</button>' +
-        '<div class="th-head"><span class="th-logo">Tristo&#39;s</span><span class="th-ident" id="th-ident"></span></div>' +
-        '<div class="th-view" id="th-view"></div>' +
-      '</div>';
-    document.body.appendChild(overlay);
-    viewEl = overlay.querySelector("#th-view");
-    identEl = overlay.querySelector("#th-ident");
-    overlay.querySelector(".th-close").onclick = close;
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
-  }
+  root.innerHTML =
+    '<div class="th-shell">' +
+      '<div class="th-head"><span class="th-logo">Tristo&#39;s</span><span class="th-ident" id="th-ident"></span></div>' +
+      '<div class="th-view" id="th-view"></div>' +
+    '</div>';
+  viewEl = root.querySelector("#th-view");
+  identEl = root.querySelector("#th-ident");
 
   async function refreshMe() {
     try { const { d } = await api("/api/hub/me", { headers: { accept: "application/json" } }); if (d && d.ok) me = { logged: !!d.logged, nick: d.nick || null }; } catch (_) {}
@@ -33,13 +29,11 @@
     if (!identEl) return;
     if (me.logged) identEl.innerHTML = 'Jugás como <b>' + esc(me.nick || "sin nick") + '</b> · <a href="#" id="th-out">salir</a>';
     else identEl.innerHTML = 'Invitado' + (guestNick() ? ' <b>' + esc(guestNick()) + '</b>' : '') + ' · <a href="#" id="th-in">entrar con mail</a>';
-    const out = overlay.querySelector("#th-out");
-    if (out) out.onclick = async (e) => { e.preventDefault(); await api("/api/hub/logout", { method: "POST", headers: JH }); me = { logged: false, nick: null }; paintIdent(); };
-    const inn = overlay.querySelector("#th-in");
+    const out = root.querySelector("#th-out");
+    if (out) out.onclick = async (e) => { e.preventDefault(); await api("/api/hub/logout", { method: "POST", headers: JH, body: "{}" }); me = { logged: false, nick: null }; paintIdent(); };
+    const inn = root.querySelector("#th-in");
     if (inn) inn.onclick = (e) => { e.preventDefault(); viewLogin(); };
   }
-
-  function stopMural() { if (muralPoll) { clearInterval(muralPoll); muralPoll = 0; } }
 
   /* ---------- Menú ---------- */
   function card(g, t, s) { return '<button class="th-card" data-g="' + g + '"><b>' + t + '</b><span>' + s + '</span></button>'; }
@@ -54,7 +48,7 @@
     viewEl.querySelectorAll(".th-card").forEach((c) => {
       c.onclick = () => {
         const g = c.getAttribute("data-g");
-        if (g === "tetristo") { close(); if (window.clickeame) window.clickeame(); }
+        if (g === "tetristo") { if (window.clickeame) window.clickeame(); }
         else if (g === "boton") viewBoton();
         else if (g === "parpadeo") viewParpadeo();
         else if (g === "mural") viewMural();
@@ -125,7 +119,7 @@
     }
     load();
     viewEl.querySelector("#th-bigbtn").onclick = async () => {
-      const { r, d } = await api("/api/boton", { method: "POST", headers: JH });
+      const { r, d } = await api("/api/boton", { method: "POST", headers: JH, body: "{}" });
       if (r.status === 401) { bmsg.textContent = "Solo los logueados pueden caer. Entrá con tu mail y volvé."; return; }
       if (d && d.ok) { bmsg.textContent = d.ya ? ("Ya habías caído. Sos el N° " + fmt.format(d.numero) + ".") : ("Caíste. Sos el caído N° " + fmt.format(d.numero) + "."); load(); }
       else bmsg.textContent = (d && d.message) || "No se pudo.";
@@ -134,13 +128,24 @@
 
   /* ---------- No Parpadees ---------- */
   const PW = ["OBEDECÉ", "CONSUMÍ", "COMPRÁ", "DORMÍ", "SOMETETE", "CONFORMATE", "SCROLLEÁ", "DESPERTÁ", "SALÍ", "MIRÁ", "CALLATE", "CORRÉ", "QUEDATE", "DUDÁ", "CREÉ", "PARPADEÁ"];
+  function sinTilde(w) { return w.replace(/Á/g, "A").replace(/É/g, "E").replace(/Í/g, "I").replace(/Ó/g, "O").replace(/Ú/g, "U"); }
+  function trasponer(w) { if (w.length < 3) return w; const i = 1 + ((Math.random() * (w.length - 2)) | 0); return w.slice(0, i) + w.charAt(i + 1) + w.charAt(i) + w.slice(i + 2); }
+  function decoys(target) {
+    const out = [];
+    const flat = sinTilde(target);
+    if (flat !== target) out.push(flat);
+    for (let k = 0; k < 6 && out.length < 3; k++) { const m = trasponer(target); if (m !== target && out.indexOf(m) < 0) out.push(m); }
+    for (let k = 0; k < 6 && out.length < 3; k++) { const m = trasponer(flat); if (m !== target && out.indexOf(m) < 0) out.push(m); }
+    while (out.length < 3) { const w = PW[(Math.random() * PW.length) | 0]; if (w !== target && out.indexOf(w) < 0) out.push(w); }
+    return out;
+  }
   function viewParpadeo() {
     stopMural();
     viewEl.innerHTML =
       '<div class="th-parp">' +
         '<a href="#" class="th-back" id="th-back">← volver</a>' +
         '<h3>No Parpadees</h3>' +
-        '<p class="th-p th-dim">Una palabra va a aparecer un instante. Decinos cuál fue.</p>' +
+        '<p class="th-p th-dim">Una palabra aparece un instante. Decinos exactamente cuál fue.</p>' +
         '<div class="th-stage" id="th-stage"><button class="th-btn" id="th-go">JUGAR</button></div>' +
         '<p class="th-big" id="th-pscore"></p>' +
         '<div class="th-lb" id="th-plb"></div>' +
@@ -162,22 +167,24 @@
     function next() {
       round++;
       target = PW[(Math.random() * PW.length) | 0];
-      const dur = Math.max(70, 380 - round * 18);
+      const dur = Math.max(45, 300 - round * 22);
       stage.innerHTML = '<div class="th-flashw">' + target + "</div>";
       setTimeout(() => {
-        const opts = [target];
-        while (opts.length < 4) { const w = PW[(Math.random() * PW.length) | 0]; if (opts.indexOf(w) < 0) opts.push(w); }
-        opts.sort(() => Math.random() - 0.5);
-        stage.innerHTML = '<p class="th-p">¿Qué viste?</p><div class="th-opts">' + opts.map((w) => '<button class="th-opt">' + w + "</button>").join("") + "</div>";
-        const t0 = performance.now();
-        clearTimeout(timer); timer = setTimeout(gameOver, 4000);
-        stage.querySelectorAll(".th-opt").forEach((b) => {
-          b.onclick = () => {
-            clearTimeout(timer);
-            if (b.textContent === target) { score += 100 + Math.max(0, Math.round((4000 - (performance.now() - t0)) / 100)); scoreEl.textContent = fmt.format(score); next(); }
-            else gameOver();
-          };
-        });
+        stage.innerHTML = '<div class="th-flashw th-mask">██████████</div>';
+        setTimeout(() => {
+          const opts = [target].concat(decoys(target));
+          opts.sort(() => Math.random() - 0.5);
+          stage.innerHTML = '<p class="th-p">¿Qué viste?</p><div class="th-opts">' + opts.map((w) => '<button class="th-opt">' + w + "</button>").join("") + "</div>";
+          const t0 = performance.now();
+          clearTimeout(timer); timer = setTimeout(gameOver, 2500);
+          stage.querySelectorAll(".th-opt").forEach((b) => {
+            b.onclick = () => {
+              clearTimeout(timer);
+              if (b.textContent === target) { score += 100 + Math.max(0, Math.round((2500 - (performance.now() - t0)) / 100)); scoreEl.textContent = fmt.format(score); next(); }
+              else gameOver();
+            };
+          });
+        }, 130);
       }, dur);
     }
     function gameOver() {
@@ -247,19 +254,6 @@
     });
   }
 
-  /* ---------- Abrir / cerrar ---------- */
-  function open() {
-    if (!built) { build(); built = true; }
-    overlay.classList.add("th-open");
-    document.documentElement.style.overflow = "hidden";
-    refreshMe(); viewMenu();
-  }
-  function close() {
-    stopMural();
-    if (overlay) overlay.classList.remove("th-open");
-    document.documentElement.style.overflow = "";
-  }
-  window.tristos = open;
-  const nav = document.getElementById("navHub");
-  if (nav) nav.addEventListener("click", (e) => { e.preventDefault(); open(); });
+  refreshMe();
+  viewMenu();
 })();

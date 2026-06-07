@@ -1,23 +1,18 @@
 /* ====== Tristo's Game Hub ====== */
 
-#th-overlay {
-  position: fixed; inset: 0; z-index: 9000; display: none;
-  align-items: flex-start; justify-content: center; padding: 24px 14px;
-  background: rgba(4, 4, 6, 0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-  font-family: "Montserrat", system-ui, sans-serif; color: #f5f5f7; overflow-y: auto;
-}
-#th-overlay.th-open { display: flex; }
+.th-main { min-height: 100svh; display: flex; justify-content: center; align-items: flex-start; padding: 88px 14px 48px; }
+#th-page { width: 100%; max-width: 680px; }
 
 .th-shell {
-  position: relative; width: 100%; max-width: 680px; margin-top: 4vh;
-  background: rgba(8, 8, 10, 0.92); border: 1px solid rgba(255, 255, 255, 0.16);
+  position: relative; width: 100%;
+  background: rgba(8, 8, 10, 0.62); border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 14px; padding: 20px 22px 26px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  font-family: "Montserrat", system-ui, sans-serif; color: #f5f5f7;
 }
-.th-close { position: absolute; top: 10px; right: 12px; background: none; border: 0; color: #9a9aa2; font-size: 26px; cursor: pointer; line-height: 1; }
-.th-close:hover { color: #fff; }
 
-.th-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; padding-right: 28px; }
+.th-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
 .th-logo { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
 .th-ident { font-size: 12px; color: #9a9aa2; }
 .th-ident b { color: #fff; }

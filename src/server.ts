@@ -527,6 +527,10 @@ export function buildApp(db: Db): FastifyInstance {
     reply.code(401).header('content-type', 'text/html; charset=utf-8');
     return page('Admin', '<h1>Clave incorrecta</h1><p>Probá de nuevo desde el sitio.</p><a href="/">Volver</a>');
   });
+  app.get('/tristos', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return reply.sendFile('tristos.html');
+  });
   app.get('/', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     const admin = isAdmin(req);
