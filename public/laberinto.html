@@ -9,16 +9,17 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/maze3d.css?v=2" />
+  <link rel="stylesheet" href="/maze3d.css?v=3" />
 </head>
 <body>
   <div id="game">
     <canvas id="c"></canvas>
+    <canvas id="rain" aria-hidden="true"></canvas>
     <canvas id="mini" width="220" height="220" aria-hidden="true"></canvas>
     <div id="hud"><span id="time">0.0</span><span class="hud-u">s</span> · <span id="depth">0</span><span class="hud-u">piso</span></div>
     <div id="flashwrap" aria-hidden="true"><div class="flashbar"><i id="flashbar"></i></div><span class="flashlbl">FLASH · espacio</span></div>
     <div id="keyind">LLAVE</div>
-    <div id="warn" class="warn hidden">te encontró</div>
+    <div id="prox" class="prox"><img src="/weirdman.png" alt="" /><span id="proxtxt"></span></div>
 
     <div id="intro" class="ov">
       <div class="ovbox">
@@ -40,6 +41,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="/maze3d.js?v=3"></script>
+  <script type="module" src="/maze3d.js?v=4"></script>
 </body>
 </html>

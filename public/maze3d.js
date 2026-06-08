@@ -5,13 +5,14 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   const canvas = document.getElementById("c");
   const miniCv = document.getElementById("mini");
   const timeEl = document.getElementById("time");
-  const warnEl = document.getElementById("warn");
+  const proxEl = document.getElementById("prox"), proxTxt = document.getElementById("proxtxt");
   const intro = document.getElementById("intro");
   const dead = document.getElementById("dead");
   if (!canvas) return;
 
   /* ---------- Audio ---------- */
   const music = new Audio("/mazemusicloop.mp3"); music.loop = true; music.volume = 0.5;
+  const rain = new Audio("/rain.mp3"); rain.loop = true; rain.volume = 0.4;
   const stepA = new Audio("/step1.mp3"), stepB = new Audio("/step2.mp3"), stepStop = new Audio("/stepstop.mp3"), monster = new Audio("/monsterwins.mp3");
   [stepA, stepB, stepStop].forEach((a) => { a.volume = 0.65; });
   function sfx(a) { try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
@@ -53,12 +54,12 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   const camera = new THREE.PerspectiveCamera(75, 1, 0.05, 80);
   camera.rotation.order = "YXZ";
   scene.add(camera);
-  scene.add(new THREE.HemisphereLight(0x3c3c4e, 0x0c0c14, 0.5));
+  scene.add(new THREE.HemisphereLight(0x46465c, 0x101018, 0.66));
   // Linterna (más fuerte y ancha)
-  const torch = new THREE.SpotLight(0xfff1da, 13.0, 42, Math.PI / 4.0, 0.5, 1.05);
+  const torch = new THREE.SpotLight(0xfff1da, 15.0, 46, Math.PI / 3.8, 0.5, 1.0);
   camera.add(torch); camera.add(torch.target); torch.position.set(0, 0, 0); torch.target.position.set(0, -0.05, -1);
   // Halo alrededor del jugador (que se vea lo cercano)
-  const glow = new THREE.PointLight(0xb8bcd0, 0.9, 10, 1.5); camera.add(glow);
+  const glow = new THREE.PointLight(0xc2c6da, 1.2, 12, 1.4); camera.add(glow);
 
   // Texturas (procedurales, reemplazables por /maze-wall.png y /maze-floor.png)
   function noiseTex(base, lines) {
@@ -110,7 +111,8 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   new THREE.TextureLoader().load("/enemymaze.png", (t) => { t.colorSpace = THREE.SRGBColorSpace; entMat.map = t; entMat.needsUpdate = true; }, undefined, () => {});
 
   // Llave + puerta (objetivos que brillan en la oscuridad) + estallido del flash
-  const keyObj = new THREE.Mesh(new THREE.OctahedronGeometry(0.34), new THREE.MeshBasicMaterial({ color: 0xffd24a, fog: false })); keyObj.position.y = 1.1; scene.add(keyObj);
+  const keyMat = new THREE.SpriteMaterial({ map: new THREE.TextureLoader().load("/key.png"), transparent: true, depthWrite: false, fog: false });
+  const keyObj = new THREE.Sprite(keyMat); keyObj.scale.set(0.95, 0.95, 1); keyObj.position.y = 1.1; scene.add(keyObj);
   const keyLight = new THREE.PointLight(0xffd24a, 1.5, 10, 1.4); scene.add(keyLight);
   const doorMat = new THREE.MeshBasicMaterial({ color: 0xd23b47, fog: false, transparent: true, opacity: 0.92, side: THREE.DoubleSide });
   const doorObj = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 0.82, WALL_H * 0.94), doorMat); doorObj.position.y = WALL_H * 0.47; scene.add(doorObj);
@@ -271,7 +273,8 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   /* ---------- Muerte / score ---------- */
   async function die() {
     if (!alive) return; alive = false; running = false;
-    try { music.pause(); } catch (_) {} sfx(monster);
+    try { music.pause(); rain.pause(); } catch (_) {} sfx(monster);
+    if (proxEl) proxEl.style.opacity = "0";
     if (document.pointerLockElement) document.exitPointerLock();
     const sec = Math.floor(elapsed), sc = depth * 500 + sec;
     document.getElementById("dscore").textContent = sc;
@@ -313,20 +316,23 @@ import * as THREE from "https://esm.sh/three@0.160.0";
       const ecx = Math.floor(ex / CELL), ecz = Math.floor(ez / CELL), pcx = Math.floor(px / CELL), pcz = Math.floor(pz / CELL);
       if (freezeT <= 0) {
         bfsTimer -= dt;
-        if (bfsTimer <= 0 || !estep) { estep = bfsStep(ecx, ecz, pcx, pcz); bfsTimer = 0.35; }
-        if (estep) {
+        if (bfsTimer <= 0 || !estep) { estep = bfsStep(ecx, ecz, pcx, pcz); bfsTimer = 0.5; }
+        // avanza celda por celda; al llegar al centro hace snap y recalcula el próximo paso (nunca se clava en la pared)
+        let budget = espd, guard = 0;
+        while (estep && budget > 0 && guard++ < 6) {
           const tx = estep[0] * CELL + CELL / 2, tz = estep[1] * CELL + CELL / 2;
           const dx = tx - ex, dz = tz - ez, dl = Math.hypot(dx, dz);
-          if (dl < 0.12) { estep = null; } else { ex += (dx / dl) * espd; ez += (dz / dl) * espd; }
+          if (dl <= budget || dl < 0.04) { ex = tx; ez = tz; budget -= dl; estep = bfsStep(estep[0], estep[1], Math.floor(px / CELL), Math.floor(pz / CELL)); }
+          else { ex += (dx / dl) * budget; ez += (dz / dl) * budget; budget = 0; }
         }
       }
-      entity.position.x = ex; entity.position.z = ez; keyObj.rotation.y += dt * 2.2;
+      entity.position.x = ex; entity.position.z = ez; keyObj.position.y = 1.1 + Math.sin(now / 380) * 0.13;
       // llave / puerta
       if (!hasKey && Math.hypot(px - (keyCell[0] * CELL + CELL / 2), pz - (keyCell[1] * CELL + CELL / 2)) < 1.2) { hasKey = true; keyObj.visible = false; keyLight.visible = false; setDoorLocked(false); heartbeat(0.18); }
       if (hasKey && Math.hypot(px - (doorCell[0] * CELL + CELL / 2), pz - (doorCell[1] * CELL + CELL / 2)) < 1.5) descend();
       // proximidad + latido
       const pd = Math.hypot(px - ex, pz - ez);
-      warnEl.classList.toggle("show", pd < CELL * 1.8 && freezeT <= 0);
+      if (proxEl) { if (freezeT <= 0 && pd < CELL * 4.5) { proxEl.style.opacity = String(Math.min(1, 1.25 - pd / (CELL * 4.5))); if (proxTxt) proxTxt.textContent = "EL MONSTRUO ESTÁ A " + Math.round(pd) + " M"; } else proxEl.style.opacity = "0"; }
       if (pd < 1.25 && freezeT <= 0) die();
       hbT -= dt;
       if (freezeT <= 0 && pd < CELL * 7 && hbT <= 0) { const ff = 1 - pd / (CELL * 7); heartbeat(0.05 + ff * 0.5); hbT = 1.1 - ff * 0.8; }
@@ -363,11 +369,23 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     alive = true; t0 = performance.now(); elapsed = 0; moving = false; stepT = 0;
     intro.classList.add("hidden"); dead.classList.add("hidden");
     initAudio();
+    if (proxEl) proxEl.style.opacity = "0";
     try { music.currentTime = 0; music.play().catch(() => {}); } catch (_) {}
+    try { rain.currentTime = 0; rain.play().catch(() => {}); } catch (_) {}
     canvas.requestPointerLock();
   }
   document.getElementById("play").onclick = start;
   document.getElementById("retry").onclick = start;
+
+  // Lluvia (overlay 2D sobre el canvas, debajo del HUD)
+  (function rainFX() {
+    const rc = document.getElementById("rain"); if (!rc) return;
+    const rx = rc.getContext("2d");
+    let drops = [];
+    function rsize() { rc.width = innerWidth; rc.height = innerHeight; const n = Math.floor(innerWidth / 4); drops = []; for (let i = 0; i < n; i++) drops.push({ x: Math.random() * rc.width, y: Math.random() * rc.height, l: 9 + Math.random() * 16, s: 7 + Math.random() * 9 }); }
+    rsize(); addEventListener("resize", rsize);
+    (function rloop() { requestAnimationFrame(rloop); rx.clearRect(0, 0, rc.width, rc.height); rx.strokeStyle = "rgba(180,200,235,.22)"; rx.lineWidth = 1; rx.beginPath(); for (const d of drops) { rx.moveTo(d.x, d.y); rx.lineTo(d.x - 1.5, d.y + d.l); d.y += d.s; if (d.y > rc.height) { d.y = -d.l; d.x = Math.random() * rc.width; } } rx.stroke(); })();
+  })();
 
   resize();
   requestAnimationFrame(frame);
