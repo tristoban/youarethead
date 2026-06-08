@@ -16,7 +16,9 @@
 .pb-link { color: #fff; border-bottom: 1px solid rgba(255,255,255,.3); }
 
 .pb-heads { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 18px; }
-.pb-head { width: 64px; height: 64px; border-radius: 10px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.2); color: #fff; font: 800 26px "Courier New", monospace; cursor: pointer; }
+.pb-head { width: 64px; height: 72px; border-radius: 10px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.2); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 2px; }
+.pb-head canvas { image-rendering: pixelated; }
+#pb-cv { image-rendering: pixelated; }
 .pb-head.on { border-color: #fff; background: rgba(255,255,255,.14); }
 
 .pb-hud { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }

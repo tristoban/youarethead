@@ -119,6 +119,7 @@ export async function initDb(db: Db): Promise<void> {
   await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS hub_users_email_uidx ON hub_users (email_norm);`);
   await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS hub_users_nick_uidx ON hub_users (nick_norm) WHERE nick_norm IS NOT NULL;`);
   await db.query(`CREATE INDEX IF NOT EXISTS hub_users_session_idx ON hub_users (session);`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS bio TEXT;`);
   await db.query(`
     CREATE TABLE IF NOT EXISTS boton_caidos (
       id BIGSERIAL PRIMARY KEY,
@@ -440,17 +441,23 @@ export function buildApp(db: Db): FastifyInstance {
     if (!text) return reply.code(400).send({ ok: false, error: 'empty', message: 'Escribí algo.' });
     if (!name) name = 'ANÓN';
     const ipHash = hashIp(getClientIp(req));
-    const lockedName = chatNames.get(ipHash);
-    if (lockedName) name = lockedName;
+    const hubU = await hubUserBySession(db, req);
+    let lockedName = chatNames.get(ipHash);
+    if (hubU && hubU.nick) { name = hubU.nick; lockedName = name; }
+    else if (lockedName) name = lockedName;
     if (offensiveAlias(name) || offensiveText(text)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Esa no va.' });
+    if (!hubU && name !== 'ANÓN' && lockedName !== name) {
+      const resv = await db.query('SELECT 1 AS x FROM hub_users WHERE nick_norm = $1', [name.toLowerCase()]);
+      if (resv.rows.length > 0) return reply.code(409).send({ ok: false, error: 'reservado', message: 'Ese nick está reservado. Entrá con tu mail para usarlo.' });
+    }
     const now = Date.now();
     const last = chatRate.get(ipHash) ?? 0;
     if (now - last < 1500) return reply.code(429).send({ ok: false, error: 'slow', message: 'Pará un toque.' });
     chatRate.set(ipHash, now);
-    if (!lockedName && name !== 'ANÓN') chatNames.set(ipHash, name);
+    if (!hubU && !lockedName && name !== 'ANÓN') chatNames.set(ipHash, name);
     const ins = await db.query('INSERT INTO chat_messages (name, body, ip_hash) VALUES ($1, $2, $3) RETURNING id, created_at', [name, text, ipHash]);
     const row = ins.rows[0];
-    return reply.code(201).send({ ok: true, message: { id: Number(row?.id ?? 0), name, body: text, t: row?.created_at }, nameLocked: chatNames.has(ipHash) });
+    return reply.code(201).send({ ok: true, message: { id: Number(row?.id ?? 0), name, body: text, t: row?.created_at }, nameLocked: !!(hubU && hubU.nick) || chatNames.has(ipHash) });
   });
 
   app.post('/api/hub/login', async (req, reply) => {
@@ -504,7 +511,33 @@ export function buildApp(db: Db): FastifyInstance {
   app.get('/api/hub/me', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
-    return { ok: true, logged: !!u, nick: u ? u.nick : null };
+    if (!u) return { ok: true, logged: false, nick: null };
+    const det = await db.query('SELECT email, bio, created_at FROM hub_users WHERE id = $1', [u.id]);
+    const r = det.rows[0] ?? {};
+    let caido = 0;
+    const c = await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [u.id]);
+    if (c.rows[0]) caido = Number(c.rows[0].n ?? 0);
+    const nl = (u.nick ?? '').toLowerCase();
+    const bt = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'tetristo' AND lower(alias) = $1", [nl]);
+    const bp = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'parpadeo' AND lower(alias) = $1", [nl]);
+    const ch = await db.query('SELECT head, vida, hambre, sueno FROM pueblo_chars WHERE user_id = $1', [u.id]);
+    const cr = ch.rows[0];
+    return {
+      ok: true, logged: true, nick: u.nick,
+      email: String(r.email ?? ''), bio: (r.bio as string | null) ?? '', desde: r.created_at ?? null, caido,
+      best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0 },
+      char: cr ? { head: String(cr.head ?? 'o'), vida: Math.round(Number(cr.vida ?? 0)), hambre: Math.round(Number(cr.hambre ?? 0)), sueno: Math.round(Number(cr.sueno ?? 0)) } : null,
+    };
+  });
+
+  app.post('/api/hub/bio', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const body = (req.body ?? {}) as { bio?: unknown };
+    const bio = typeof body.bio === 'string' ? body.bio.replace(/\s+/g, ' ').trim().slice(0, 140).trim() : '';
+    if (offensiveText(bio)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Esa bio no va.' });
+    await db.query('UPDATE hub_users SET bio = $2 WHERE id = $1', [u.id, bio]);
+    return { ok: true, bio };
   });
 
   app.post('/api/hub/logout', async (req, reply) => {
@@ -658,6 +691,10 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.code(400).send({ ok: false, error: 'accion' });
   });
 
+  app.get('/perfil', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return reply.sendFile('perfil.html');
+  });
   app.get('/pueblo', async (_req, reply) => {
     reply.header('cache-control', 'no-store');
     return reply.sendFile('pueblo.html');

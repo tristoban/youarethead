@@ -3,9 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>El Pueblo</title>
-  <meta name="description" content="No deberías estar acá todavía." />
-  <meta name="robots" content="noindex, nofollow" />
+  <title>Tu perfil</title>
+  <meta name="description" content="Tu cuenta en youarethead." />
   <meta name="theme-color" content="#060606" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -13,7 +12,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=8" />
   <link rel="stylesheet" href="/holding.css?v=6" />
-  <link rel="stylesheet" href="/pueblo.css?v=2" />
+  <link rel="stylesheet" href="/hub.css?v=3" />
+  <link rel="stylesheet" href="/perfil.css?v=1" />
 </head>
 <body>
   <canvas id="bg" aria-hidden="true"></canvas>
@@ -23,12 +23,13 @@
   <header class="hd-nav">
     <a class="brand" href="/">youarethead.com.ar</a>
     <nav class="hd-links">
+      <a href="/" class="nav-game">&#8592; Volver</a>
       <a href="/tristos" class="nav-game">Tristo's</a>
     </nav>
   </header>
 
-  <main class="pb-main">
-    <div id="pb-root" class="pb-card"><p class="pb-dim">Cargando el pueblo…</p></div>
+  <main class="th-main">
+    <div id="pf-root" class="th-shell"><p class="th-dim">Cargando…</p></div>
   </main>
 
   <audio id="snd-audio" src="/ambient.mp3" loop preload="auto" playsinline></audio>
@@ -37,6 +38,6 @@
   </button>
 
   <script src="/holding.js?v=7" defer></script>
-  <script src="/pueblo.js?v=2" defer></script>
+  <script src="/perfil.js?v=1" defer></script>
 </body>
 </html>

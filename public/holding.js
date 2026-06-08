@@ -228,6 +228,16 @@
     });
   })();
 
+  /* ---------- Botón entrar / mi perfil en el nav ---------- */
+  (() => {
+    const a = document.getElementById("navPerfil");
+    if (!a) return;
+    fetch("/api/hub/me", { headers: { accept: "application/json" } })
+      .then((r) => r.json())
+      .then((d) => { if (d && d.logged) a.textContent = d.nick || "mi perfil"; })
+      .catch(() => {});
+  })();
+
   /* ---------- Chat en vivo (shoutbox con polling) ---------- */
   (() => {
     const log = document.getElementById("chat-log");
