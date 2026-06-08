@@ -153,7 +153,14 @@
       setTimeout(() => s.remove(), 1500);
     }
   }
-  const PW = ["OBEDECÉ", "CONSUMÍ", "COMPRÁ", "DORMÍ", "SOMETETE", "CONFORMATE", "SCROLLEÁ", "DESPERTÁ", "SALÍ", "MIRÁ", "CALLATE", "CORRÉ", "QUEDATE", "DUDÁ", "CREÉ", "PARPADEÁ"];
+  const PW = [
+    "OBEDECÉ", "CONSUMÍ", "COMPRÁ", "DORMÍ", "SOMETETE", "CONFORMATE", "SCROLLEÁ", "DESPERTÁ",
+    "SALÍ", "MIRÁ", "CALLATE", "CORRÉ", "QUEDATE", "DUDÁ", "CREÉ", "PARPADEÁ",
+    "ESCAPÁ", "RENDITE", "ENTREGÁ", "ACEPTÁ", "NEGÁ", "GRITÁ", "ESPERÁ", "VOLVÉ",
+    "SEGUÍ", "FRENÁ", "PAGÁ", "VENDÉ", "COMPARTÍ", "SUSCRIBÍ", "TRABAJÁ", "PRODUCÍ",
+    "REPETÍ", "OLVIDÁ", "RECORDÁ", "CONFIÁ", "DESCONFIÁ", "RESPIRÁ", "AGUANTÁ", "SOÑÁ",
+    "GASTÁ", "HUÍ", "OBSERVÁ", "ESCONDETE",
+  ];
   function sinTilde(w) { return w.replace(/Á/g, "A").replace(/É/g, "E").replace(/Í/g, "I").replace(/Ó/g, "O").replace(/Ú/g, "U"); }
   function trasponer(w) { if (w.length < 3) return w; const i = 1 + ((Math.random() * (w.length - 2)) | 0); return w.slice(0, i) + w.charAt(i + 1) + w.charAt(i) + w.slice(i + 2); }
   function decoys(target) {
@@ -188,6 +195,7 @@
     }
     loadLB();
     let score = 0, round = 0, target = "", timer = 0;
+    const ANS = 2500;
     viewEl.querySelector("#th-go").onclick = start;
     function start() { score = 0; round = 0; scoreEl.textContent = ""; next(); }
     function next() {
@@ -200,13 +208,13 @@
         setTimeout(() => {
           const opts = [target].concat(decoys(target));
           opts.sort(() => Math.random() - 0.5);
-          stage.innerHTML = '<p class="th-p">¿Qué viste?</p><div class="th-opts">' + opts.map((w) => '<button class="th-opt">' + w + "</button>").join("") + "</div>";
+          stage.innerHTML = '<div class="th-timer"><i style="animation: th-timebar ' + ANS + 'ms linear forwards"></i></div><p class="th-p">¿Qué viste?</p><div class="th-opts">' + opts.map((w) => '<button class="th-opt">' + w + "</button>").join("") + "</div>";
           const t0 = performance.now();
-          clearTimeout(timer); timer = setTimeout(gameOver, 2500);
+          clearTimeout(timer); timer = setTimeout(gameOver, ANS);
           stage.querySelectorAll(".th-opt").forEach((b) => {
             b.onclick = () => {
               clearTimeout(timer);
-              if (b.textContent === target) { floatWords(target); score += 100 + Math.max(0, Math.round((2500 - (performance.now() - t0)) / 100)); scoreEl.textContent = fmt.format(score); next(); }
+              if (b.textContent === target) { floatWords(target); score += 100 + Math.max(0, Math.round((ANS - (performance.now() - t0)) / 100)); scoreEl.textContent = fmt.format(score); next(); }
               else gameOver();
             };
           });
@@ -219,12 +227,16 @@
         '<div class="th-row"><input id="th-palias" maxlength="12" placeholder="tu alias" value="' + pre + '" /><button class="th-btn" id="th-psave">GUARDAR</button></div>' +
         '<button class="th-btn th-ghost" id="th-pagain">DE NUEVO</button><p class="th-msg" id="th-pmsg"></p>';
       stage.querySelector("#th-pagain").onclick = start;
-      stage.querySelector("#th-psave").onclick = async () => {
+      let saved = false;
+      const sbtn = stage.querySelector("#th-psave");
+      sbtn.onclick = async () => {
+        if (saved) return;
         const alias = stage.querySelector("#th-palias").value.trim();
         const pm = stage.querySelector("#th-pmsg"); pm.textContent = "...";
+        sbtn.disabled = true;
         const { r, d } = await api("/api/score", { method: "POST", headers: JH, body: JSON.stringify({ alias, score, game: "parpadeo" }) });
-        pm.textContent = (r.ok && d) ? ("¡Puesto #" + d.rank + "!") : ((d && d.message) || "No se pudo.");
-        if (r.ok) loadLB();
+        if (r.ok && d) { saved = true; sbtn.textContent = "GUARDADO"; pm.textContent = "¡Puesto #" + d.rank + "!"; loadLB(); }
+        else { sbtn.disabled = false; pm.textContent = (d && d.message) || "No se pudo."; }
       };
     }
   }

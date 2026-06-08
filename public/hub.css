@@ -77,6 +77,9 @@
 .th-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; max-width: 380px; }
 .th-opt { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; color: #fff; font: inherit; font-weight: 700; padding: 12px 8px; cursor: pointer; }
 .th-opt:hover { background: rgba(255, 255, 255, 0.14); }
+.th-timer { height: 9px; border-radius: 5px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); overflow: hidden; margin: 0 0 14px; width: 100%; max-width: 380px; margin-left: auto; margin-right: auto; }
+.th-timer i { display: block; height: 100%; width: 100%; background: #46d17f; }
+@keyframes th-timebar { 0% { width: 100%; background: #46d17f; } 55% { background: #e0c24a; } 100% { width: 0%; background: #e23d3d; } }
 .th-lb { text-align: left; margin-top: 16px; font-size: 13px; }
 .th-lb h4 { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #9a9aa2; margin: 0 0 8px; }
 .th-lb ol { margin: 0; padding-left: 22px; }
