@@ -176,7 +176,7 @@
 
 /* Aire general */
 .pf-app { gap: 22px; }
-.pf-center { min-height: 70vh; }
+.pf-center { min-height: 70vh; border: 0; background: rgba(16,16,18,.96); }
 .pf-ctitle { padding: 18px 24px 12px; font-size: 19px; }
 .pf-body { padding: 22px 26px 34px; }
 .pf-h { margin: 24px 0 10px; font-size: 11px; letter-spacing: .16em; color: #8a8f98; }
@@ -225,8 +225,13 @@
 .pf-code { font: 700 11px monospace; color: #9aa0a8; border: 1px solid rgba(255,255,255,.16); border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
 .pf-post-t { font-size: 18px; font-weight: 800; margin: 12px 0 6px; line-height: 1.3; color: #fff; }
 .pf-post-b { margin: 0; color: #c4c7cf; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
-.pf-post-f { margin-top: 12px; }
+.pf-post-f { display: flex; align-items: center; gap: 18px; margin-top: 14px; }
 .pf-cnt { font-size: 12px; color: #8a8f98; }
+.pf-like { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; color: #8a8f98; font: 700 12px "Montserrat", sans-serif; cursor: pointer; padding: 2px 0; transition: color .12s, transform .08s; }
+.pf-like:hover { color: #cfd2d8; }
+.pf-like.on { color: #fff; }
+.pf-like:active { transform: scale(1.18); }
+.pf-like svg { width: 16px; height: 16px; flex: none; }
 
 /* Post detail + comentarios */
 .pf-back2 { display: inline-block; color: #9aa0a8; font-size: 13px; margin: 0 0 16px; cursor: pointer; }

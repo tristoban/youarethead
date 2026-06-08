@@ -49,6 +49,13 @@
     h = h.replace(/(^|[\s(>])\$([0-9]{1,9})/g, '$1<a class="pf-ref" data-post="$2">$$2</a>');
     return h.replace(/\n/g, "<br>");
   }
+  function skull() { return '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2C7.3 2 4 5.4 4 9.8c0 2.2.9 3.9 2.4 5.2.3.3.6.7.6 1.2V18c0 1 .8 1.8 1.8 1.8h.4v-1.6h1.6v1.6h1.6v-1.6h1.6v1.6h.4c1 0 1.8-.8 1.8-1.8v-1.8c0-.5.3-.9.6-1.2C19.1 13.7 20 12 20 9.8 20 5.4 16.7 2 12 2zM8.6 11.3a1.7 1.7 0 110-3.4 1.7 1.7 0 010 3.4zm6.8 0a1.7 1.7 0 110-3.4 1.7 1.7 0 010 3.4zM12 12.4l1 2h-2l1-2z"/></svg>'; }
+  function likeBtn(p) { return '<button class="pf-like' + (p.liked ? " on" : "") + '" data-like="' + p.id + '" type="button" title="Me cala">' + skull() + "<span>" + (p.nlik || 0) + "</span></button>"; }
+  async function toggleLike(btn) {
+    const id = btn.getAttribute("data-like");
+    const { r, d } = await api("/api/social/like", { method: "POST", headers: JH, body: JSON.stringify({ postId: Number(id) }) });
+    if (r.ok && d) { btn.classList.toggle("on", !!d.liked); const sp = btn.querySelector("span"); if (sp) sp.textContent = d.count; }
+  }
   function avaPic(photo, head) { return photo ? '<img class="pf-img" src="' + esc(photo) + '" alt="" referrerpolicy="no-referrer" />' : avatar(head); }
   function resizeImg(file, cb) {
     const fr = new FileReader();
@@ -198,6 +205,7 @@
       const t = e.target; if (!t || !t.closest) return;
       const u = t.closest("[data-u]"); if (u) { e.preventDefault(); viewUser(u.getAttribute("data-u")); return; }
       const tg = t.closest("[data-tag]"); if (tg) { e.preventDefault(); viewFeedTag(tg.getAttribute("data-tag")); return; }
+      const lk = t.closest("[data-like]"); if (lk) { e.preventDefault(); e.stopPropagation(); toggleLike(lk); return; }
       const ps = t.closest("[data-post]"); if (ps) { e.preventDefault(); viewPost(Number(ps.getAttribute("data-post"))); return; }
     }); }
     rightRail();
@@ -232,7 +240,7 @@
       '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><span class="pf-code" title="código del posteo">$' + p.id + "</span></div>" +
       (p.title ? '<h3 class="pf-post-t">' + esc(p.title) + "</h3>" : "") +
       (snip ? '<p class="pf-post-b">' + snip + "</p>" : "") +
-      '<div class="pf-post-f"><span class="pf-cnt">' + nc + (nc === 1 ? " comentario" : " comentarios") + "</span></div>" +
+      '<div class="pf-post-f">' + likeBtn(p) + '<span class="pf-cnt">' + nc + (nc === 1 ? " comentario" : " comentarios") + "</span></div>" +
       "</article>";
   }
   function viewFeed() {
@@ -300,6 +308,7 @@
         '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><span class="pf-code">$' + p.id + "</span></div>" +
         (p.title ? '<h2 class="pf-postfull-t">' + esc(p.title) + "</h2>" : "") +
         (p.body ? '<div class="pf-postfull-b">' + rich(p.body) + "</div>" : "") +
+        '<div class="pf-post-f" style="margin-top:14px">' + likeBtn(p) + "</div>" +
       "</article>" +
       '<div class="pf-h">Comentarios</div>' +
       '<div class="pf-comp pf-comp-c"><textarea id="pp-ctext" maxlength="1000" placeholder="Sumate al hilo… (@ # $)"></textarea><div class="pf-crow"><span class="pf-msg" id="pp-cmsg"></span><button class="pf-btn pf-spin" id="pp-csend">Comentar</button></div></div>' +

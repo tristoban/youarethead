@@ -189,6 +189,7 @@ export async function initDb(db: Db): Promise<void> {
     );
   `);
   await db.query(`CREATE INDEX IF NOT EXISTS comments_post_idx ON comments (post_id, id);`);
+  await db.query(`CREATE TABLE IF NOT EXISTS post_likes (post_id BIGINT NOT NULL, user_id BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (post_id, user_id));`);
   await db.query(`
     CREATE TABLE IF NOT EXISTS grupos (
       id BIGSERIAL PRIMARY KEY,
@@ -1069,27 +1070,29 @@ export function buildApp(db: Db): FastifyInstance {
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
     const qy = (req.query ?? {}) as { scope?: unknown; tag?: unknown };
     const tag = typeof qy.tag === 'string' ? qy.tag.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40) : '';
-    const sel = "SELECT p.id, p.nick, p.title, p.body, p.created_at, u.avatar, (SELECT count(*) FROM comments c WHERE c.post_id = p.id) AS ncom FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id";
+    const sel = "SELECT p.id, p.nick, p.title, p.body, p.created_at, u.avatar, (SELECT count(*) FROM comments c WHERE c.post_id = p.id) AS ncom, (SELECT count(*) FROM post_likes pl WHERE pl.post_id = p.id) AS nlik, EXISTS(SELECT 1 FROM post_likes pl2 WHERE pl2.post_id = p.id AND pl2.user_id = $1) AS liked FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id";
     let rows;
     if (tag) {
-      rows = (await db.query(sel + " WHERE lower(coalesce(p.title,'') || ' ' || p.body) LIKE $1 ORDER BY p.id DESC LIMIT 40", ['%#' + tag + '%'])).rows;
+      rows = (await db.query(sel + " WHERE lower(coalesce(p.title,'') || ' ' || p.body) LIKE $2 ORDER BY p.id DESC LIMIT 40", [u.id, '%#' + tag + '%'])).rows;
     } else if (qy.scope === 'amigos') {
       rows = (await db.query(sel + " WHERE p.user_id = $1 OR p.user_id IN (SELECT CASE WHEN a = $1 THEN b ELSE a END FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado') ORDER BY p.id DESC LIMIT 40", [u.id])).rows;
     } else {
-      rows = (await db.query(sel + ' ORDER BY p.id DESC LIMIT 40')).rows;
+      rows = (await db.query(sel + ' ORDER BY p.id DESC LIMIT 40', [u.id])).rows;
     }
-    return { ok: true, posts: rows.map((r) => ({ id: Number(r.id), nick: r.nick, title: (r.title as string | null) ?? '', body: r.body, t: r.created_at, avatar: (r.avatar as string | null) ?? null, ncom: Number(r.ncom ?? 0) })) };
+    return { ok: true, posts: rows.map((r) => ({ id: Number(r.id), nick: r.nick, title: (r.title as string | null) ?? '', body: r.body, t: r.created_at, avatar: (r.avatar as string | null) ?? null, ncom: Number(r.ncom ?? 0), nlik: Number(r.nlik ?? 0), liked: r.liked === true })) };
   });
 
   app.get('/api/social/post', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     const id = Math.floor(Number(((req.query ?? {}) as { id?: unknown }).id));
     if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
-    const pr = (await db.query('SELECT p.id, p.nick, p.title, p.body, p.created_at, u.avatar FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id WHERE p.id = $1', [id])).rows[0];
+    const meU = await hubUserBySession(db, req);
+    const meId = meU ? meU.id : 0;
+    const pr = (await db.query('SELECT p.id, p.nick, p.title, p.body, p.created_at, u.avatar, (SELECT count(*) FROM post_likes pl WHERE pl.post_id = p.id) AS nlik, EXISTS(SELECT 1 FROM post_likes pl2 WHERE pl2.post_id = p.id AND pl2.user_id = $2) AS liked FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id WHERE p.id = $1', [id, meId])).rows[0];
     if (!pr) return reply.code(404).send({ ok: false, error: 'not_found', message: 'Ese posteo no existe.' });
     const cs = (await db.query('SELECT c.id, c.parent_id, c.nick, c.body, c.created_at, u.avatar FROM comments c LEFT JOIN hub_users u ON u.id = c.user_id WHERE c.post_id = $1 ORDER BY c.id ASC LIMIT 300', [id])).rows;
     return { ok: true,
-      post: { id: Number(pr.id), nick: pr.nick, title: (pr.title as string | null) ?? '', body: pr.body, t: pr.created_at, avatar: (pr.avatar as string | null) ?? null },
+      post: { id: Number(pr.id), nick: pr.nick, title: (pr.title as string | null) ?? '', body: pr.body, t: pr.created_at, avatar: (pr.avatar as string | null) ?? null, nlik: Number(pr.nlik ?? 0), liked: pr.liked === true },
       comments: cs.map((c) => ({ id: Number(c.id), parent: c.parent_id ? Number(c.parent_id) : null, nick: c.nick, body: c.body, t: c.created_at, avatar: (c.avatar as string | null) ?? null })) };
   });
 
@@ -1132,6 +1135,21 @@ export function buildApp(db: Db): FastifyInstance {
     const ins = await db.query('INSERT INTO comments (post_id, parent_id, user_id, nick, body) VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at', [postId, parent, u.id, u.nick, text]);
     const row = ins.rows[0];
     return reply.code(201).send({ ok: true, comment: { id: Number(row?.id ?? 0), parent, nick: u.nick, body: text, t: row?.created_at, avatar: null } });
+  });
+
+  app.post('/api/social/like', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const postId = Math.floor(Number(((req.body ?? {}) as { postId?: unknown }).postId));
+    if (!Number.isInteger(postId) || postId <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
+    const exists = await db.query('SELECT 1 FROM posts WHERE id = $1', [postId]);
+    if (!exists.rows.length) return reply.code(404).send({ ok: false, error: 'no_post' });
+    const had = await db.query('SELECT 1 FROM post_likes WHERE post_id = $1 AND user_id = $2', [postId, u.id]);
+    let liked: boolean;
+    if (had.rows.length) { await db.query('DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2', [postId, u.id]); liked = false; }
+    else { await db.query('INSERT INTO post_likes (post_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [postId, u.id]); liked = true; }
+    const cnt = await db.query('SELECT count(*) AS c FROM post_likes WHERE post_id = $1', [postId]);
+    return { ok: true, liked, count: Number(cnt.rows[0]?.c ?? 0) };
   });
 
   app.post('/api/social/grupos/crear', async (req, reply) => {
