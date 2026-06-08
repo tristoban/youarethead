@@ -9,31 +9,50 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/maze3d.css?v=3" />
+  <link rel="stylesheet" href="/maze3d.css?v=4" />
 </head>
 <body>
   <div id="game">
     <canvas id="c"></canvas>
-    <canvas id="rain" aria-hidden="true"></canvas>
     <canvas id="mini" width="220" height="220" aria-hidden="true"></canvas>
-    <div id="hud"><span id="time">0.0</span><span class="hud-u">s</span> · <span id="depth">0</span><span class="hud-u">piso</span></div>
-    <div id="flashwrap" aria-hidden="true"><div class="flashbar"><i id="flashbar"></i></div><span class="flashlbl">FLASH · espacio</span></div>
+    <div id="hud"><span id="time">0.0</span><span class="hud-u">s</span> · <span id="depth">1</span><span class="hud-u">nivel</span></div>
+
+    <div id="bars" aria-hidden="true">
+      <div class="bar"><span class="barlbl">FLASH · espacio</span><div class="barbg"><i id="flashbar"></i></div></div>
+      <div class="bar"><span class="barlbl">AIRE · shift</span><div class="barbg"><i id="stambar" class="stam"></i></div></div>
+    </div>
+    <div id="flareind">BENGALAS 3 · F</div>
     <div id="keyind">LLAVE</div>
+    <div id="hideprompt">E · esconderte</div>
     <div id="prox" class="prox"><img src="/weirdman.png" alt="" /><span id="proxtxt"></span></div>
+
+    <div id="hidev" aria-hidden="true"><div class="hidemeter"><i id="hidebar"></i></div><span>conteniendo la respiración… (E para salir)</span></div>
 
     <div id="intro" class="ov">
       <div class="ovbox">
         <h1>EL LABERINTO</h1>
         <p>No tiene fin. Algo te busca — es lento, pero no se cansa ni duerme.</p>
-        <p class="dim">WASD moverte · mouse mirar · <b style="color:#fff">ESPACIO</b> suelta un flash que congela al monstruo (tarda en recargar). Buscá la <b style="color:#ffd24a">llave</b> y cruzá la <b style="color:#46d17f">puerta</b> para bajar de piso. Cada piso suma y el monstruo se vuelve más rápido.</p>
+        <p class="dim"><b style="color:#fff">WASD</b> moverte · <b style="color:#fff">mouse</b> mirar · <b style="color:#fff">SHIFT</b> correr (gasta aire) · <b style="color:#fff">ESPACIO</b> flash que congela al monstruo (tarda en recargar) · <b style="color:#ffb866">F</b> tirar bengala (el monstruo la evita) · <b style="color:#fff">E</b> esconderte en un locker.</p>
+        <p class="dim">Buscá la <b style="color:#ffd24a">llave</b>, cruzá la <b style="color:#46d17f">puerta</b> y llegá al <b style="color:#fff">refugio</b>. Ahí decidís si seguís o te vas con tu score. Cada nivel es más difícil.</p>
         <button id="play" class="mbtn" type="button">Entrar</button>
         <a class="mback" href="/tristos">&#8592; volver a Tristo's</a>
       </div>
     </div>
 
+    <div id="refuge" class="ov hidden">
+      <div class="ovbox">
+        <img class="rg-img" src="/weirdman.png" alt="" />
+        <h1>REFUGIO</h1>
+        <p>Nivel <b id="rg-lvl">1</b> superado. Acá el monstruo no entra y el contador está frenado. Recargaste flash, aire y bengalas.</p>
+        <p class="dim">Score actual: <b id="rg-score">0</b></p>
+        <button id="rg-next" class="mbtn" type="button">Seguir · siguiente nivel</button>
+        <button id="rg-quit" class="mbtn ghost" type="button">Terminar acá y guardar</button>
+      </div>
+    </div>
+
     <div id="dead" class="ov hidden">
       <div class="ovbox">
-        <h1>TE ALCANZÓ</h1>
+        <h1 id="deadtitle">TE ALCANZÓ</h1>
         <p>Puntaje: <b id="dscore">0</b></p>
         <p class="dim" id="drank"></p>
         <button id="retry" class="mbtn" type="button">Otra vez</button>
@@ -41,6 +60,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="/maze3d.js?v=4"></script>
+  <script type="module" src="/maze3d.js?v=5"></script>
 </body>
 </html>
