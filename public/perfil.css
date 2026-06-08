@@ -1,5 +1,5 @@
 /* ====== Red social — layout 3 columnas (twitter-ish, en nuestra clave) ====== */
-:root { --pf-acc: #6b8cff; --pf-card: rgba(10,10,13,.72); }
+:root { --pf-acc: #6b8cff; --pf-card: rgba(18,18,20,.95); }
 
 #pf-root { min-height: 100svh; padding: 14px; }
 .pf-loading { color: #6c6c72; text-align: center; padding: 80px 0; font-family: "Montserrat", sans-serif; }
@@ -79,7 +79,7 @@
 
 /* ---- Centro ---- */
 .pf-center { background: var(--pf-card); border: 1px solid rgba(255,255,255,.12); border-radius: 16px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); min-height: 60vh; overflow: hidden; }
-.pf-chead { position: sticky; top: 0; z-index: 2; background: rgba(10,10,13,.82); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(255,255,255,.1); }
+.pf-chead { position: sticky; top: 0; z-index: 2; background: rgba(18,18,20,.94); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(255,255,255,.1); }
 .pf-ctitle { font-size: 18px; font-weight: 800; padding: 14px 18px 10px; }
 .pf-tabs2 { display: flex; }
 .pf-tabs2 button { flex: 1; background: none; border: 0; border-bottom: 2px solid transparent; color: #9a9aa2; font: 700 13px "Montserrat", sans-serif; padding: 12px; cursor: pointer; }
@@ -175,9 +175,10 @@
    ============================================================ */
 
 /* Aire general */
+.pf-app { gap: 22px; }
 .pf-center { min-height: 70vh; }
-.pf-ctitle { padding: 18px 22px 12px; font-size: 19px; }
-.pf-body { padding: 18px 22px 30px; }
+.pf-ctitle { padding: 18px 24px 12px; font-size: 19px; }
+.pf-body { padding: 22px 26px 34px; }
 .pf-h { margin: 24px 0 10px; font-size: 11px; letter-spacing: .16em; color: #8a8f98; }
 
 /* Botones: legibles, sólidos, poco redondeados (sin glow) */
@@ -204,7 +205,7 @@
 .pf-ref:hover { text-decoration: underline; }
 
 /* Compositor: bloque, apilado, cómodo */
-.pf-comp { display: block; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.1); border-radius: 16px; padding: 16px; margin: 0 0 18px; }
+.pf-comp { display: block; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.1); border-radius: 16px; padding: 16px; margin: 0 0 22px; }
 .pf-comp .pf-ava { display: none; }
 .pf-cti { display: block; width: 100%; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); border-radius: 11px; padding: 13px 15px; color: #fff; font: 800 16px "Montserrat", sans-serif; outline: none; margin: 0 0 10px; }
 .pf-cti:focus { border-color: rgba(255,255,255,.32); }
@@ -215,7 +216,7 @@
 .pf-crow .pf-msg { margin: 0; flex: 1; }
 
 /* Posteos como cards (Reddit) con aire y márgenes */
-.pf-post { display: block; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.1); border-radius: 16px; padding: 16px 18px; margin: 0 0 14px; cursor: pointer; transition: border-color .12s, background .12s; }
+.pf-post { display: block; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.1); border-radius: 16px; padding: 16px 18px; margin: 0 0 18px; cursor: pointer; transition: border-color .12s, background .12s; }
 .pf-post:hover { background: rgba(255,255,255,.055); border-color: rgba(255,255,255,.22); }
 .pf-post-h { display: flex; align-items: center; gap: 11px; }
 .pf-post-h .pf-ava { width: 36px; height: 42px; flex: none; }
@@ -242,7 +243,7 @@
 .pf-reply:hover { color: #fff; }
 
 /* Carrusel: gris con filo de color (atención mínima) */
-.pf-carousel { margin: 0 0 18px; }
+.pf-carousel { margin: 0 0 22px; }
 .pf-cslide { background: rgba(255,255,255,.045) !important; border: 1px solid rgba(255,255,255,.1); border-left: 3px solid #6b8cff; padding: 18px 20px; border-radius: 14px; }
 .pf-cslide.s-remera { border-left-color: #6b8cff; }
 .pf-cslide.s-video { border-left-color: #d23b47; }
