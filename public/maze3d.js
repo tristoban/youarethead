@@ -63,6 +63,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   /* ---------- Three.js ---------- */
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.75));
+  if ("useLegacyLights" in renderer) renderer.useLegacyLights = true; // three r155+ pasó a luz física → todo negro sin esto
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x05060a, 0.05);
   const camera = new THREE.PerspectiveCamera(75, 1, 0.05, 80);
@@ -82,17 +83,17 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     if (lines) { x.strokeStyle = "rgba(0,0,0,.5)"; x.lineWidth = 3; x.strokeRect(0, 0, s, s); }
     const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
   }
-  const wallTex = noiseTex("#15151a", true);
-  const floorTex = noiseTex("#0c0c10", false); floorTex.repeat.set(40, 40);
-  const wallMat = new THREE.MeshLambertMaterial({ map: wallTex, color: 0xc2c2ce, side: THREE.DoubleSide });
-  const floorMat = new THREE.MeshLambertMaterial({ map: floorTex, color: 0x9a9aa6 });
+  const wallTex = noiseTex("#56565f", true);
+  const floorTex = noiseTex("#44444c", false); floorTex.repeat.set(40, 40);
+  const wallMat = new THREE.MeshLambertMaterial({ map: wallTex, color: 0xffffff, side: THREE.DoubleSide });
+  const floorMat = new THREE.MeshLambertMaterial({ map: floorTex, color: 0xffffff });
   new THREE.TextureLoader().load("/maze-wall.png", (t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; wallMat.map = t; wallMat.color.set(0xffffff); wallMat.needsUpdate = true; }, undefined, () => {});
 
   const wallGeoN = new THREE.PlaneGeometry(CELL, WALL_H);
   const wallGroup = new THREE.Group(); scene.add(wallGroup);
   const FSIZE = (VIEW * 2 + 4) * CELL;
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(FSIZE, FSIZE), floorMat); floor.rotation.x = -Math.PI / 2; scene.add(floor);
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(FSIZE, FSIZE), new THREE.MeshLambertMaterial({ map: floorTex, color: 0x4c4c58, side: THREE.DoubleSide })); ceil.rotation.x = Math.PI / 2; ceil.position.y = WALL_H; scene.add(ceil);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(FSIZE, FSIZE), new THREE.MeshLambertMaterial({ map: floorTex, color: 0x6a6a76, side: THREE.DoubleSide })); ceil.rotation.x = Math.PI / 2; ceil.position.y = WALL_H; scene.add(ceil);
 
   let builtCx = 9999, builtCz = 9999;
   function buildWalls(cx, cz) {
