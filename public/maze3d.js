@@ -10,6 +10,12 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   const dead = document.getElementById("dead");
   if (!canvas) return;
 
+  /* ---------- Audio ---------- */
+  const music = new Audio("/mazemusicloop.mp3"); music.loop = true; music.volume = 0.5;
+  const stepA = new Audio("/step1.mp3"), stepB = new Audio("/step2.mp3"), stepStop = new Audio("/stepstop.mp3"), monster = new Audio("/monsterwins.mp3");
+  [stepA, stepB, stepStop].forEach((a) => { a.volume = 0.65; });
+  function sfx(a) { try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
+
   /* ---------- Config ---------- */
   const CELL = 4, WALL_H = 3.0, VIEW = 8, R = 0.34, EYE = 1.5;
   const MOVE = 3.4;            // velocidad del jugador
@@ -36,14 +42,16 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.75));
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x000000, 0.12);
-  const camera = new THREE.PerspectiveCamera(75, 1, 0.05, 60);
+  scene.fog = new THREE.FogExp2(0x05060a, 0.05);
+  const camera = new THREE.PerspectiveCamera(75, 1, 0.05, 80);
   camera.rotation.order = "YXZ";
   scene.add(camera);
-  scene.add(new THREE.HemisphereLight(0x222233, 0x010103, 0.16));
-  // Linterna
-  const torch = new THREE.SpotLight(0xfff0d8, 6.0, 26, Math.PI / 5.2, 0.55, 1.4);
+  scene.add(new THREE.HemisphereLight(0x3c3c4e, 0x0c0c14, 0.5));
+  // Linterna (más fuerte y ancha)
+  const torch = new THREE.SpotLight(0xfff1da, 13.0, 42, Math.PI / 4.0, 0.5, 1.05);
   camera.add(torch); camera.add(torch.target); torch.position.set(0, 0, 0); torch.target.position.set(0, -0.05, -1);
+  // Halo alrededor del jugador (que se vea lo cercano)
+  const glow = new THREE.PointLight(0xb8bcd0, 0.9, 10, 1.5); camera.add(glow);
 
   // Texturas (procedurales, reemplazables por /maze-wall.png y /maze-floor.png)
   function noiseTex(base, lines) {
@@ -58,15 +66,15 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   }
   const wallTex = noiseTex("#15151a", true);
   const floorTex = noiseTex("#0c0c10", false); floorTex.repeat.set(40, 40);
-  const wallMat = new THREE.MeshLambertMaterial({ map: wallTex, color: 0x9090a0, side: THREE.DoubleSide });
-  const floorMat = new THREE.MeshLambertMaterial({ map: floorTex, color: 0x6a6a78 });
+  const wallMat = new THREE.MeshLambertMaterial({ map: wallTex, color: 0xc2c2ce, side: THREE.DoubleSide });
+  const floorMat = new THREE.MeshLambertMaterial({ map: floorTex, color: 0x9a9aa6 });
   new THREE.TextureLoader().load("/maze-wall.png", (t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; wallMat.map = t; wallMat.color.set(0xffffff); wallMat.needsUpdate = true; }, undefined, () => {});
 
   const wallGeoN = new THREE.PlaneGeometry(CELL, WALL_H);
   const wallGroup = new THREE.Group(); scene.add(wallGroup);
   const FSIZE = (VIEW * 2 + 4) * CELL;
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(FSIZE, FSIZE), floorMat); floor.rotation.x = -Math.PI / 2; floor.position.y = 0; scene.add(floor);
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(FSIZE, FSIZE), new THREE.MeshLambertMaterial({ map: floorTex, color: 0x35353f, side: THREE.DoubleSide })); ceil.rotation.x = Math.PI / 2; ceil.position.y = WALL_H; scene.add(ceil);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(FSIZE, FSIZE), new THREE.MeshLambertMaterial({ map: floorTex, color: 0x4c4c58, side: THREE.DoubleSide })); ceil.rotation.x = Math.PI / 2; ceil.position.y = WALL_H; scene.add(ceil);
 
   let builtCx = 9999, builtCz = 9999;
   function buildWalls(cx, cz) {
@@ -90,9 +98,9 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     x.fillStyle = "#0a0a0e"; x.beginPath(); x.ellipse(w * 0.40, h * 0.32, 8, 14, 0, 0, 7); x.ellipse(w * 0.60, h * 0.32, 8, 14, 0, 0, 7); x.fill();
     return new THREE.CanvasTexture(cv);
   }
-  const entMat = new THREE.SpriteMaterial({ map: entityTex(), transparent: true, depthWrite: false, fog: true });
-  const entity = new THREE.Sprite(entMat); entity.scale.set(1.8, 2.8, 1); entity.position.y = 1.4; scene.add(entity);
-  new THREE.TextureLoader().load("/maze-entity.png", (t) => { entMat.map = t; entMat.needsUpdate = true; }, undefined, () => {});
+  const entMat = new THREE.SpriteMaterial({ map: entityTex(), transparent: true, depthWrite: false, fog: false });
+  const entity = new THREE.Sprite(entMat); entity.scale.set(2.0, 3.0, 1); entity.position.y = 1.5; scene.add(entity);
+  new THREE.TextureLoader().load("/enemymaze.png", (t) => { t.colorSpace = THREE.SRGBColorSpace; entMat.map = t; entMat.needsUpdate = true; }, undefined, () => {});
 
   /* ---------- CRT post-proceso (curva ovalada) ---------- */
   let rt = new THREE.WebGLRenderTarget(2, 2);
@@ -141,7 +149,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   let px = CELL / 2, pz = CELL / 2, yaw = 0, pitch = 0;
   let ex = 0, ez = 0, estep = null;
   const keys = {};
-  let running = false, alive = false, t0 = 0, elapsed = 0, last = 0, bfsTimer = 0;
+  let running = false, alive = false, t0 = 0, elapsed = 0, last = 0, bfsTimer = 0, stepT = 0, stepToggle = false, moving = false;
   addEventListener("keydown", (e) => { keys[e.code] = true; if (e.code === "KeyC") crtOn = !crtOn; });
   addEventListener("keyup", (e) => { keys[e.code] = false; });
   canvas.addEventListener("click", () => { if (alive && !running) canvas.requestPointerLock(); });
@@ -219,6 +227,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   /* ---------- Muerte / score ---------- */
   async function die() {
     if (!alive) return; alive = false; running = false;
+    try { music.pause(); } catch (_) {} sfx(monster);
     if (document.pointerLockElement) document.exitPointerLock();
     const sec = Math.floor(elapsed);
     document.getElementById("dscore").textContent = sec;
@@ -244,6 +253,11 @@ import * as THREE from "https://esm.sh/three@0.160.0";
         const sin = Math.sin(yaw), cos = Math.cos(yaw), spd = MOVE * dt;
         px += (-sin * f + cos * s) * spd; pz += (-cos * f - sin * s) * spd;
         collide();
+        stepT -= dt; if (stepT <= 0) { sfx(stepToggle ? stepA : stepB); stepToggle = !stepToggle; stepT = 0.42; }
+        moving = true;
+      } else {
+        if (moving) sfx(stepStop);
+        moving = false; stepT = 0;
       }
       // entidad
       const espd = (ENT_BASE + elapsed * ENT_RAMP) * dt;
@@ -286,8 +300,9 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     // entidad arranca a ~7 celdas
     ex = 7 * CELL + CELL / 2; ez = 6 * CELL + CELL / 2; estep = null; bfsTimer = 0;
     buildWalls(0, 0);
-    alive = true; t0 = performance.now(); elapsed = 0;
+    alive = true; t0 = performance.now(); elapsed = 0; moving = false; stepT = 0;
     intro.classList.add("hidden"); dead.classList.add("hidden");
+    try { music.currentTime = 0; music.play().catch(() => {}); } catch (_) {}
     canvas.requestPointerLock();
   }
   document.getElementById("play").onclick = start;

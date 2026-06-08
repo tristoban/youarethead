@@ -177,6 +177,7 @@ a { color: inherit; text-decoration: none; }
 }
 .snd:hover { border-color: rgba(255,255,255,.45); background: rgba(6,6,6,.78); }
 .snd:active { transform: translateY(1px); }
+.snd.snd-off { opacity: .28; pointer-events: none; }
 .snd-bars { display: inline-flex; align-items: flex-end; gap: 3px; height: 18px; }
 .snd-bars i { display: block; width: 3px; height: 18px; background: var(--ink); border-radius: 1px; transform-origin: bottom; }
 .snd-bars i:nth-child(1) { transform: scaleY(.5); }

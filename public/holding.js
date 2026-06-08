@@ -73,11 +73,11 @@
     if (!audio || !btn) return;
     audio.volume = 0.5;
     audio.muted = true;
-    let want = true, unlocked = false, justUnlocked = false;
+    let want = true, unlocked = false, justUnlocked = false, suspended = false;
     try { if (localStorage.getItem("yath-muted") === "1") want = false; } catch (_) {}
     function play() { const p = audio.play(); if (p && p.catch) p.catch(() => {}); }
     function apply() {
-      audio.muted = !(want && unlocked);
+      audio.muted = suspended || !(want && unlocked);
       btn.classList.toggle("playing", want);
       btn.setAttribute("aria-pressed", want ? "true" : "false");
       btn.setAttribute("aria-label", want ? "Silenciar música" : "Activar música");
@@ -93,12 +93,18 @@
     }
     ["pointerdown", "keydown", "touchstart", "scroll"].forEach((ev) => window.addEventListener(ev, unlock, { passive: true }));
     btn.addEventListener("click", () => {
+      if (suspended) return;
       if (justUnlocked) { justUnlocked = false; apply(); return; }
       want = !want;
       if (want) { unlocked = true; play(); }
       apply();
       save();
     });
+    // Los juegos con música propia suspenden la música del sitio para que no se solapen.
+    window.YATH_siteMusic = {
+      suspend() { suspended = true; try { audio.muted = true; audio.pause(); } catch (_) {} btn.classList.add("snd-off"); },
+      resume() { suspended = false; btn.classList.remove("snd-off"); apply(); if (want && unlocked) play(); },
+    };
   })();
 
   /* ---------- Mundo ASCII (delante de la niebla, detrás del chat; 2 niveles) ---------- */

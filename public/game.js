@@ -376,6 +376,11 @@
     document.addEventListener("keydown", onKey);
     over = false; running = false; resetBoard(); piece = null; draw();
     updateHud(); showStart(); fetchScores();
+    try {
+      if (!window.__tmusic) { window.__tmusic = new Audio("/tetristomusic.mp3"); window.__tmusic.loop = true; window.__tmusic.volume = 0.5; }
+      if (window.YATH_siteMusic) window.YATH_siteMusic.suspend();
+      window.__tmusic.currentTime = 0; var _p = window.__tmusic.play(); if (_p && _p.catch) _p.catch(function () {});
+    } catch (_) {}
   }
   function closeGame() {
     running = false; window.cancelAnimationFrame(raf);
@@ -383,6 +388,7 @@
     hideSite(false); setNoZoom(false);
     document.documentElement.style.overflow = "";
     document.removeEventListener("keydown", onKey);
+    try { if (window.__tmusic) window.__tmusic.pause(); if (window.YATH_siteMusic) window.YATH_siteMusic.resume(); } catch (_) {}
   }
 
   window.clickeame = openGame;
