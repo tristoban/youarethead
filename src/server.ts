@@ -121,6 +121,7 @@ export async function initDb(db: Db): Promise<void> {
   await db.query(`CREATE INDEX IF NOT EXISTS hub_users_session_idx ON hub_users (session);`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS bio TEXT;`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS pin_hash TEXT;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS recovery_hash TEXT;`);
   await db.query(`ALTER TABLE hub_users ALTER COLUMN email DROP NOT NULL;`);
   await db.query(`ALTER TABLE hub_users ALTER COLUMN email_norm DROP NOT NULL;`);
   await db.query(`
@@ -220,7 +221,7 @@ export async function initDb(db: Db): Promise<void> {
 
 interface Stats { count: number; goal: number; remaining: number; unlocked: boolean; }
 async function getStats(db: Db): Promise<Stats> {
-  const { rows } = await db.query('SELECT count(*) AS c FROM wishlist WHERE confirmed = true');
+  const { rows } = await db.query('SELECT count(*) AS c FROM hub_users WHERE nick IS NOT NULL');
   const count = Number((rows[0]?.c as string | number | bigint | undefined) ?? 0);
   const remaining = Math.max(0, GOAL - count);
   return { count, goal: GOAL, remaining, unlocked: count >= GOAL };
@@ -329,6 +330,7 @@ function getClientIp(req: FastifyRequest): string {
 }
 function hashIp(ip: string): string { return createHash('sha256').update(`${IP_SALT}:${ip}`).digest('hex'); }
 function pinHash(pin: string, nickNorm: string): string { return pbkdf2Sync(pin, `${IP_SALT}:${nickNorm}`, 60000, 32, 'sha256').toString('hex'); }
+function recoveryHash(code: string): string { return createHash('sha256').update(`${IP_SALT}:rec:${code}`).digest('hex'); }
 function isAdmin(req: FastifyRequest): boolean {
   if (!ADMIN_TOKEN) return false;
   const c = req.headers.cookie;
@@ -578,9 +580,10 @@ export function buildApp(db: Db): FastifyInstance {
     const ex = await db.query('SELECT 1 AS k FROM hub_users WHERE nick_norm = $1', [nickNorm]);
     if (ex.rows.length) return reply.code(409).send({ ok: false, error: 'taken', message: 'Ese nick ya está tomado.' });
     const sess = newToken();
-    await db.query('INSERT INTO hub_users (nick, nick_norm, pin_hash, session) VALUES ($1, $2, $3, $4)', [nick, nickNorm, pinHash(pin, nickNorm), sess]);
+    const rec = randomBytes(5).toString('hex').toUpperCase();
+    await db.query('INSERT INTO hub_users (nick, nick_norm, pin_hash, session, recovery_hash) VALUES ($1, $2, $3, $4, $5)', [nick, nickNorm, pinHash(pin, nickNorm), sess, recoveryHash(rec)]);
     reply.header('set-cookie', 'yath_sess=' + sess + '; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax');
-    return reply.code(201).send({ ok: true, logged: true, nick });
+    return reply.code(201).send({ ok: true, logged: true, nick, recovery: rec });
   });
 
   app.post('/api/hub/pin-login', async (req, reply) => {
@@ -618,6 +621,26 @@ export function buildApp(db: Db): FastifyInstance {
     if (!/^[0-9]{4,6}$/.test(pin)) return reply.code(400).send({ ok: false, error: 'bad_pin', message: 'El PIN son 4 a 6 números.' });
     await db.query('UPDATE hub_users SET pin_hash = $2 WHERE id = $1', [u.id, pinHash(pin, u.nick.toLowerCase())]);
     return { ok: true, message: 'PIN guardado. Ya podés entrar con nick + PIN.' };
+  });
+
+  app.post('/api/hub/recuperar', async (req, reply) => {
+    const body = (req.body ?? {}) as { nick?: unknown; recovery?: unknown; pin?: unknown };
+    const nick = typeof body.nick === 'string' ? body.nick.trim() : '';
+    const recovery = typeof body.recovery === 'string' ? body.recovery.replace(/\s+/g, '').toUpperCase() : '';
+    const pin = typeof body.pin === 'string' ? body.pin.trim() : '';
+    if (!nick || !recovery || !/^[0-9]{4,6}$/.test(pin)) return reply.code(400).send({ ok: false, error: 'bad', message: 'Completá nick, código y PIN nuevo (4-6 números).' });
+    const ipHash = hashIp(getClientIp(req));
+    const now = Date.now();
+    if (now - (pinRate.get(ipHash) ?? 0) < 1000) return reply.code(429).send({ ok: false, error: 'slow', message: 'Esperá un toque.' });
+    pinRate.set(ipHash, now);
+    const nickNorm = nick.toLowerCase();
+    const { rows } = await db.query('SELECT id, nick, recovery_hash FROM hub_users WHERE nick_norm = $1', [nickNorm]);
+    const row = rows[0];
+    if (!row || !row.recovery_hash || String(row.recovery_hash) !== recoveryHash(recovery)) return reply.code(401).send({ ok: false, error: 'bad_recovery', message: 'Nick o código de recuperación incorrecto.' });
+    const sess = newToken();
+    await db.query('UPDATE hub_users SET pin_hash = $2, session = $3 WHERE id = $1', [row.id, pinHash(pin, nickNorm), sess]);
+    reply.header('set-cookie', 'yath_sess=' + sess + '; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax');
+    return reply.code(200).send({ ok: true, logged: true, nick: row.nick });
   });
 
   app.post('/api/hub/verify', async (req, reply) => {

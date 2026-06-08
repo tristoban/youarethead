@@ -57,25 +57,9 @@
             <a class="buy" id="buyBtn" href="#comprar">Comprar la mía</a>
           </div>
 
-          <form id="form" class="form" novalidate>
-            <input id="email" class="email" type="email" inputmode="email" autocomplete="email"
-                   placeholder="albertoduarte@email.com" aria-label="Tu email" required />
-            <button id="submit" class="submit" type="submit">Anotarme</button>
-          </form>
-          <div id="otp" class="otp hidden">
-            <p class="otp-copy">Te mandamos un código a <b id="otp-email"></b>. Buscalo en tu mail y pegalo acá:</p>
-            <div class="otp-boxes" id="otp-boxes">
-              <input class="otp-d" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="1" aria-label="Dígito 1" />
-              <input class="otp-d" type="text" inputmode="numeric" maxlength="1" aria-label="Dígito 2" />
-              <input class="otp-d" type="text" inputmode="numeric" maxlength="1" aria-label="Dígito 3" />
-              <input class="otp-d" type="text" inputmode="numeric" maxlength="1" aria-label="Dígito 4" />
-              <input class="otp-d" type="text" inputmode="numeric" maxlength="1" aria-label="Dígito 5" />
-              <input class="otp-d" type="text" inputmode="numeric" maxlength="1" aria-label="Dígito 6" />
-            </div>
-            <p class="otp-actions"><a id="otp-resend" href="#">Reenviar código</a> &middot; <a id="otp-change" href="#">Cambiar mail</a></p>
-          </div>
+          <div id="anotate" class="form"><a class="submit" href="/perfil" style="flex:1;text-align:center;text-decoration:none">Creá tu cuenta y anotate</a></div>
           <p class="msg" id="msg" role="status" aria-live="polite"></p>
-          <p class="micro">Un mail por persona. Te llega un código: pegalo y sumás. Cuando el contador llega a 0, sale a la venta. Pauta.</p>
+          <p class="micro">Una cuenta por persona. Cuando el contador llega a 0, sale a la venta. Pauta.</p>
         </div>
 
         <div class="hero-art">
@@ -159,7 +143,7 @@
     <span class="snd-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
   </button>
 
-  <script src="/app.js?v=9" defer></script>
+  <script src="/app.js?v=10" defer></script>
   <script src="/game.js?v=9" defer></script>
   <script src="/notify.js?v=1" defer></script>
 </body>

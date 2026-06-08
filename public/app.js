@@ -12,6 +12,16 @@
     document.body.appendChild(ax);
   }
 
+  /* ---------- Anotarse = crear cuenta (sin mail) ---------- */
+  (() => {
+    const an = document.getElementById("anotate");
+    if (!an) return;
+    fetch("/api/hub/me", { headers: { accept: "application/json" } })
+      .then((r) => r.json())
+      .then((d) => { if (d && d.logged && d.nick) an.innerHTML = '<div style="font-weight:700;color:var(--ink)">Ya estás anotado como <b>' + String(d.nick).replace(/[<>&]/g, "") + "</b>. Sos parte.</div>"; })
+      .catch(() => {});
+  })();
+
   /* ---------- Fondo: niebla de ruido (tipo dark.netflix.io) ---------- */
   const canvas = document.getElementById("bg");
   if (canvas) {

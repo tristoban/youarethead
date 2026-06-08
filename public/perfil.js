@@ -44,6 +44,15 @@
   async function boot() { const { d } = await api("/api/hub/me", AH); if (!d || !d.ok) { root.innerHTML = '<p class="pf-loading">No responde. Probá en un rato.</p>'; return; } if (!d.logged) login(); else { me = d; app(); } }
 
   /* ---------- Login ---------- */
+  function recoveryScreen(code) {
+    root.innerHTML = '<div style="max-width:430px;margin:8vh auto 0" class="pf-center"><div class="pf-body">' +
+      '<h2 class="pf-ctitle" style="padding:0 0 6px">¡Cuenta creada!</h2>' +
+      '<p class="pf-dimc" style="padding:0 0 10px;text-align:left">Anotá este código de recuperación. Es la <b>única</b> forma de volver a entrar si olvidás el PIN (no usamos mail):</p>' +
+      '<div style="font:800 24px monospace;letter-spacing:3px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:16px;text-align:center;color:#fff">' + esc(code) + '</div>' +
+      '<button class="pf-btn" id="r-ok" style="margin-top:14px;width:100%">Ya lo guardé, entrar</button>' +
+      '</div></div>';
+    root.querySelector("#r-ok").onclick = () => boot();
+  }
   function login() {
     root.innerHTML =
       '<div style="max-width:430px;margin:8vh auto 0" class="pf-center"><div class="pf-body">' +
@@ -53,7 +62,14 @@
       '<input class="pf-input" id="l-pin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN (4 a 6 números)" />' +
       '<div class="pf-row" style="margin-top:10px"><button class="pf-btn" id="l-in" style="flex:1">Entrar</button><button class="pf-btn ghost" id="l-reg" style="flex:1">Crear cuenta</button></div>' +
       '<p class="pf-msg" id="l-msg"></p>' +
-      '<a class="pf-wlink" id="l-mailt" style="border:0;margin-top:4px;cursor:pointer">¿Cuenta vieja con mail? Entrá acá →</a>' +
+      '<a class="pf-wlink" id="l-forgot" style="border:0;margin-top:4px;cursor:pointer">Olvidé mi PIN →</a>' +
+      '<div id="l-rec" style="display:none;border-top:1px solid rgba(255,255,255,.1);margin-top:6px;padding-top:12px">' +
+        '<input class="pf-input" id="r-nick" maxlength="14" placeholder="tu nick" style="margin-bottom:8px" />' +
+        '<input class="pf-input" id="r-code" placeholder="código de recuperación" style="margin-bottom:8px" />' +
+        '<input class="pf-input" id="r-pin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN nuevo (4-6)" />' +
+        '<button class="pf-btn" id="r-go" style="margin-top:8px;width:100%">Recuperar y entrar</button>' +
+      '</div>' +
+      '<a class="pf-wlink" id="l-mailt" style="border:0;cursor:pointer">¿Cuenta vieja con mail? Entrá acá →</a>' +
       '<div id="l-mail" style="display:none;border-top:1px solid rgba(255,255,255,.1);margin-top:6px;padding-top:12px">' +
         '<div class="pf-row" id="l1"><input class="pf-input" id="l-email" type="email" placeholder="tu@mail.com" /><button class="pf-btn" id="l-send">Código</button></div>' +
         '<div class="pf-row" id="l2" style="display:none;margin-top:8px"><input class="pf-input" id="l-code" inputmode="numeric" maxlength="6" placeholder="código" /><button class="pf-btn" id="l-ver">Entrar</button></div>' +
@@ -62,7 +78,9 @@
     const msg = root.querySelector("#l-msg");
     const creds = () => ({ nick: root.querySelector("#l-nick").value.trim(), pin: root.querySelector("#l-pin").value.trim() });
     root.querySelector("#l-in").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/pin-login", { method: "POST", headers: JH, body: JSON.stringify(creds()) }); if (r.ok && d && d.logged) boot(); else msg.textContent = (d && d.message) || "No se pudo."; };
-    root.querySelector("#l-reg").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/registrar", { method: "POST", headers: JH, body: JSON.stringify(creds()) }); if (r.ok && d && d.logged) boot(); else msg.textContent = (d && d.message) || "No se pudo."; };
+    root.querySelector("#l-reg").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/registrar", { method: "POST", headers: JH, body: JSON.stringify(creds()) }); if (r.ok && d && d.logged) { if (d.recovery) recoveryScreen(d.recovery); else boot(); } else msg.textContent = (d && d.message) || "No se pudo."; };
+    root.querySelector("#l-forgot").onclick = () => { const m = root.querySelector("#l-rec"); m.style.display = m.style.display === "none" ? "block" : "none"; };
+    root.querySelector("#r-go").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/recuperar", { method: "POST", headers: JH, body: JSON.stringify({ nick: root.querySelector("#r-nick").value.trim(), recovery: root.querySelector("#r-code").value.trim(), pin: root.querySelector("#r-pin").value.trim() }) }); if (r.ok && d && d.logged) boot(); else msg.textContent = (d && d.message) || "No se pudo."; };
     let email = "";
     const show = (id) => ["l1", "l2", "l3"].forEach((k) => { const n = root.querySelector("#" + k); if (n) n.style.display = k === id ? "flex" : "none"; });
     root.querySelector("#l-mailt").onclick = () => { const m = root.querySelector("#l-mail"); m.style.display = m.style.display === "none" ? "block" : "none"; };
