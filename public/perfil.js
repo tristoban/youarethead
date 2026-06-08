@@ -8,6 +8,9 @@
   async function api(path, opts) { const r = await fetch(path, opts); let d = null; try { d = await r.json(); } catch (_) {} return { r, d }; }
   function esc(s) { return String(s).replace(/[<>&"']/g, ""); }
   function cuando(t) { try { const d = new Date(t); return d.toLocaleDateString("es-AR", { day: "numeric", month: "short" }) + " " + d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }); } catch (_) { return ""; } }
+  const notif = new Audio("/notification.mp3");
+  notif.volume = 0.6;
+  function ping() { try { notif.currentTime = 0; const p = notif.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
 
   const PAL = { H: "#b9bdc7", A: "#e8eaf0", D: "#14141a", B: "#383b44", L: "#23252d", W: "#a87848" };
   const HEADS_PX = {
@@ -150,7 +153,7 @@
         : '<p class="th-dim">Todavía no tenés amigos acá adentro.' + ((d.enviadas || []).length ? " Pendientes: " + d.enviadas.map(esc).join(", ") + "." : "") + "</p>";
       view().querySelectorAll("[data-ok]").forEach((b) => { b.onclick = async () => { await api("/api/social/amigos/responder", { method: "POST", headers: JH, body: JSON.stringify({ nick: b.getAttribute("data-ok"), aceptar: true }) }); load(); }; });
       view().querySelectorAll("[data-no]").forEach((b) => { b.onclick = async () => { await api("/api/social/amigos/responder", { method: "POST", headers: JH, body: JSON.stringify({ nick: b.getAttribute("data-no"), aceptar: false }) }); load(); }; });
-      view().querySelectorAll("[data-dm]").forEach((b) => { b.onclick = () => { root.querySelectorAll("#pf-tabs button").forEach((x) => x.classList.toggle("on", x.getAttribute("data-t") === "msgs")); go("msgs", b.getAttribute("data-dm")); }; });
+      view().querySelectorAll("[data-dm]").forEach((b) => { b.onclick = () => { root.querySelectorAll("#pf-tabs button").forEach((x) => x.classList.toggle("on", x.getAttribute("data-t") === "msgs")); go("msgs", { dm: b.getAttribute("data-dm") }); }; });
     }
     load();
     async function buscar() {
@@ -170,20 +173,27 @@
     view().querySelector("#pf-buscar").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); });
   }
 
-  /* ---------- Mensajes ---------- */
-  function tabMsgs(conNick) {
-    view().innerHTML = '<div class="pf-dm"><div class="pf-dml" id="pf-dml"><p class="th-dim">Cargando…</p></div><div class="pf-dmc" id="pf-dmc"><p class="th-dim">Elegí un amigo para chatear.</p></div></div>';
-    let con = conNick || null, maxId = 0;
-    async function loadAmigos() {
-      const { d } = await api("/api/social/amigos", AH);
+  /* ---------- Mensajes (amigos + grupos) ---------- */
+  function tabMsgs(sel) {
+    view().innerHTML =
+      '<div class="pf-row" style="margin-bottom:10px"><button class="th-btn pf-mini" id="pf-gnew">+ Nuevo grupo</button></div>' +
+      '<div class="pf-dm"><div class="pf-dml" id="pf-dml"><p class="th-dim">Cargando…</p></div><div class="pf-dmc" id="pf-dmc"><p class="th-dim">Elegí un amigo o un grupo.</p></div></div>';
+    let con = (sel && sel.dm) || null, gsel = null, maxId = 0;
+    function marca(box, b) { box.querySelectorAll(".pf-dmf").forEach((x) => x.classList.remove("on")); b.classList.add("on"); }
+    async function loadLista() {
+      const ra = await api("/api/social/amigos", AH);
+      const rg = await api("/api/social/grupos", AH);
       const box = view().querySelector("#pf-dml"); if (!box) return;
-      const am = (d && d.amigos) || [];
-      box.innerHTML = am.length
-        ? am.map((n) => '<button class="pf-dmf' + (n === con ? " on" : "") + '" data-n="' + esc(n) + '">' + esc(n) + "</button>").join("")
-        : '<p class="th-dim">Sin amigos todavía. Agregá desde la pestaña Amigos.</p>';
-      box.querySelectorAll(".pf-dmf").forEach((b) => { b.onclick = () => { con = b.getAttribute("data-n"); maxId = 0; box.querySelectorAll(".pf-dmf").forEach((x) => x.classList.remove("on")); b.classList.add("on"); conv(); }; });
+      const am = (ra.d && ra.d.amigos) || [], gs = (rg.d && rg.d.grupos) || [];
+      let html = "";
+      if (gs.length) html += '<p class="pf-h">Grupos</p>' + gs.map((g) => '<button class="pf-dmf' + (gsel && gsel.id === g.id ? " on" : "") + '" data-g="' + g.id + '" data-n="' + esc(g.nombre) + '"># ' + esc(g.nombre) + " (" + g.miembros + ")</button>").join("");
+      html += '<p class="pf-h">Amigos</p>';
+      html += am.length ? am.map((n) => '<button class="pf-dmf' + (n === con ? " on" : "") + '" data-d="' + esc(n) + '">' + esc(n) + "</button>").join("") : '<p class="th-dim">Sin amigos aún.</p>';
+      box.innerHTML = html;
+      box.querySelectorAll("[data-d]").forEach((b) => { b.onclick = () => { con = b.getAttribute("data-d"); gsel = null; maxId = 0; marca(box, b); clearTimers(); dmConv(); }; });
+      box.querySelectorAll("[data-g]").forEach((b) => { b.onclick = () => { gsel = { id: Number(b.getAttribute("data-g")), nombre: b.getAttribute("data-n") }; con = null; maxId = 0; marca(box, b); clearTimers(); gConv(); }; });
     }
-    function conv() {
+    function dmConv() {
       const c = view().querySelector("#pf-dmc");
       c.innerHTML = '<div class="pf-dmh">con <b>' + esc(con) + '</b></div><div class="pf-dmlog" id="pf-dmlog"></div>' +
         '<div class="pf-row"><input id="pf-dmtxt" maxlength="300" placeholder="escribí…" autocomplete="off" /><button class="th-btn" id="pf-dmsend">Enviar</button></div><p class="th-msg" id="pf-dmmsg"></p>';
@@ -191,10 +201,11 @@
       function add(m) { const div = document.createElement("div"); div.className = "pf-m" + (m.mio ? " mio" : ""); div.textContent = m.body; log.appendChild(div); if (m.id > maxId) maxId = m.id; }
       async function load() {
         if (!con) return;
+        const first = maxId === 0;
         const url = "/api/social/dm?con=" + encodeURIComponent(con) + (maxId ? "&since=" + maxId : "");
         const { r, d } = await api(url, AH);
         if (r.status === 403) { dmm.textContent = "Tienen que ser amigos para chatear."; return; }
-        if (d && d.mensajes && d.mensajes.length) { d.mensajes.forEach(add); log.scrollTop = log.scrollHeight; }
+        if (d && d.mensajes && d.mensajes.length) { d.mensajes.forEach(add); log.scrollTop = log.scrollHeight; if (!first && d.mensajes.some((m) => !m.mio)) ping(); }
       }
       load();
       timers.push(setInterval(() => { if (!document.hidden) load(); }, 3000));
@@ -207,7 +218,64 @@
       c.querySelector("#pf-dmsend").onclick = enviar;
       txt.addEventListener("keydown", (e) => { if (e.key === "Enter") enviar(); });
     }
-    loadAmigos().then(() => { if (con) conv(); });
+    function gConv() {
+      const c = view().querySelector("#pf-dmc");
+      c.innerHTML = '<div class="pf-dmh"><b># ' + esc(gsel.nombre) + '</b> · <span class="th-dim" id="pf-gmiem"></span><br><a href="#" id="pf-gadd">+ sumar amigo</a> · <a href="#" id="pf-gout">salir del grupo</a></div>' +
+        '<div class="pf-dmlog" id="pf-dmlog"></div>' +
+        '<div class="pf-row"><input id="pf-dmtxt" maxlength="300" placeholder="escribí…" autocomplete="off" /><button class="th-btn" id="pf-dmsend">Enviar</button></div><p class="th-msg" id="pf-dmmsg"></p>';
+      const log = c.querySelector("#pf-dmlog"), txt = c.querySelector("#pf-dmtxt"), dmm = c.querySelector("#pf-dmmsg");
+      function add(m) {
+        const div = document.createElement("div"); div.className = "pf-m" + (m.mio ? " mio" : "");
+        if (!m.mio && m.nick) { const n = document.createElement("b"); n.className = "pf-mn"; n.textContent = m.nick; div.appendChild(n); }
+        div.appendChild(document.createTextNode(m.body));
+        log.appendChild(div);
+        if (m.id > maxId) maxId = m.id;
+      }
+      async function load() {
+        if (!gsel) return;
+        const first = maxId === 0;
+        const url = "/api/social/grupos/msgs?id=" + gsel.id + (maxId ? "&since=" + maxId : "");
+        const { r, d } = await api(url, AH);
+        if (r.status === 403) { dmm.textContent = "Ya no estás en este grupo."; return; }
+        if (d && d.ok) {
+          const mm = c.querySelector("#pf-gmiem");
+          if (mm && d.miembros) mm.textContent = d.miembros.map(esc).join(", ");
+          if (d.mensajes && d.mensajes.length) { d.mensajes.forEach(add); log.scrollTop = log.scrollHeight; if (!first && d.mensajes.some((m) => !m.mio)) ping(); }
+        }
+      }
+      load();
+      timers.push(setInterval(() => { if (!document.hidden) load(); }, 3000));
+      async function enviar() {
+        const t = txt.value.trim(); if (!t) return;
+        const { r, d } = await api("/api/social/grupos/msg", { method: "POST", headers: JH, body: JSON.stringify({ id: gsel.id, body: t }) });
+        if (r.ok && d && d.mensaje) { add(d.mensaje); log.scrollTop = log.scrollHeight; txt.value = ""; dmm.textContent = ""; }
+        else dmm.textContent = (d && d.message) || "No se pudo.";
+      }
+      c.querySelector("#pf-dmsend").onclick = enviar;
+      txt.addEventListener("keydown", (e) => { if (e.key === "Enter") enviar(); });
+      c.querySelector("#pf-gadd").onclick = async (e) => {
+        e.preventDefault();
+        const nick = window.prompt("Nick del amigo a sumar:");
+        if (!nick) return;
+        const { d } = await api("/api/social/grupos/agregar", { method: "POST", headers: JH, body: JSON.stringify({ id: gsel.id, nick: nick.trim() }) });
+        dmm.textContent = (d && d.message) || (d && d.ok ? "Agregado." : "No se pudo.");
+        load(); loadLista();
+      };
+      c.querySelector("#pf-gout").onclick = async (e) => {
+        e.preventDefault();
+        if (!window.confirm("¿Salir del grupo?")) return;
+        await api("/api/social/grupos/salir", { method: "POST", headers: JH, body: JSON.stringify({ id: gsel.id }) });
+        gsel = null; clearTimers(); tabMsgs();
+      };
+    }
+    view().querySelector("#pf-gnew").onclick = async () => {
+      const nombre = window.prompt("Nombre del grupo:");
+      if (!nombre) return;
+      const { r, d } = await api("/api/social/grupos/crear", { method: "POST", headers: JH, body: JSON.stringify({ nombre: nombre.trim() }) });
+      if (r.ok && d && d.grupo) { gsel = { id: d.grupo.id, nombre: d.grupo.nombre }; con = null; maxId = 0; await loadLista(); gConv(); }
+      else window.alert((d && d.message) || "No se pudo crear.");
+    };
+    loadLista().then(() => { if (con) dmConv(); });
   }
 
   /* ---------- Cuenta ---------- */

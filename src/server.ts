@@ -150,6 +150,33 @@ export async function initDb(db: Db): Promise<void> {
     );
   `);
   await db.query(`
+    CREATE TABLE IF NOT EXISTS grupos (
+      id BIGSERIAL PRIMARY KEY,
+      nombre TEXT NOT NULL,
+      creador BIGINT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS grupo_miembros (
+      grupo_id BIGINT NOT NULL,
+      user_id BIGINT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (grupo_id, user_id)
+    );
+  `);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS grupo_msgs (
+      id BIGSERIAL PRIMARY KEY,
+      grupo_id BIGINT NOT NULL,
+      de BIGINT NOT NULL,
+      nick TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS grupo_msgs_idx ON grupo_msgs (grupo_id, id);`);
+  await db.query(`
     CREATE TABLE IF NOT EXISTS boton_caidos (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL UNIQUE,
@@ -387,6 +414,10 @@ export function buildApp(db: Db): FastifyInstance {
   }
   async function sonAmigos(x: number, y: number): Promise<boolean> {
     const { rows } = await db.query("SELECT 1 AS k FROM amigos WHERE ((a = $1 AND b = $2) OR (a = $2 AND b = $1)) AND estado = 'aceptado'", [x, y]);
+    return rows.length > 0;
+  }
+  async function esMiembro(gid: number, uid: number): Promise<boolean> {
+    const { rows } = await db.query('SELECT 1 AS k FROM grupo_miembros WHERE grupo_id = $1 AND user_id = $2', [gid, uid]);
     return rows.length > 0;
   }
   const GATED = new Set(['/index.html', '/tshirt.png', '/pic1.png', '/pic2.png', '/pic3.png', '/pic3.jpg']);
@@ -692,6 +723,89 @@ export function buildApp(db: Db): FastifyInstance {
     const ins = await db.query('INSERT INTO posts (user_id, nick, body) VALUES ($1, $2, $3) RETURNING id, created_at', [u.id, u.nick, text]);
     const row = ins.rows[0];
     return reply.code(201).send({ ok: true, post: { id: Number(row?.id ?? 0), nick: u.nick, body: text, t: row?.created_at } });
+  });
+
+  app.post('/api/social/grupos/crear', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    if (!u.nick) return reply.code(400).send({ ok: false, error: 'sin_nick', message: 'Primero reservá tu nick.' });
+    const raw = ((req.body ?? {}) as { nombre?: unknown }).nombre;
+    const nombre = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().slice(0, 24).trim() : '';
+    if (nombre.length < 2) return reply.code(400).send({ ok: false, error: 'nombre', message: 'Nombre muy corto.' });
+    if (offensiveText(nombre)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Ese nombre no va.' });
+    const ins = await db.query('INSERT INTO grupos (nombre, creador) VALUES ($1, $2) RETURNING id', [nombre, u.id]);
+    const gid = Number(ins.rows[0]?.id ?? 0);
+    if (gid) await db.query('INSERT INTO grupo_miembros (grupo_id, user_id) VALUES ($1, $2)', [gid, u.id]);
+    return reply.code(201).send({ ok: true, grupo: { id: gid, nombre } });
+  });
+
+  app.post('/api/social/grupos/agregar', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const body = (req.body ?? {}) as { id?: unknown; nick?: unknown };
+    const gid = Math.floor(Number(body.id));
+    if (!Number.isInteger(gid) || gid <= 0) return reply.code(400).send({ ok: false, error: 'grupo' });
+    if (!(await esMiembro(gid, u.id))) return reply.code(403).send({ ok: false, error: 'no_miembro' });
+    const otro = await userByNick(String(body.nick ?? ''));
+    if (!otro) return reply.code(404).send({ ok: false, error: 'no_existe', message: 'No existe ese nick.' });
+    if (otro.id === u.id) return reply.code(400).send({ ok: false, error: 'vos', message: 'Ya estás adentro.' });
+    if (!(await sonAmigos(u.id, otro.id))) return reply.code(403).send({ ok: false, error: 'no_amigos', message: 'Solo podés sumar a tus amigos.' });
+    const cnt = await db.query('SELECT count(*) AS c FROM grupo_miembros WHERE grupo_id = $1', [gid]);
+    if (Number((cnt.rows[0]?.c as string | number | bigint | undefined) ?? 0) >= 20) return reply.code(400).send({ ok: false, error: 'lleno', message: 'El grupo está lleno (20 máx).' });
+    await db.query('INSERT INTO grupo_miembros (grupo_id, user_id) VALUES ($1, $2) ON CONFLICT (grupo_id, user_id) DO NOTHING', [gid, otro.id]);
+    return reply.code(201).send({ ok: true, message: otro.nick + ' agregado al grupo.' });
+  });
+
+  app.post('/api/social/grupos/salir', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const gid = Math.floor(Number(((req.body ?? {}) as { id?: unknown }).id));
+    if (!Number.isInteger(gid) || gid <= 0) return reply.code(400).send({ ok: false, error: 'grupo' });
+    await db.query('DELETE FROM grupo_miembros WHERE grupo_id = $1 AND user_id = $2', [gid, u.id]);
+    return { ok: true };
+  });
+
+  app.get('/api/social/grupos', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const { rows } = await db.query('SELECT g.id, g.nombre, (SELECT count(*) FROM grupo_miembros m2 WHERE m2.grupo_id = g.id) AS n FROM grupos g JOIN grupo_miembros m ON m.grupo_id = g.id WHERE m.user_id = $1 ORDER BY g.id DESC', [u.id]);
+    return { ok: true, grupos: rows.map((r) => ({ id: Number(r.id), nombre: r.nombre, miembros: Number(r.n ?? 0) })) };
+  });
+
+  app.get('/api/social/grupos/msgs', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const q = (req.query ?? {}) as { id?: unknown; since?: unknown };
+    const gid = Math.floor(Number(q.id));
+    if (!Number.isInteger(gid) || gid <= 0) return reply.code(400).send({ ok: false, error: 'grupo' });
+    if (!(await esMiembro(gid, u.id))) return reply.code(403).send({ ok: false, error: 'no_miembro' });
+    const since = Math.floor(Number(q.since));
+    let rows;
+    if (Number.isFinite(since) && since > 0) rows = (await db.query('SELECT id, de, nick, body, created_at FROM grupo_msgs WHERE grupo_id = $1 AND id > $2 ORDER BY id ASC LIMIT 100', [gid, since])).rows;
+    else rows = (await db.query('SELECT id, de, nick, body, created_at FROM grupo_msgs WHERE grupo_id = $1 ORDER BY id DESC LIMIT 50', [gid])).rows.reverse();
+    const mem = await db.query('SELECT u2.nick FROM grupo_miembros m JOIN hub_users u2 ON u2.id = m.user_id WHERE m.grupo_id = $1', [gid]);
+    return { ok: true, mensajes: rows.map((r) => ({ id: Number(r.id), mio: Number(r.de) === u.id, nick: r.nick, body: r.body, t: r.created_at })), miembros: mem.rows.map((r) => r.nick) };
+  });
+
+  app.post('/api/social/grupos/msg', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const body = (req.body ?? {}) as { id?: unknown; body?: unknown };
+    const gid = Math.floor(Number(body.id));
+    if (!Number.isInteger(gid) || gid <= 0) return reply.code(400).send({ ok: false, error: 'grupo' });
+    if (!(await esMiembro(gid, u.id))) return reply.code(403).send({ ok: false, error: 'no_miembro' });
+    const text = typeof body.body === 'string' ? body.body.replace(/\s+/g, ' ').trim().slice(0, 300).trim() : '';
+    if (!text) return reply.code(400).send({ ok: false, error: 'empty' });
+    if (offensiveText(text)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Eso no va.' });
+    const now = Date.now();
+    const last = dmRate.get(u.id) ?? 0;
+    if (now - last < 1200) return reply.code(429).send({ ok: false, error: 'slow' });
+    dmRate.set(u.id, now);
+    const ins = await db.query('INSERT INTO grupo_msgs (grupo_id, de, nick, body) VALUES ($1, $2, $3, $4) RETURNING id, created_at', [gid, u.id, u.nick ?? 'anón', text]);
+    const row = ins.rows[0];
+    return reply.code(201).send({ ok: true, mensaje: { id: Number(row?.id ?? 0), mio: true, nick: u.nick ?? '', body: text, t: row?.created_at } });
   });
 
   app.post('/api/hub/logout', async (req, reply) => {

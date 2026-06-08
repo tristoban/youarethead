@@ -38,5 +38,8 @@
 .pf-dmlog { height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; }
 .pf-m { max-width: 80%; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 7px 11px; font-size: 13px; align-self: flex-start; overflow-wrap: anywhere; }
 .pf-m.mio { align-self: flex-end; background: rgba(255,255,255,.16); }
+.pf-mn { display: block; font-size: 10px; color: #9a9aa2; margin-bottom: 2px; }
+.pf-dml .pf-h { margin: 8px 0 4px; }
+.pf-dmh a { color: #cfcfd6; border-bottom: 1px solid rgba(255,255,255,.25); font-size: 11px; }
 
 @media (max-width: 560px) { .pf-dm { grid-template-columns: 1fr; } .pf-dml { flex-direction: row; flex-wrap: wrap; } }
