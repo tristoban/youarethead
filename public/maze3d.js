@@ -15,18 +15,25 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   const stepA = new Audio("/step1.mp3"), stepB = new Audio("/step2.mp3"), stepStop = new Audio("/stepstop.mp3"), monster = new Audio("/monsterwins.mp3");
   [stepA, stepB, stepStop].forEach((a) => { a.volume = 0.65; });
   function sfx(a) { try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {} }
+  let actx = null;
+  function initAudio() { if (actx) return; try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) {} }
+  function thump(t, vol) { if (!actx) return; const o = actx.createOscillator(), g = actx.createGain(); o.type = "sine"; o.frequency.setValueAtTime(62, t); o.frequency.exponentialRampToValueAtTime(34, t + 0.12); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2); o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.22); }
+  function heartbeat(vol) { if (!actx) return; const t = actx.currentTime; thump(t, vol); thump(t + 0.24, vol * 0.62); }
 
   /* ---------- Config ---------- */
   const CELL = 4, WALL_H = 3.0, VIEW = 8, R = 0.34, EYE = 1.5;
   const MOVE = 3.4;            // velocidad del jugador
-  const ENT_BASE = 1.05;       // entidad: lenta
-  const ENT_RAMP = 0.018;      // se acelera de a poco con el tiempo
+  const ENT_BASE = 1.15;       // entidad: lenta al inicio
+  const ENT_RAMP = 0.012;      // se acelera con el tiempo
+  const ENT_DEPTH_BOOST = 0.5; // y bastante por piso
+  const FLASH_CD = 22, FLASH_FREEZE = 5;
   const SEED = 90210;
+  let mazeSeed = SEED;
 
   /* ---------- Laberinto procedural infinito (determinístico) ---------- */
   const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // 0 N(-z) 1 E(+x) 2 S(+z) 3 W(-x)
   function hash(x, z, s) {
-    let h = (x | 0) * 374761393 + (z | 0) * 668265263 + (s | 0) * 2147483647 + SEED * 69069;
+    let h = (x | 0) * 374761393 + (z | 0) * 668265263 + (s | 0) * 2147483647 + mazeSeed * 69069;
     h = (h ^ (h >> 13)) >>> 0; h = (h * 1274126177) >>> 0; h = (h ^ (h >> 16)) >>> 0;
     return h / 4294967296;
   }
@@ -102,6 +109,15 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   const entity = new THREE.Sprite(entMat); entity.scale.set(2.0, 3.0, 1); entity.position.y = 1.5; scene.add(entity);
   new THREE.TextureLoader().load("/enemymaze.png", (t) => { t.colorSpace = THREE.SRGBColorSpace; entMat.map = t; entMat.needsUpdate = true; }, undefined, () => {});
 
+  // Llave + puerta (objetivos que brillan en la oscuridad) + estallido del flash
+  const keyObj = new THREE.Mesh(new THREE.OctahedronGeometry(0.34), new THREE.MeshBasicMaterial({ color: 0xffd24a, fog: false })); keyObj.position.y = 1.1; scene.add(keyObj);
+  const keyLight = new THREE.PointLight(0xffd24a, 1.5, 10, 1.4); scene.add(keyLight);
+  const doorMat = new THREE.MeshBasicMaterial({ color: 0xd23b47, fog: false, transparent: true, opacity: 0.92, side: THREE.DoubleSide });
+  const doorObj = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 0.82, WALL_H * 0.94), doorMat); doorObj.position.y = WALL_H * 0.47; scene.add(doorObj);
+  const doorLight = new THREE.PointLight(0xd23b47, 1.8, 12, 1.3); scene.add(doorLight);
+  const burst = new THREE.PointLight(0xffffff, 0, 70, 0.5); camera.add(burst);
+  function setDoorLocked(locked) { const c = locked ? 0xd23b47 : 0x46d17f; doorMat.color.setHex(c); doorLight.color.setHex(c); }
+
   /* ---------- CRT post-proceso (curva ovalada) ---------- */
   let rt = new THREE.WebGLRenderTarget(2, 2);
   const crtScene = new THREE.Scene();
@@ -150,7 +166,13 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   let ex = 0, ez = 0, estep = null;
   const keys = {};
   let running = false, alive = false, t0 = 0, elapsed = 0, last = 0, bfsTimer = 0, stepT = 0, stepToggle = false, moving = false;
-  addEventListener("keydown", (e) => { keys[e.code] = true; if (e.code === "KeyC") crtOn = !crtOn; });
+  let depth = 0, hasKey = false, flashCharge = 1, freezeT = 0, flashLt = 0, hbT = 0, keyCell = [5, 0], doorCell = [9, 0];
+  const depthEl = document.getElementById("depth"), flashBar = document.getElementById("flashbar"), keyEl = document.getElementById("keyind");
+  addEventListener("keydown", (e) => {
+    keys[e.code] = true;
+    if (e.code === "KeyC") crtOn = !crtOn;
+    if (e.code === "Space") { e.preventDefault(); if (alive && running && flashCharge >= 1) { freezeT = FLASH_FREEZE; flashLt = 1.6; flashCharge = 0; } }
+  });
   addEventListener("keyup", (e) => { keys[e.code] = false; });
   canvas.addEventListener("click", () => { if (alive && !running) canvas.requestPointerLock(); });
   document.addEventListener("pointerlockchange", () => { running = document.pointerLockElement === canvas; });
@@ -194,6 +216,28 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     return null;
   }
 
+  /* ---------- Objetivos: llave + puerta + bajar de piso ---------- */
+  function placeObjectives() {
+    const ka = hash(11, 11, 1) * 6.2832, kd = 5 + Math.floor(hash(12, 12, 1) * 4);
+    keyCell = [Math.round(Math.cos(ka) * kd) || 5, Math.round(Math.sin(ka) * kd)];
+    const da = hash(21, 21, 1) * 6.2832, dd = 9 + Math.floor(hash(22, 22, 1) * 5);
+    doorCell = [Math.round(Math.cos(da) * dd) || 9, Math.round(Math.sin(da) * dd)];
+    keyObj.visible = true; keyLight.visible = true;
+    keyObj.position.set(keyCell[0] * CELL + CELL / 2, 1.1, keyCell[1] * CELL + CELL / 2);
+    keyLight.position.set(keyCell[0] * CELL + CELL / 2, 1.4, keyCell[1] * CELL + CELL / 2);
+    doorObj.position.set(doorCell[0] * CELL + CELL / 2, WALL_H * 0.47, doorCell[1] * CELL + CELL / 2);
+    doorLight.position.set(doorCell[0] * CELL + CELL / 2, 1.6, doorCell[1] * CELL + CELL / 2);
+    setDoorLocked(true);
+  }
+  function descend() {
+    depth++; mazeSeed = SEED + depth * 7919;
+    hasKey = false; seenCells.clear();
+    px = CELL / 2; pz = CELL / 2;
+    ex = 7 * CELL + CELL / 2; ez = 6 * CELL + CELL / 2; estep = null; bfsTimer = 0;
+    buildWalls(0, 0); placeObjectives();
+    flashLt = 0.9; sfx(stepStop);
+  }
+
   /* ---------- Minimapa (fog of war) ---------- */
   const mctx = miniCv.getContext("2d");
   const seenCells = new Set();
@@ -229,15 +273,16 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     if (!alive) return; alive = false; running = false;
     try { music.pause(); } catch (_) {} sfx(monster);
     if (document.pointerLockElement) document.exitPointerLock();
-    const sec = Math.floor(elapsed);
-    document.getElementById("dscore").textContent = sec;
+    const sec = Math.floor(elapsed), sc = depth * 500 + sec;
+    document.getElementById("dscore").textContent = sc;
     dead.classList.remove("hidden");
     try {
       const me = await (await fetch("/api/hub/me", { headers: { accept: "application/json" } })).json();
       const alias = (me && me.nick) || "ANÓN";
-      await fetch("/api/score", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ game: "laberinto", alias, score: sec }) });
-      const rk = await (await fetch("/api/rank?game=laberinto&score=" + sec, { headers: { accept: "application/json" } })).json();
-      if (rk && rk.ok) document.getElementById("drank").textContent = "Puesto #" + rk.rank + " de " + rk.total;
+      await fetch("/api/score", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ game: "laberinto", alias, score: sc }) });
+      const rk = await (await fetch("/api/rank?game=laberinto&score=" + sc, { headers: { accept: "application/json" } })).json();
+      const base = "Piso " + depth + " · " + sec + "s";
+      document.getElementById("drank").textContent = (rk && rk.ok) ? base + " · Puesto #" + rk.rank + " de " + rk.total : base;
     } catch (_) {}
   }
 
@@ -259,25 +304,39 @@ import * as THREE from "https://esm.sh/three@0.160.0";
         if (moving) sfx(stepStop);
         moving = false; stepT = 0;
       }
-      // entidad
-      const espd = (ENT_BASE + elapsed * ENT_RAMP) * dt;
-      bfsTimer -= dt;
+      // flash: carga + congelado + estallido de luz
+      if (flashCharge < 1) flashCharge = Math.min(1, flashCharge + dt / FLASH_CD);
+      if (freezeT > 0) freezeT -= dt;
+      if (flashLt > 0) { flashLt -= dt; burst.intensity = Math.max(0, flashLt) * 9; } else burst.intensity = 0;
+      // entidad (acelera por piso y tiempo; quieta si está congelada)
+      const espd = (ENT_BASE + depth * ENT_DEPTH_BOOST + elapsed * ENT_RAMP) * dt;
       const ecx = Math.floor(ex / CELL), ecz = Math.floor(ez / CELL), pcx = Math.floor(px / CELL), pcz = Math.floor(pz / CELL);
-      if (bfsTimer <= 0 || !estep) { estep = bfsStep(ecx, ecz, pcx, pcz); bfsTimer = 0.35; }
-      if (estep) {
-        const tx = estep[0] * CELL + CELL / 2, tz = estep[1] * CELL + CELL / 2;
-        const dx = tx - ex, dz = tz - ez, dl = Math.hypot(dx, dz);
-        if (dl < 0.12) { estep = null; } else { ex += (dx / dl) * espd; ez += (dz / dl) * espd; }
+      if (freezeT <= 0) {
+        bfsTimer -= dt;
+        if (bfsTimer <= 0 || !estep) { estep = bfsStep(ecx, ecz, pcx, pcz); bfsTimer = 0.35; }
+        if (estep) {
+          const tx = estep[0] * CELL + CELL / 2, tz = estep[1] * CELL + CELL / 2;
+          const dx = tx - ex, dz = tz - ez, dl = Math.hypot(dx, dz);
+          if (dl < 0.12) { estep = null; } else { ex += (dx / dl) * espd; ez += (dz / dl) * espd; }
+        }
       }
-      entity.position.x = ex; entity.position.z = ez;
-      // proximidad
+      entity.position.x = ex; entity.position.z = ez; keyObj.rotation.y += dt * 2.2;
+      // llave / puerta
+      if (!hasKey && Math.hypot(px - (keyCell[0] * CELL + CELL / 2), pz - (keyCell[1] * CELL + CELL / 2)) < 1.2) { hasKey = true; keyObj.visible = false; keyLight.visible = false; setDoorLocked(false); heartbeat(0.18); }
+      if (hasKey && Math.hypot(px - (doorCell[0] * CELL + CELL / 2), pz - (doorCell[1] * CELL + CELL / 2)) < 1.5) descend();
+      // proximidad + latido
       const pd = Math.hypot(px - ex, pz - ez);
-      warnEl.classList.toggle("show", pd < CELL * 1.8);
-      if (pd < 1.25) { die(); }
-      // descubrir minimapa
+      warnEl.classList.toggle("show", pd < CELL * 1.8 && freezeT <= 0);
+      if (pd < 1.25 && freezeT <= 0) die();
+      hbT -= dt;
+      if (freezeT <= 0 && pd < CELL * 7 && hbT <= 0) { const ff = 1 - pd / (CELL * 7); heartbeat(0.05 + ff * 0.5); hbT = 1.1 - ff * 0.8; }
+      // minimapa + HUD
       seenCells.add(pcx + "," + pcz);
       for (let i = 0; i < 4; i++) seenCells.add((pcx + DIRS[i][0]) + "," + (pcz + DIRS[i][1]));
       timeEl.textContent = elapsed.toFixed(1);
+      if (depthEl) depthEl.textContent = depth;
+      if (flashBar) flashBar.style.width = (flashCharge * 100) + "%";
+      if (keyEl) keyEl.style.opacity = hasKey ? "1" : "0.3";
     }
     // cámara
     camera.position.set(px, EYE, pz); camera.rotation.y = yaw; camera.rotation.x = pitch;
@@ -296,12 +355,14 @@ import * as THREE from "https://esm.sh/three@0.160.0";
 
   function start() {
     seenCells.clear();
+    depth = 0; mazeSeed = SEED; hasKey = false; flashCharge = 1; freezeT = 0; flashLt = 0; hbT = 0;
     px = CELL / 2; pz = CELL / 2; yaw = 0; pitch = 0;
     // entidad arranca a ~7 celdas
     ex = 7 * CELL + CELL / 2; ez = 6 * CELL + CELL / 2; estep = null; bfsTimer = 0;
-    buildWalls(0, 0);
+    buildWalls(0, 0); placeObjectives();
     alive = true; t0 = performance.now(); elapsed = 0; moving = false; stepT = 0;
     intro.classList.add("hidden"); dead.classList.add("hidden");
+    initAudio();
     try { music.currentTime = 0; music.play().catch(() => {}); } catch (_) {}
     canvas.requestPointerLock();
   }
