@@ -1,6 +1,102 @@
 /* ====== Red social — layout 3 columnas (twitter-ish, en nuestra clave) ====== */
 :root { --pf-acc: #6b8cff; --pf-card: rgba(10,10,13,.72); }
 
+/* ============================================================
+   REDISEÑO v2 — gris, cards, botones que giran, márgenes
+   (overrides al final: la cascada gana sobre lo de arriba)
+   ============================================================ */
+@property --pf-spin-a { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+
+/* Botones que giran (borde de color animado, menos redondos) */
+.pf-spin { position: relative; border: 0; background: #14141a; color: #f5f5f7; border-radius: 11px; padding: 12px 22px; font: 800 13px "Montserrat", sans-serif; letter-spacing: .02em; cursor: pointer; overflow: hidden; z-index: 0; text-decoration: none; }
+.pf-spin::before { content: ""; position: absolute; z-index: -2; left: -60%; top: -60%; width: 220%; height: 220%; background: conic-gradient(transparent 0deg, #5a76d6 55deg, transparent 130deg, #9b5fd0 210deg, transparent 290deg); animation: pf-rot 4.5s linear infinite; }
+.pf-spin::after { content: ""; position: absolute; z-index: -1; inset: 1.6px; border-radius: 9px; background: #14141a; }
+.pf-spin:hover::after { background: #1b1b22; }
+@keyframes pf-rot { to { transform: rotate(360deg); } }
+
+/* Botones generales menos circulares */
+.pf-btn { border-radius: 10px; }
+.pf-mini { border-radius: 8px; }
+
+/* Espaciado general más respirado */
+.pf-body { padding: 16px 20px 26px; }
+.pf-ctitle { padding: 16px 20px 12px; }
+.pf-h { margin: 20px 0 8px; }
+
+/* @ # $ — gris claro, no azul */
+.pf-u { color: #e6e8ee; }
+.pf-tag2 { color: #aeb4c0; cursor: pointer; font-weight: 600; }
+.pf-tag2:hover { text-decoration: underline; }
+.pf-ref { color: #c2c6d0; cursor: pointer; font-weight: 700; }
+.pf-ref:hover { text-decoration: underline; }
+
+/* Tabs en blanco/gris (sin azul) */
+.pf-tabs2 button.on { color: #fff; border-bottom-color: #fff; }
+
+/* Compositor (título + cuerpo) */
+.pf-comp { display: block; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 14px; margin: 0 0 16px; }
+.pf-cti { width: 100%; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 12px 14px; color: #fff; font: 800 15px "Montserrat", sans-serif; outline: none; margin-bottom: 8px; }
+.pf-cti:focus { border-color: rgba(255,255,255,.3); }
+.pf-comp textarea { width: 100%; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); border-radius: 10px; color: #fff; font: 400 14px "Montserrat", sans-serif; outline: none; resize: vertical; min-height: 70px; padding: 11px 14px; }
+.pf-comp textarea:focus { border-color: rgba(255,255,255,.3); }
+.pf-crow { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+
+/* Posteos como cards (Reddit) — con márgenes, no atraviesan */
+.pf-post { display: block; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 14px 16px; margin: 0 0 12px; cursor: pointer; transition: border-color .12s, background .12s; }
+.pf-post:hover { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.2); }
+.pf-post-h { display: flex; align-items: center; gap: 10px; }
+.pf-post-h .pf-ava { width: 34px; height: 40px; flex: none; }
+.pf-post-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.pf-post-meta span { font-size: 12px; color: #8a8f98; }
+.pf-code { font: 700 11px monospace; color: #8a8f98; border: 1px solid rgba(255,255,255,.14); border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
+.pf-post-t { font-size: 17px; font-weight: 800; margin: 10px 0 4px; line-height: 1.3; }
+.pf-post-b { margin: 0; color: #c4c7cf; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.pf-post-f { margin-top: 10px; }
+.pf-cnt { font-size: 12px; color: #8a8f98; }
+
+/* Post detail + comentarios */
+.pf-back2 { display: inline-block; color: #8a8f98; font-size: 13px; margin-bottom: 14px; cursor: pointer; }
+.pf-back2:hover { color: #fff; }
+.pf-postfull { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+.pf-postfull-t { font-size: 22px; font-weight: 800; margin: 12px 0 8px; line-height: 1.25; }
+.pf-postfull-b { color: #dfe1e7; font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pf-comp-c { margin-bottom: 14px; }
+.pf-cmt { border-left: 2px solid rgba(255,255,255,.1); padding: 8px 0 0 12px; margin-top: 12px; }
+.pf-cmt-h { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.pf-ava-sm { width: 24px !important; height: 28px !important; }
+.pf-cmt-b { font-size: 14px; color: #dfe1e7; margin: 5px 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pf-reply { font-size: 12px; color: #8a8f98; cursor: pointer; }
+.pf-reply:hover { color: #fff; }
+
+/* Carrusel: gris con un filo de color (atención mínima) */
+.pf-cslide { background: rgba(255,255,255,.04) !important; border: 1px solid rgba(255,255,255,.1); border-left: 3px solid #6b8cff; }
+.pf-cslide.s-remera { border-left-color: #6b8cff; }
+.pf-cslide.s-video { border-left-color: #d23b47; }
+.pf-cslide.s-tristo { border-left-color: #e2b23c; }
+.pf-cs-t b { color: #fff; }
+
+/* Amigos / filas como cards */
+.pf-fila { padding: 11px 14px; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; margin-bottom: 8px; background: rgba(255,255,255,.02); }
+.pf-fila:hover { background: rgba(255,255,255,.045); }
+
+/* Mensajes: panel más ancho y claro */
+.pf-dm { grid-template-columns: 210px minmax(0,1fr); gap: 14px; }
+.pf-dmf { padding: 11px 12px; border-radius: 10px; }
+.pf-dmlog { height: 48vh; }
+.pf-m.mio { background: #2b2e37; color: #fff; border-color: transparent; }
+.pf-m.mio .pf-mn { color: rgba(255,255,255,.5); }
+
+/* Links del rail en gris */
+.pf-wlink { color: #aeb4c0; }
+.pf-dmh a { color: #aeb4c0; }
+
+/* Perfil de invitado (/u/nick sin login) */
+.pf-guest { max-width: 480px; margin: 0 auto; padding: 20px 18px 40px; }
+
+@media (max-width: 680px) {
+  .pf-dm { grid-template-columns: 1fr; }
+}
+
 #pf-root { min-height: 100svh; padding: 14px; }
 .pf-loading { color: #6c6c72; text-align: center; padding: 80px 0; font-family: "Montserrat", sans-serif; }
 

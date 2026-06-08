@@ -143,6 +143,7 @@ export async function initDb(db: Db): Promise<void> {
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS location TEXT;`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS links JSONB NOT NULL DEFAULT '[]'::jsonb;`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS pinned BIGINT;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS admin BOOLEAN NOT NULL DEFAULT false;`);
   await db.query(`CREATE TABLE IF NOT EXISTS site_config (key TEXT PRIMARY KEY, value TEXT);`);
   await db.query(`ALTER TABLE hub_users ALTER COLUMN email DROP NOT NULL;`);
   await db.query(`ALTER TABLE hub_users ALTER COLUMN email_norm DROP NOT NULL;`);
@@ -175,6 +176,19 @@ export async function initDb(db: Db): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  await db.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS title TEXT;`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS comments (
+      id BIGSERIAL PRIMARY KEY,
+      post_id BIGINT NOT NULL,
+      parent_id BIGINT,
+      user_id BIGINT NOT NULL,
+      nick TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS comments_post_idx ON comments (post_id, id);`);
   await db.query(`
     CREATE TABLE IF NOT EXISTS grupos (
       id BIGSERIAL PRIMARY KEY,
@@ -287,8 +301,9 @@ async function adminUser(db: Db, req: FastifyRequest): Promise<{ id: number; nic
   const u = await hubUserBySession(db, req);
   if (!u) return null;
   if (isAdminNick(u.nick)) return { id: u.id, nick: u.nick || '' };
-  const e = await db.query('SELECT email FROM hub_users WHERE id = $1', [u.id]);
-  if (isAdminEmail(e.rows[0]?.email)) return { id: u.id, nick: u.nick || '' };
+  const e = await db.query('SELECT email, admin FROM hub_users WHERE id = $1', [u.id]);
+  const row = e.rows[0];
+  if ((row && row.admin === true) || isAdminEmail(row?.email)) return { id: u.id, nick: u.nick || '' };
   return null;
 }
 
@@ -747,7 +762,7 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
     if (!u) return { ok: true, logged: false, nick: null };
-    const det = await db.query('SELECT email, bio, created_at, pin_hash, avatar, banner, accent, estado, location, links, pinned FROM hub_users WHERE id = $1', [u.id]);
+    const det = await db.query('SELECT email, bio, created_at, pin_hash, avatar, banner, accent, estado, location, links, pinned, admin FROM hub_users WHERE id = $1', [u.id]);
     const r = det.rows[0] ?? {};
     let caido = 0;
     const c = await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [u.id]);
@@ -758,7 +773,7 @@ export function buildApp(db: Db): FastifyInstance {
     const ch = await db.query('SELECT head, vida, hambre, sueno FROM pueblo_chars WHERE user_id = $1', [u.id]);
     const cr = ch.rows[0];
     return {
-      ok: true, logged: true, nick: u.nick, admin: isAdminNick(u.nick) || isAdminEmail(r.email),
+      ok: true, logged: true, nick: u.nick, admin: isAdminNick(u.nick) || isAdminEmail(r.email) || r.admin === true,
       email: String(r.email ?? ''), pin: !!r.pin_hash, avatar: (r.avatar as string | null) ?? null,
       banner: (r.banner as string | null) ?? null, accent: (r.accent as string | null) ?? null, estado: (r.estado as string | null) ?? '', location: (r.location as string | null) ?? '', links: (r.links as unknown) ?? [], pinned: r.pinned ? Number(r.pinned) : null, founder: u.id <= FOUNDER_MAX,
       bio: (r.bio as string | null) ?? '', desde: r.created_at ?? null, caido,
@@ -795,9 +810,9 @@ export function buildApp(db: Db): FastifyInstance {
     const qr = (req.query ?? {}) as { q?: unknown };
     const q = typeof qr.q === 'string' ? qr.q.trim().toLowerCase() : '';
     const rows = q
-      ? (await db.query("SELECT nick, banned, banned_reason, muted, created_at FROM hub_users WHERE nick IS NOT NULL AND nick_norm LIKE $1 ORDER BY banned DESC, muted DESC, created_at DESC LIMIT 60", ['%' + q + '%'])).rows
-      : (await db.query("SELECT nick, banned, banned_reason, muted, created_at FROM hub_users WHERE nick IS NOT NULL ORDER BY created_at DESC LIMIT 60")).rows;
-    const users = rows.map((r) => ({ nick: r.nick, banned: r.banned === true, muted: r.muted === true, reason: (r.banned_reason as string | null) ?? '', desde: r.created_at ?? null, admin: isAdminNick(r.nick as string) }));
+      ? (await db.query("SELECT nick, banned, banned_reason, muted, admin, created_at FROM hub_users WHERE nick IS NOT NULL AND nick_norm LIKE $1 ORDER BY banned DESC, muted DESC, created_at DESC LIMIT 60", ['%' + q + '%'])).rows
+      : (await db.query("SELECT nick, banned, banned_reason, muted, admin, created_at FROM hub_users WHERE nick IS NOT NULL ORDER BY created_at DESC LIMIT 60")).rows;
+    const users = rows.map((r) => ({ nick: r.nick, banned: r.banned === true, muted: r.muted === true, admin: r.admin === true || isAdminNick(r.nick as string), reason: (r.banned_reason as string | null) ?? '', desde: r.created_at ?? null }));
     return { ok: true, users };
   });
 
@@ -847,6 +862,26 @@ export function buildApp(db: Db): FastifyInstance {
     return { ok: true, nick: rows[0]?.nick ?? nick, muted: false };
   });
 
+  app.post('/api/admin/grant', async (req, reply) => {
+    const a = await adminUser(db, req);
+    if (!a) return reply.code(403).send({ ok: false, error: 'forbidden' });
+    const nick = typeof ((req.body ?? {}) as { nick?: unknown }).nick === 'string' ? ((req.body) as { nick: string }).nick.trim() : '';
+    if (!nick) return reply.code(400).send({ ok: false, error: 'bad', message: 'Falta el nick.' });
+    const { rows } = await db.query('UPDATE hub_users SET admin = true WHERE nick_norm = $1 RETURNING nick', [nick.toLowerCase()]);
+    if (!rows.length) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese nick.' });
+    return { ok: true, nick: rows[0]?.nick ?? nick, admin: true };
+  });
+
+  app.post('/api/admin/revoke', async (req, reply) => {
+    const a = await adminUser(db, req);
+    if (!a) return reply.code(403).send({ ok: false, error: 'forbidden' });
+    const nick = typeof ((req.body ?? {}) as { nick?: unknown }).nick === 'string' ? ((req.body) as { nick: string }).nick.trim() : '';
+    if (!nick) return reply.code(400).send({ ok: false, error: 'bad', message: 'Falta el nick.' });
+    const { rows } = await db.query('UPDATE hub_users SET admin = false WHERE nick_norm = $1 RETURNING nick', [nick.toLowerCase()]);
+    if (!rows.length) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese nick.' });
+    return { ok: true, nick: rows[0]?.nick ?? nick, admin: false };
+  });
+
   app.post('/api/admin/config', async (req, reply) => {
     const a = await adminUser(db, req);
     if (!a) return reply.code(403).send({ ok: false, error: 'forbidden' });
@@ -877,9 +912,9 @@ export function buildApp(db: Db): FastifyInstance {
     const bp = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'parpadeo' AND lower(alias) = $1", [nl]);
     const fc = await db.query("SELECT count(*) AS c FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado'", [uid]);
     const ca = await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [uid]);
-    const posts = (await db.query('SELECT id, nick, body, created_at FROM posts WHERE user_id = $1 ORDER BY id DESC LIMIT 20', [uid])).rows.map((p) => ({ id: Number(p.id), nick: p.nick, body: p.body, t: p.created_at, avatar: (r.avatar as string | null) ?? null }));
+    const posts = (await db.query("SELECT id, nick, title, body, created_at, (SELECT count(*) FROM comments c WHERE c.post_id = posts.id) AS ncom FROM posts WHERE user_id = $1 ORDER BY id DESC LIMIT 20", [uid])).rows.map((p) => ({ id: Number(p.id), nick: p.nick, title: (p.title as string | null) ?? '', body: p.body, t: p.created_at, avatar: (r.avatar as string | null) ?? null, ncom: Number(p.ncom ?? 0) }));
     let pinned: Record<string, unknown> | null = null;
-    if (r.pinned) { const pp = (await db.query('SELECT id, nick, body, created_at FROM posts WHERE id = $1 AND user_id = $2', [Number(r.pinned), uid])).rows[0]; if (pp) pinned = { id: Number(pp.id), nick: pp.nick, body: pp.body, t: pp.created_at, avatar: (r.avatar as string | null) ?? null }; }
+    if (r.pinned) { const pp = (await db.query("SELECT id, nick, title, body, created_at, (SELECT count(*) FROM comments c WHERE c.post_id = posts.id) AS ncom FROM posts WHERE id = $1 AND user_id = $2", [Number(r.pinned), uid])).rows[0]; if (pp) pinned = { id: Number(pp.id), nick: pp.nick, title: (pp.title as string | null) ?? '', body: pp.body, t: pp.created_at, avatar: (r.avatar as string | null) ?? null, ncom: Number(pp.ncom ?? 0) }; }
     let rel = 'none';
     if (meU) { if (meU.id === uid) rel = 'me'; else { const am = await db.query('SELECT estado FROM amigos WHERE (a = $1 AND b = $2) OR (a = $2 AND b = $1)', [meU.id, uid]); const ar = am.rows[0]; if (ar) rel = ar.estado === 'aceptado' ? 'amigos' : 'pendiente'; } }
     return { ok: true, perfil: {
@@ -1032,14 +1067,30 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
-    const scope = ((req.query ?? {}) as { scope?: unknown }).scope;
+    const qy = (req.query ?? {}) as { scope?: unknown; tag?: unknown };
+    const tag = typeof qy.tag === 'string' ? qy.tag.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40) : '';
+    const sel = "SELECT p.id, p.nick, p.title, p.body, p.created_at, u.avatar, (SELECT count(*) FROM comments c WHERE c.post_id = p.id) AS ncom FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id";
     let rows;
-    if (scope === 'amigos') {
-      rows = (await db.query("SELECT p.id, p.nick, p.body, p.created_at, u.avatar FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id WHERE p.user_id = $1 OR p.user_id IN (SELECT CASE WHEN a = $1 THEN b ELSE a END FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado') ORDER BY p.id DESC LIMIT 30", [u.id])).rows;
+    if (tag) {
+      rows = (await db.query(sel + " WHERE lower(coalesce(p.title,'') || ' ' || p.body) LIKE $1 ORDER BY p.id DESC LIMIT 40", ['%#' + tag + '%'])).rows;
+    } else if (qy.scope === 'amigos') {
+      rows = (await db.query(sel + " WHERE p.user_id = $1 OR p.user_id IN (SELECT CASE WHEN a = $1 THEN b ELSE a END FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado') ORDER BY p.id DESC LIMIT 40", [u.id])).rows;
     } else {
-      rows = (await db.query('SELECT p.id, p.nick, p.body, p.created_at, u.avatar FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id ORDER BY p.id DESC LIMIT 30')).rows;
+      rows = (await db.query(sel + ' ORDER BY p.id DESC LIMIT 40')).rows;
     }
-    return { ok: true, posts: rows.map((r) => ({ id: Number(r.id), nick: r.nick, body: r.body, t: r.created_at, avatar: (r.avatar as string | null) ?? null })) };
+    return { ok: true, posts: rows.map((r) => ({ id: Number(r.id), nick: r.nick, title: (r.title as string | null) ?? '', body: r.body, t: r.created_at, avatar: (r.avatar as string | null) ?? null, ncom: Number(r.ncom ?? 0) })) };
+  });
+
+  app.get('/api/social/post', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const id = Math.floor(Number(((req.query ?? {}) as { id?: unknown }).id));
+    if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
+    const pr = (await db.query('SELECT p.id, p.nick, p.title, p.body, p.created_at, u.avatar FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id WHERE p.id = $1', [id])).rows[0];
+    if (!pr) return reply.code(404).send({ ok: false, error: 'not_found', message: 'Ese posteo no existe.' });
+    const cs = (await db.query('SELECT c.id, c.parent_id, c.nick, c.body, c.created_at, u.avatar FROM comments c LEFT JOIN hub_users u ON u.id = c.user_id WHERE c.post_id = $1 ORDER BY c.id ASC LIMIT 300', [id])).rows;
+    return { ok: true,
+      post: { id: Number(pr.id), nick: pr.nick, title: (pr.title as string | null) ?? '', body: pr.body, t: pr.created_at, avatar: (pr.avatar as string | null) ?? null },
+      comments: cs.map((c) => ({ id: Number(c.id), parent: c.parent_id ? Number(c.parent_id) : null, nick: c.nick, body: c.body, t: c.created_at, avatar: (c.avatar as string | null) ?? null })) };
   });
 
   app.post('/api/social/post', async (req, reply) => {
@@ -1047,17 +1098,40 @@ export function buildApp(db: Db): FastifyInstance {
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
     if (!u.nick) return reply.code(400).send({ ok: false, error: 'sin_nick', message: 'Primero reservá tu nick.' });
     if (u.muted) return reply.code(403).send({ ok: false, error: 'muted', message: 'Estás silenciado. No podés postear.' });
-    const raw = ((req.body ?? {}) as { body?: unknown }).body;
-    const text = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().slice(0, 280).trim() : '';
+    const b = (req.body ?? {}) as { title?: unknown; body?: unknown };
+    const title = typeof b.title === 'string' ? b.title.replace(/\s+/g, ' ').trim().slice(0, 120).trim() : '';
+    const text = typeof b.body === 'string' ? b.body.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 2000).trim() : '';
+    if (!title) return reply.code(400).send({ ok: false, error: 'empty', message: 'Ponele un título.' });
+    if (offensiveText(title) || offensiveText(text)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Eso no va.' });
+    const now = Date.now();
+    if (now - (postRate.get(u.id) ?? 0) < 15000) return reply.code(429).send({ ok: false, error: 'slow', message: 'Esperá un poco entre publicaciones.' });
+    postRate.set(u.id, now);
+    const ins = await db.query('INSERT INTO posts (user_id, nick, title, body) VALUES ($1, $2, $3, $4) RETURNING id, created_at', [u.id, u.nick, title, text]);
+    const row = ins.rows[0];
+    return reply.code(201).send({ ok: true, post: { id: Number(row?.id ?? 0), nick: u.nick, title, body: text, t: row?.created_at, avatar: null, ncom: 0 } });
+  });
+
+  app.post('/api/social/comment', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    if (!u.nick) return reply.code(400).send({ ok: false, error: 'sin_nick', message: 'Primero reservá tu nick.' });
+    if (u.muted) return reply.code(403).send({ ok: false, error: 'muted', message: 'Estás silenciado.' });
+    const b = (req.body ?? {}) as { postId?: unknown; parentId?: unknown; body?: unknown };
+    const postId = Math.floor(Number(b.postId));
+    if (!Number.isInteger(postId) || postId <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
+    const text = typeof b.body === 'string' ? b.body.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 1000).trim() : '';
     if (!text) return reply.code(400).send({ ok: false, error: 'empty', message: 'Escribí algo.' });
     if (offensiveText(text)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Eso no va.' });
+    const exists = await db.query('SELECT 1 FROM posts WHERE id = $1', [postId]);
+    if (!exists.rows.length) return reply.code(404).send({ ok: false, error: 'no_post' });
+    let parent: number | null = null;
+    if (b.parentId != null && b.parentId !== '') { const pp = Math.floor(Number(b.parentId)); if (Number.isInteger(pp) && pp > 0) { const pc = await db.query('SELECT 1 FROM comments WHERE id = $1 AND post_id = $2', [pp, postId]); if (pc.rows.length) parent = pp; } }
     const now = Date.now();
-    const last = postRate.get(u.id) ?? 0;
-    if (now - last < 20000) return reply.code(429).send({ ok: false, error: 'slow', message: 'Esperá un poco entre publicaciones.' });
-    postRate.set(u.id, now);
-    const ins = await db.query('INSERT INTO posts (user_id, nick, body) VALUES ($1, $2, $3) RETURNING id, created_at', [u.id, u.nick, text]);
+    if (now - (postRate.get(-u.id) ?? 0) < 4000) return reply.code(429).send({ ok: false, error: 'slow', message: 'Esperá un toque.' });
+    postRate.set(-u.id, now);
+    const ins = await db.query('INSERT INTO comments (post_id, parent_id, user_id, nick, body) VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at', [postId, parent, u.id, u.nick, text]);
     const row = ins.rows[0];
-    return reply.code(201).send({ ok: true, post: { id: Number(row?.id ?? 0), nick: u.nick, body: text, t: row?.created_at } });
+    return reply.code(201).send({ ok: true, comment: { id: Number(row?.id ?? 0), parent, nick: u.nick, body: text, t: row?.created_at, avatar: null } });
   });
 
   app.post('/api/social/grupos/crear', async (req, reply) => {
@@ -1310,6 +1384,10 @@ export function buildApp(db: Db): FastifyInstance {
   });
 
   app.get('/perfil', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return reply.sendFile('perfil.html');
+  });
+  app.get('/u/:nick', async (_req, reply) => {
     reply.header('cache-control', 'no-store');
     return reply.sendFile('perfil.html');
   });

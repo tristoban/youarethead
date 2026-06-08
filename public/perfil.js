@@ -42,6 +42,13 @@
   function platOf(url) { const u = String(url).toLowerCase(); for (const p of PLATS) if (u.includes(p[0])) return p; return ["", "Link", '<circle cx="12" cy="12" r="9"/><path d="M3.5 12h17M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/>']; }
   function linkSvg(paths) { return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + "</svg>"; }
   function uname(nick) { return '<b class="pf-u" data-u="' + esc(nick) + '">' + esc(nick) + "</b>"; }
+  function rich(s) {
+    let h = esc(s == null ? "" : s);
+    h = h.replace(/(^|[\s(>])@([a-zA-Z0-9_]{2,14})/g, '$1<b class="pf-u" data-u="$2">@$2</b>');
+    h = h.replace(/(^|[\s(>])#([a-zA-Z0-9_]{2,40})/g, '$1<a class="pf-tag2" data-tag="$2">#$2</a>');
+    h = h.replace(/(^|[\s(>])\$([0-9]{1,9})/g, '$1<a class="pf-ref" data-post="$2">$$2</a>');
+    return h.replace(/\n/g, "<br>");
+  }
   function avaPic(photo, head) { return photo ? '<img class="pf-img" src="' + esc(photo) + '" alt="" referrerpolicy="no-referrer" />' : avatar(head); }
   function resizeImg(file, cb) {
     const fr = new FileReader();
@@ -87,12 +94,30 @@
     const oauth = params.get("oauth");
     if (oauth) history.replaceState(null, "", location.pathname);
     if (oauth === "setup") { setupScreen(); return; }
+    const um = location.pathname.match(/^\/u\/(.+)$/);
+    const wantUser = um ? decodeURIComponent(um[1]) : null;
     const { d } = await api("/api/hub/me", AH);
     if (!d || !d.ok) { root.innerHTML = '<p class="pf-loading">No responde. Probá en un rato.</p>'; return; }
-    if (!d.logged) { login(oauth); return; }
+    if (!d.logged) { if (wantUser) { guestProfile(wantUser); return; } login(oauth); return; }
     me = d;
     if (oauth === "migrated") { migrationModal(() => app()); return; }
     app();
+    if (wantUser) viewUser(wantUser);
+  }
+  async function guestProfile(nick) {
+    const { r, d } = await api("/api/social/perfil?nick=" + encodeURIComponent(nick), AH);
+    if (!r.ok || !d || !d.ok) { root.innerHTML = '<div class="pf-guest"><p class="pf-empty">No se encontró ese perfil.</p><a class="pf-btn pf-spin" href="/perfil">Entrá a youarethead</a></div>'; return; }
+    const p = d.perfil, acc = (typeof p.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(p.accent)) ? p.accent : "var(--pf-acc)";
+    const links = (Array.isArray(p.links) ? p.links : []).map((l) => { const pl = platOf(l.url); return '<a class="pf-link" href="' + esc(l.url) + '" target="_blank" rel="noopener"><span class="pf-link-i">' + linkSvg(pl[2]) + '</span><span class="pf-link-t">' + esc(l.title) + '</span><span class="pf-link-x">&#8599;</span></a>'; }).join("");
+    const banner = p.banner ? '<div class="pf-banner" style="background-image:url(\'' + esc(p.banner) + '\')"></div>' : '<div class="pf-banner" style="background:linear-gradient(120deg,' + acc + '22,#0a0a0d)"></div>';
+    root.innerHTML = '<div class="pf-guest">' + banner +
+      '<div class="pf-uhead"><span class="pf-ava pf-uava">' + avaPic(p.avatar, headFor(p.nick)) + "</span></div>" +
+      '<div class="pf-uname">' + esc(p.nick) + " " + badges(p) + "</div>" +
+      '<div class="pf-dimc" style="padding:2px 0">@' + esc(p.nick) + (p.estado ? " · " + esc(p.estado) : "") + "</div>" +
+      (p.bio ? '<p style="margin:8px 0 0;white-space:pre-wrap">' + esc(p.bio) + "</p>" : "") +
+      (links ? '<div class="pf-links">' + links + "</div>" : "") +
+      '<a class="pf-btn pf-spin" href="/perfil" style="margin-top:18px;display:inline-flex">Entrá a youarethead</a>' +
+      "</div>";
   }
   async function enterApp() { const { d } = await api("/api/hub/me", AH); if (d && d.logged) { me = d; app(); } else login("error"); }
 
@@ -169,7 +194,12 @@
     root.querySelector("#pf-postbtn").onclick = () => { setView("feed"); const t = root.querySelector("#pf-post"); if (t) t.focus(); };
     root.querySelector("#pf-me").onclick = () => setView("perfil");
     root.querySelector("#pf-logout").onclick = async () => { await api("/api/hub/logout", { method: "POST", headers: JH, body: "{}" }); boot(); };
-    if (!root.__uwired) { root.__uwired = true; root.addEventListener("click", (e) => { const el = e.target.closest ? e.target.closest("[data-u]") : null; if (el) { e.preventDefault(); viewUser(el.getAttribute("data-u")); } }); }
+    if (!root.__uwired) { root.__uwired = true; root.addEventListener("click", (e) => {
+      const t = e.target; if (!t || !t.closest) return;
+      const u = t.closest("[data-u]"); if (u) { e.preventDefault(); viewUser(u.getAttribute("data-u")); return; }
+      const tg = t.closest("[data-tag]"); if (tg) { e.preventDefault(); viewFeedTag(tg.getAttribute("data-tag")); return; }
+      const ps = t.closest("[data-post]"); if (ps) { e.preventDefault(); viewPost(Number(ps.getAttribute("data-post"))); return; }
+    }); }
     rightRail();
     setView("feed");
   }
@@ -193,13 +223,28 @@
   }
 
   /* ---------- Feed ---------- */
-  function postHTML(p) { return '<div class="pf-post"><span class="pf-ava">' + avaPic(p.avatar, headFor(p.nick)) + '</span><div class="pf-pb"><div class="pf-ph">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><p>' + esc(p.body) + "</p></div></div>"; }
+  function postHTML(p) {
+    const raw = p.body || "";
+    const snip = raw ? (raw.length > 220 ? esc(raw.slice(0, 220)).replace(/\n/g, " ") + "…" : esc(raw).replace(/\n/g, " ")) : "";
+    const nc = p.ncom || 0;
+    return '<article class="pf-post" data-post="' + p.id + '">' +
+      '<div class="pf-post-h"><span class="pf-ava">' + avaPic(p.avatar, headFor(p.nick)) + "</span>" +
+      '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><span class="pf-code" title="código del posteo">$' + p.id + "</span></div>" +
+      (p.title ? '<h3 class="pf-post-t">' + esc(p.title) + "</h3>" : "") +
+      (snip ? '<p class="pf-post-b">' + snip + "</p>" : "") +
+      '<div class="pf-post-f"><span class="pf-cnt">' + nc + (nc === 1 ? " comentario" : " comentarios") + "</span></div>" +
+      "</article>";
+  }
   function viewFeed() {
     let scope = "ti";
     chead("Feed", '<div class="pf-tabs2"><button data-s="ti" class="on">Para ti</button><button data-s="amigos">Amigos</button></div>');
     body().innerHTML =
       '<div id="pf-carousel" class="pf-carousel"></div>' +
-      '<div class="pf-comp"><span class="pf-ava">' + avaPic(me.avatar, me.char ? me.char.head : "o") + '</span><div class="pf-cbox"><textarea id="pf-post" maxlength="280" placeholder="¿Qué está pasando ahí adentro?"></textarea><div class="pf-crow"><button class="pf-cbtn" id="pf-pub">Postear</button></div><p class="pf-msg" id="pf-pmsg"></p></div></div>' +
+      '<div class="pf-comp">' +
+        '<input class="pf-cti" id="pf-ttl" maxlength="120" placeholder="Título de tu posteo" />' +
+        '<textarea id="pf-post" maxlength="2000" placeholder="Texto (opcional). @ para nombrar, # para temas, $ para citar otro posteo."></textarea>' +
+        '<div class="pf-crow"><span class="pf-msg" id="pf-pmsg"></span><button class="pf-btn pf-spin" id="pf-pub">Publicar</button></div>' +
+      "</div>" +
       '<div id="pf-feed"><p class="pf-dimc">Cargando…</p></div>';
     async function load() {
       const { d } = await api("/api/social/feed" + (scope === "amigos" ? "?scope=amigos" : ""), AH);
@@ -207,9 +252,65 @@
       const posts = (d && d.posts) || [];
       box.innerHTML = posts.length ? posts.map(postHTML).join("") : '<p class="pf-empty">' + (scope === "amigos" ? "Tus amigos no postearon nada todavía." : "Nadie publicó nada. Sé la primera voz del encierro.") + "</p>";
     }
-    load(); mountCarousel(); vt.push(setInterval(() => { if (!document.hidden) load(); }, 12000));
+    load(); mountCarousel(); vt.push(setInterval(() => { if (!document.hidden) load(); }, 15000));
     root.querySelector("#pf-chead").querySelectorAll("[data-s]").forEach((b) => { b.onclick = () => { scope = b.getAttribute("data-s"); root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.remove("on")); b.classList.add("on"); load(); }; });
-    body().querySelector("#pf-pub").onclick = async () => { const ta = body().querySelector("#pf-post"), pm = body().querySelector("#pf-pmsg"); pm.textContent = "..."; const { r, d } = await api("/api/social/post", { method: "POST", headers: JH, body: JSON.stringify({ body: ta.value }) }); if (r.ok) { ta.value = ""; pm.textContent = ""; scope = "ti"; root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.toggle("on", x.getAttribute("data-s") === "ti")); load(); } else pm.textContent = (d && d.message) || "No se pudo."; };
+    body().querySelector("#pf-pub").onclick = async () => { const ti = body().querySelector("#pf-ttl"), ta = body().querySelector("#pf-post"), pm = body().querySelector("#pf-pmsg"); pm.textContent = "..."; const { r, d } = await api("/api/social/post", { method: "POST", headers: JH, body: JSON.stringify({ title: ti.value, body: ta.value }) }); if (r.ok) { ti.value = ""; ta.value = ""; pm.textContent = ""; scope = "ti"; root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.toggle("on", x.getAttribute("data-s") === "ti")); load(); } else pm.textContent = (d && d.message) || "No se pudo."; };
+  }
+
+  function viewFeedTag(tag) {
+    clearView(); cur = "feed";
+    root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === "feed"));
+    chead("#" + esc(tag));
+    body().innerHTML = '<div id="pf-feed"><p class="pf-dimc">Cargando…</p></div>';
+    api("/api/social/feed?tag=" + encodeURIComponent(tag), AH).then(({ d }) => {
+      const box = body().querySelector("#pf-feed"); if (!box) return;
+      const posts = (d && d.posts) || [];
+      box.innerHTML = posts.length ? posts.map(postHTML).join("") : '<p class="pf-empty">Nada con #' + esc(tag) + " todavía.</p>";
+    });
+  }
+
+  function commentTree(comments) {
+    const byParent = {};
+    comments.forEach((c) => { const k = c.parent || 0; (byParent[k] = byParent[k] || []).push(c); });
+    function render(parent, depth) {
+      return (byParent[parent] || []).map((c) =>
+        '<div class="pf-cmt" style="margin-left:' + Math.min(depth, 4) * 16 + 'px">' +
+          '<div class="pf-cmt-h"><span class="pf-ava pf-ava-sm">' + avaPic(c.avatar, headFor(c.nick)) + "</span>" + uname(c.nick) + '<span class="pf-dimc"> · ' + cuando(c.t) + "</span></div>" +
+          '<div class="pf-cmt-b">' + rich(c.body) + "</div>" +
+          '<a class="pf-reply" data-reply="' + c.id + '">Responder</a>' +
+          render(c.id, depth + 1) +
+        "</div>"
+      ).join("");
+    }
+    return render(0, 0);
+  }
+
+  async function viewPost(id) {
+    clearView(); cur = "post";
+    root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
+    chead("Posteo");
+    body().innerHTML = '<p class="pf-dimc">Cargando…</p>';
+    const { r, d } = await api("/api/social/post?id=" + id, AH);
+    if (!r.ok || !d || !d.ok) { body().innerHTML = '<p class="pf-empty">Ese posteo no existe.</p>'; return; }
+    const p = d.post, comments = d.comments || [];
+    body().innerHTML =
+      '<a class="pf-back2" id="pp-back">&#8592; volver al feed</a>' +
+      '<article class="pf-postfull">' +
+        '<div class="pf-post-h"><span class="pf-ava">' + avaPic(p.avatar, headFor(p.nick)) + "</span>" +
+        '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><span class="pf-code">$' + p.id + "</span></div>" +
+        (p.title ? '<h2 class="pf-postfull-t">' + esc(p.title) + "</h2>" : "") +
+        (p.body ? '<div class="pf-postfull-b">' + rich(p.body) + "</div>" : "") +
+      "</article>" +
+      '<div class="pf-h">Comentarios</div>' +
+      '<div class="pf-comp pf-comp-c"><textarea id="pp-ctext" maxlength="1000" placeholder="Sumate al hilo… (@ # $)"></textarea><div class="pf-crow"><span class="pf-msg" id="pp-cmsg"></span><button class="pf-btn pf-spin" id="pp-csend">Comentar</button></div></div>' +
+      '<div id="pp-comments"></div>';
+    const cbox = body().querySelector("#pp-comments");
+    cbox.innerHTML = comments.length ? commentTree(comments) : '<p class="pf-empty">Sin comentarios. Arrancá el hilo.</p>';
+    body().querySelector("#pp-back").onclick = () => setView("feed");
+    let replyTo = null;
+    const cmsg = body().querySelector("#pp-cmsg"), ctext = body().querySelector("#pp-ctext");
+    cbox.addEventListener("click", (e) => { const rb = e.target.closest ? e.target.closest("[data-reply]") : null; if (rb) { replyTo = Number(rb.getAttribute("data-reply")); ctext.focus(); cmsg.textContent = "Respondiendo en el hilo…"; } });
+    body().querySelector("#pp-csend").onclick = async () => { cmsg.textContent = "..."; const { r: rr, d: dd } = await api("/api/social/comment", { method: "POST", headers: JH, body: JSON.stringify({ postId: id, parentId: replyTo, body: ctext.value }) }); if (rr.ok) { ctext.value = ""; replyTo = null; cmsg.textContent = ""; viewPost(id); } else cmsg.textContent = (dd && dd.message) || "No se pudo."; };
   }
 
   /* ---------- Admin ---------- */
@@ -240,13 +341,16 @@
           btn += u.muted ? '<button class="pf-btn ghost pf-mini" data-unmute="' + esc(u.nick) + '">Desmutear</button>' : '<button class="pf-btn ghost pf-mini" data-mute="' + esc(u.nick) + '">Mutear</button>';
           btn += u.banned ? '<button class="pf-btn ghost pf-mini" data-unban="' + esc(u.nick) + '">Desbanear</button>' : '<button class="pf-btn pf-mini" data-ban="' + esc(u.nick) + '">Banear</button>';
         }
-        return '<div class="pf-fila"><span>' + uname(u.nick) + tags + rs + '</span><span style="display:flex;gap:6px">' + btn + "</span></div>";
+        btn += u.admin ? '<button class="pf-btn ghost pf-mini" data-revoke="' + esc(u.nick) + '">Quitar admin</button>' : '<button class="pf-btn ghost pf-mini" data-grant="' + esc(u.nick) + '">Hacer admin</button>';
+        return '<div class="pf-fila"><span>' + uname(u.nick) + tags + rs + '</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">' + btn + "</span></div>";
       }).join("") : '<p class="pf-empty">Sin resultados.</p>';
       const act = async (path, nick, extra) => { am.textContent = "..."; const { r, d: dd } = await api(path, { method: "POST", headers: JH, body: JSON.stringify(Object.assign({ nick }, extra || {})) }); am.textContent = r.ok ? "Listo: " + nick : ((dd && dd.message) || "No se pudo."); load(); };
       box.querySelectorAll("[data-ban]").forEach((b) => b.onclick = () => { const nick = b.getAttribute("data-ban"); const reason = window.prompt("Motivo del baneo a " + nick + " (opcional):", "") || ""; act("/api/admin/ban", nick, { reason }); });
       box.querySelectorAll("[data-unban]").forEach((b) => b.onclick = () => act("/api/admin/unban", b.getAttribute("data-unban")));
       box.querySelectorAll("[data-mute]").forEach((b) => b.onclick = () => act("/api/admin/mute", b.getAttribute("data-mute")));
       box.querySelectorAll("[data-unmute]").forEach((b) => b.onclick = () => act("/api/admin/unmute", b.getAttribute("data-unmute")));
+      box.querySelectorAll("[data-grant]").forEach((b) => b.onclick = () => act("/api/admin/grant", b.getAttribute("data-grant")));
+      box.querySelectorAll("[data-revoke]").forEach((b) => b.onclick = () => act("/api/admin/revoke", b.getAttribute("data-revoke")));
     }
     body().querySelector("#ad-go").onclick = load;
     qEl.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });

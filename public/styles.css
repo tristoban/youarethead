@@ -104,7 +104,7 @@ a { color: inherit; text-decoration: none; }
 @keyframes numpulse { 0%{ text-shadow: 0 0 0 rgba(255,255,255,0); } 30%{ text-shadow: 0 0 34px rgba(255,255,255,.65); transform: scale(1.05); } 100%{ text-shadow: 0 0 0 rgba(255,255,255,0); transform: none; } }
 @media (max-width: 600px) { .otp-d { width: 42px; height: 52px; font-size: 1.4rem; } .otp-boxes { gap: 6px; } }
 
-.hero-art img { width: 100%; filter: drop-shadow(0 40px 90px rgba(0,0,0,.7)); }
+.hero-art img { width: 100%; filter: drop-shadow(0 40px 90px rgba(0,0,0,.7)); border-radius: 6px; }
 
 /* ---- Glitch del título: YOU ARE THE AD <-> YOU ARE DEAD ---- */
 .headline.dead, .reflection.dead {
@@ -144,7 +144,7 @@ a { color: inherit; text-decoration: none; }
 /* ---- Producto ---- */
 .product { background: var(--surface); border-bottom: 1px solid var(--line); padding: 84px 0; }
 .product-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
-.product-art img { width: 100%; }
+.product-art img { width: 100%; border-radius: 6px; }
 .product-copy h2 { margin: 0 0 18px; font-size: clamp(1.7rem, 3.4vw, 2.6rem); font-weight: 800; line-height: 1.05; letter-spacing: -0.01em; }
 .lead { margin: 0 0 26px; color: #c9c9d0; line-height: 1.65; max-width: 42ch; }
 .specs { margin: 0; }
@@ -157,7 +157,7 @@ a { color: inherit; text-decoration: none; }
 .manifesto-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
 .manifesto-copy h2 { margin: 0 0 22px; font-size: clamp(1.8rem, 3.8vw, 2.8rem); font-weight: 800; line-height: 1.05; letter-spacing: -0.01em; }
 .manifesto-copy p { margin: 0; color: #c9c9d0; line-height: 1.7; max-width: 46ch; font-size: 1.05rem; }
-.manifesto-art img { width: 100%; }
+.manifesto-art img { width: 100%; border-radius: 6px; }
 
 /* ---- Footer ---- */
 .footer { background: var(--surface); border-top: 1px solid var(--line); padding: 52px 0 64px; text-align: center; }
