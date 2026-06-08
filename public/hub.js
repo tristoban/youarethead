@@ -63,34 +63,11 @@
       '<div class="th-login">' +
         '<a href="#" class="th-back" id="th-back">← volver</a>' +
         '<h3>Entrar a Tristo&#39;s</h3>' +
-        '<p class="th-p th-dim">Elegí un nick y un PIN. Sin mail.</p>' +
-        '<div class="th-row"><input id="th-nick" maxlength="14" placeholder="tu nick" /></div>' +
-        '<div class="th-row" style="margin-top:8px"><input id="th-pin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN (4-6 números)" /></div>' +
-        '<div class="th-row" style="margin-top:10px"><button class="th-btn" id="th-in" style="flex:1">Entrar</button><button class="th-btn th-ghost" id="th-reg" style="flex:1">Crear cuenta</button></div>' +
-        '<p class="th-msg" id="th-lmsg"></p>' +
-        '<a href="#" class="th-back" id="th-forgot">Olvidé mi PIN →</a>' +
-        '<div id="th-rec" class="th-hide"><div class="th-row"><input id="th-rnick" maxlength="14" placeholder="tu nick" /></div><div class="th-row" style="margin-top:8px"><input id="th-rcode" placeholder="código de recuperación" /></div><div class="th-row" style="margin-top:8px"><input id="th-rpin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN nuevo (4-6)" /><button class="th-btn" id="th-rgo">Recuperar</button></div></div>' +
-        '<a href="#" class="th-back" id="th-mailt">¿Cuenta vieja con mail? Entrá acá →</a>' +
-        '<div id="th-mail" class="th-hide">' +
-          '<div class="th-row" id="th-l1"><input id="th-email" type="email" placeholder="tu@mail.com" /><button class="th-btn" id="th-send">Código</button></div>' +
-          '<div class="th-row th-hide" id="th-l2" style="margin-top:8px"><input id="th-code" inputmode="numeric" maxlength="6" placeholder="código" /><button class="th-btn" id="th-ver">Entrar</button></div>' +
-          '<div class="th-row th-hide" id="th-l3" style="margin-top:8px"><input id="th-nick2" maxlength="14" placeholder="elegí tu nick" /><button class="th-btn" id="th-nickb">Guardar</button></div>' +
-        '</div>' +
+        '<p class="th-p th-dim">Entrá con tu cuenta de Google. Rápido y seguro.</p>' +
+        '<a href="/api/auth/google?return=/tristos" style="display:flex;align-items:center;justify-content:center;background:#fff;color:#111;font-weight:800;border-radius:10px;padding:13px 18px;text-decoration:none;margin-top:6px"><svg viewBox="0 0 24 24" width="18" height="18" style="vertical-align:-4px;margin-right:8px" aria-hidden="true"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.4-1.7 4.1-5.5 4.1-3.3 0-6-2.7-6-6.1S8.7 5.9 12 5.9c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.3 14.6 2.3 12 2.3 6.9 2.3 2.8 6.4 2.8 11.5S6.9 20.7 12 20.7c5.3 0 8.8-3.7 8.8-9 0-.6-.06-1-.15-1.5H12z"/></svg>Entrar con Google</a>' +
+        '<p class="th-p th-dim" style="margin-top:10px;font-size:13px">Si ya tenías cuenta, al entrar te dejamos vincularla.</p>' +
       '</div>';
-    const msg = viewEl.querySelector("#th-lmsg");
     viewEl.querySelector("#th-back").onclick = (e) => { e.preventDefault(); viewMenu(); };
-    const creds = () => ({ nick: viewEl.querySelector("#th-nick").value.trim(), pin: viewEl.querySelector("#th-pin").value.trim() });
-    const enter = (d) => { me = { logged: true, nick: d.nick || null }; paintIdent(); viewMenu(); };
-    viewEl.querySelector("#th-in").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/pin-login", { method: "POST", headers: JH, body: JSON.stringify(creds()) }); if (r.ok && d && d.logged) enter(d); else msg.textContent = (d && d.message) || "No se pudo."; };
-    viewEl.querySelector("#th-reg").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/registrar", { method: "POST", headers: JH, body: JSON.stringify(creds()) }); if (r.ok && d && d.logged) { if (d.recovery) { me = { logged: true, nick: d.nick || null }; paintIdent(); viewEl.innerHTML = '<div class="th-login"><h3>¡Cuenta creada!</h3><p class="th-p th-dim">Guardá este código: es la única forma de recuperar tu cuenta sin mail.</p><div style="font:800 22px monospace;letter-spacing:3px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:14px;text-align:center;margin-bottom:12px">' + esc(d.recovery) + '</div><button class="th-btn" id="th-recok">Ya lo guardé, jugar</button></div>'; viewEl.querySelector("#th-recok").onclick = viewMenu; } else enter(d); } else msg.textContent = (d && d.message) || "No se pudo."; };
-    let email = "";
-    const show = (id) => { ["th-l1", "th-l2", "th-l3"].forEach((k) => { const n = viewEl.querySelector("#" + k); if (n) n.classList.toggle("th-hide", k !== id); }); };
-    viewEl.querySelector("#th-mailt").onclick = (e) => { e.preventDefault(); viewEl.querySelector("#th-mail").classList.toggle("th-hide"); };
-    viewEl.querySelector("#th-forgot").onclick = (e) => { e.preventDefault(); viewEl.querySelector("#th-rec").classList.toggle("th-hide"); };
-    viewEl.querySelector("#th-rgo").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/recuperar", { method: "POST", headers: JH, body: JSON.stringify({ nick: viewEl.querySelector("#th-rnick").value.trim(), recovery: viewEl.querySelector("#th-rcode").value.trim(), pin: viewEl.querySelector("#th-rpin").value.trim() }) }); if (r.ok && d && d.logged) { me = { logged: true, nick: d.nick || null }; paintIdent(); viewMenu(); } else msg.textContent = (d && d.message) || "No se pudo."; };
-    viewEl.querySelector("#th-send").onclick = async () => { email = viewEl.querySelector("#th-email").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/login", { method: "POST", headers: JH, body: JSON.stringify({ email }) }); msg.textContent = (d && d.message) || (r.ok ? "Código enviado." : "No se pudo."); if (r.ok) show("th-l2"); };
-    viewEl.querySelector("#th-ver").onclick = async () => { const code = viewEl.querySelector("#th-code").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/verify", { method: "POST", headers: JH, body: JSON.stringify({ email, code }) }); if (r.ok && d && d.logged) { me = { logged: true, nick: d.nick || null }; paintIdent(); if (!d.nick) { msg.textContent = "Elegí tu nick."; show("th-l3"); } else viewMenu(); } else msg.textContent = (d && d.message) || "No se pudo."; };
-    viewEl.querySelector("#th-nickb").onclick = async () => { const nick = viewEl.querySelector("#th-nick2").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/nick", { method: "POST", headers: JH, body: JSON.stringify({ nick }) }); if (r.ok && d && d.ok) { me.nick = d.nick; paintIdent(); viewMenu(); } else msg.textContent = (d && d.message) || "No se pudo."; };
   }
 
   /* ---------- El Botón ---------- */

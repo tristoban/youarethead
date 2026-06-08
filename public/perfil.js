@@ -42,52 +42,70 @@
   let me = null, vt = [], rt = [], cur = "inicio";
   function clearView() { vt.forEach((t) => clearInterval(t)); vt = []; window.YATH_CONV = null; }
 
-  async function boot() { const { d } = await api("/api/hub/me", AH); if (!d || !d.ok) { root.innerHTML = '<p class="pf-loading">No responde. Probá en un rato.</p>'; return; } if (!d.logged) login(); else { me = d; app(); } }
-
-  /* ---------- Login ---------- */
-  function recoveryScreen(code) {
-    root.innerHTML = '<div style="max-width:430px;margin:8vh auto 0" class="pf-center"><div class="pf-body">' +
-      '<h2 class="pf-ctitle" style="padding:0 0 6px">¡Cuenta creada!</h2>' +
-      '<p class="pf-dimc" style="padding:0 0 10px;text-align:left">Anotá este código de recuperación. Es la <b>única</b> forma de volver a entrar si olvidás el PIN (no usamos mail):</p>' +
-      '<div style="font:800 24px monospace;letter-spacing:3px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:16px;text-align:center;color:#fff">' + esc(code) + '</div>' +
-      '<button class="pf-btn" id="r-ok" style="margin-top:14px;width:100%">Ya lo guardé, entrar</button>' +
-      '</div></div>';
-    root.querySelector("#r-ok").onclick = () => boot();
+  async function boot() {
+    const params = new URLSearchParams(location.search);
+    const oauth = params.get("oauth");
+    if (oauth) history.replaceState(null, "", location.pathname);
+    if (oauth === "setup") { setupScreen(); return; }
+    const { d } = await api("/api/hub/me", AH);
+    if (!d || !d.ok) { root.innerHTML = '<p class="pf-loading">No responde. Probá en un rato.</p>'; return; }
+    if (!d.logged) { login(oauth); return; }
+    me = d;
+    if (oauth === "migrated") { migrationModal(() => app()); return; }
+    app();
   }
-  function login() {
+  async function enterApp() { const { d } = await api("/api/hub/me", AH); if (d && d.logged) { me = d; app(); } else login("error"); }
+
+  /* ---------- Login (solo Google) ---------- */
+  var GBTN = '<svg viewBox="0 0 24 24" width="18" height="18" style="vertical-align:-4px;margin-right:8px" aria-hidden="true"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.4-1.7 4.1-5.5 4.1-3.3 0-6-2.7-6-6.1S8.7 5.9 12 5.9c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.3 14.6 2.3 12 2.3 6.9 2.3 2.8 6.4 2.8 11.5S6.9 20.7 12 20.7c5.3 0 8.8-3.7 8.8-9 0-.6-.06-1-.15-1.5H12z"/></svg>';
+  function gbtn(label) { return '<a href="/api/auth/google" style="display:flex;align-items:center;justify-content:center;background:#fff;color:#111;font-weight:800;border-radius:10px;padding:13px 18px;text-decoration:none;margin-top:6px">' + GBTN + (label || "Entrar con Google") + "</a>"; }
+  function login(err) {
+    const emsg = err === "error" ? "No se pudo entrar con Google. Probá de nuevo." : err === "banned" ? "Tu cuenta está suspendida." : err === "off" ? "El ingreso con Google todavía no está activo. Volvé en un rato." : "";
+    root.innerHTML =
+      '<div style="max-width:400px;margin:12vh auto 0;text-align:center" class="pf-center"><div class="pf-body">' +
+      '<h2 class="pf-ctitle" style="padding:0 0 4px">Entrá a youarethead</h2>' +
+      '<p class="pf-dimc" style="padding:0 0 14px">Una cuenta, una identidad. Entrá con Google: rápido y seguro.</p>' +
+      (emsg ? '<p class="pf-msg" style="color:#ff6b6b;margin:0 0 8px">' + emsg + '</p>' : '') +
+      gbtn("Entrar con Google") +
+      '</div></div>';
+  }
+  function migrationModal(done) {
+    root.innerHTML =
+      '<div style="max-width:430px;margin:10vh auto 0;text-align:center" class="pf-center"><div class="pf-body">' +
+      '<h2 class="pf-ctitle" style="padding:0 0 6px">Nos fue mejor de lo esperado</h2>' +
+      '<p class="pf-dimc" style="padding:0 0 14px">Superamos todas las expectativas de usuarios. Para mantener tu cuenta segura, ahora se entra con Google. Tu cuenta, tus amigos y tus posts siguen igual.</p>' +
+      '<button class="pf-btn" id="mg-ok" style="width:100%">Entendido</button>' +
+      '</div></div>';
+    root.querySelector("#mg-ok").onclick = done;
+  }
+  async function setupScreen() {
+    const { d } = await api("/api/auth/google/pending", AH);
+    if (!d || !d.ok) { login("error"); return; }
+    const suggest = d.suggest || "";
     root.innerHTML =
       '<div style="max-width:430px;margin:8vh auto 0" class="pf-center"><div class="pf-body">' +
-      '<h2 class="pf-ctitle" style="padding:0 0 4px">Entrar a youarethead</h2>' +
-      '<p class="pf-dimc" style="padding:0 0 14px;text-align:left">Elegí un nick y un PIN. Sin mail, sin vueltas.</p>' +
-      '<input class="pf-input" id="l-nick" maxlength="14" placeholder="tu nick" style="margin-bottom:8px" />' +
-      '<input class="pf-input" id="l-pin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN (4 a 6 números)" />' +
-      '<div class="pf-row" style="margin-top:10px"><button class="pf-btn" id="l-in" style="flex:1">Entrar</button><button class="pf-btn ghost" id="l-reg" style="flex:1">Crear cuenta</button></div>' +
-      '<p class="pf-msg" id="l-msg"></p>' +
-      '<a class="pf-wlink" id="l-forgot" style="border:0;margin-top:4px;cursor:pointer">Olvidé mi PIN →</a>' +
-      '<div id="l-rec" style="display:none;border-top:1px solid rgba(255,255,255,.1);margin-top:6px;padding-top:12px">' +
-        '<input class="pf-input" id="r-nick" maxlength="14" placeholder="tu nick" style="margin-bottom:8px" />' +
-        '<input class="pf-input" id="r-code" placeholder="código de recuperación" style="margin-bottom:8px" />' +
-        '<input class="pf-input" id="r-pin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN nuevo (4-6)" />' +
-        '<button class="pf-btn" id="r-go" style="margin-top:8px;width:100%">Recuperar y entrar</button>' +
+      '<h2 class="pf-ctitle" style="padding:0 0 6px;text-align:center">Nos fue mejor de lo esperado</h2>' +
+      '<p class="pf-dimc" style="padding:0 0 12px;text-align:left">Superamos todas las expectativas de usuarios. Para mantener tu cuenta segura migramos el ingreso a Google. Una última cosa:</p>' +
+      '<p style="font-weight:700;text-align:center;margin:0 0 10px">¿Ya tenías cuenta acá antes?</p>' +
+      '<div class="pf-row"><button class="pf-btn" id="s-yes" style="flex:1">Sí, ya tenía</button><button class="pf-btn ghost" id="s-no" style="flex:1">No, soy nuevo</button></div>' +
+      '<p class="pf-msg" id="s-msg"></p>' +
+      '<div id="s-link" style="display:none;border-top:1px solid rgba(255,255,255,.1);margin-top:10px;padding-top:12px">' +
+        '<p class="pf-dimc" style="text-align:left;margin:0 0 8px">Vinculá tu cuenta vieja con tu nick de siempre y tu PIN.</p>' +
+        '<input class="pf-input" id="s-lnick" maxlength="14" placeholder="tu nick viejo" style="margin-bottom:8px" />' +
+        '<input class="pf-input" id="s-lpin" type="password" inputmode="numeric" maxlength="6" placeholder="tu PIN viejo" />' +
+        '<button class="pf-btn" id="s-lgo" style="margin-top:8px;width:100%">Vincular y entrar</button>' +
       '</div>' +
-      '<a class="pf-wlink" id="l-mailt" style="border:0;cursor:pointer">¿Cuenta vieja con mail? Entrá acá →</a>' +
-      '<div id="l-mail" style="display:none;border-top:1px solid rgba(255,255,255,.1);margin-top:6px;padding-top:12px">' +
-        '<div class="pf-row" id="l1"><input class="pf-input" id="l-email" type="email" placeholder="tu@mail.com" /><button class="pf-btn" id="l-send">Código</button></div>' +
-        '<div class="pf-row" id="l2" style="display:none;margin-top:8px"><input class="pf-input" id="l-code" inputmode="numeric" maxlength="6" placeholder="código" /><button class="pf-btn" id="l-ver">Entrar</button></div>' +
-        '<div class="pf-row" id="l3" style="display:none;margin-top:8px"><input class="pf-input" id="l-nick2" maxlength="14" placeholder="elegí tu nick" /><button class="pf-btn" id="l-nickb">Guardar</button></div>' +
+      '<div id="s-new" style="display:none;border-top:1px solid rgba(255,255,255,.1);margin-top:10px;padding-top:12px">' +
+        '<p class="pf-dimc" style="text-align:left;margin:0 0 8px">Elegí tu nick (así te van a ver los demás).</p>' +
+        '<input class="pf-input" id="s-nnick" maxlength="14" placeholder="tu nick" value="' + esc(suggest) + '" />' +
+        '<button class="pf-btn" id="s-ngo" style="margin-top:8px;width:100%">Crear mi cuenta</button>' +
       '</div></div></div>';
-    const msg = root.querySelector("#l-msg");
-    const creds = () => ({ nick: root.querySelector("#l-nick").value.trim(), pin: root.querySelector("#l-pin").value.trim() });
-    root.querySelector("#l-in").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/pin-login", { method: "POST", headers: JH, body: JSON.stringify(creds()) }); if (r.ok && d && d.logged) boot(); else msg.textContent = (d && d.message) || "No se pudo."; };
-    root.querySelector("#l-reg").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/registrar", { method: "POST", headers: JH, body: JSON.stringify(creds()) }); if (r.ok && d && d.logged) { if (d.recovery) recoveryScreen(d.recovery); else boot(); } else msg.textContent = (d && d.message) || "No se pudo."; };
-    root.querySelector("#l-forgot").onclick = () => { const m = root.querySelector("#l-rec"); m.style.display = m.style.display === "none" ? "block" : "none"; };
-    root.querySelector("#r-go").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/recuperar", { method: "POST", headers: JH, body: JSON.stringify({ nick: root.querySelector("#r-nick").value.trim(), recovery: root.querySelector("#r-code").value.trim(), pin: root.querySelector("#r-pin").value.trim() }) }); if (r.ok && d && d.logged) boot(); else msg.textContent = (d && d.message) || "No se pudo."; };
-    let email = "";
-    const show = (id) => ["l1", "l2", "l3"].forEach((k) => { const n = root.querySelector("#" + k); if (n) n.style.display = k === id ? "flex" : "none"; });
-    root.querySelector("#l-mailt").onclick = () => { const m = root.querySelector("#l-mail"); m.style.display = m.style.display === "none" ? "block" : "none"; };
-    root.querySelector("#l-send").onclick = async () => { email = root.querySelector("#l-email").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/login", { method: "POST", headers: JH, body: JSON.stringify({ email }) }); msg.textContent = (d && d.message) || (r.ok ? "Código enviado." : "No se pudo."); if (r.ok) show("l2"); };
-    root.querySelector("#l-ver").onclick = async () => { const code = root.querySelector("#l-code").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/verify", { method: "POST", headers: JH, body: JSON.stringify({ email, code }) }); if (r.ok && d && d.logged) { if (!d.nick) { msg.textContent = "Elegí tu nick."; show("l3"); } else boot(); } else msg.textContent = (d && d.message) || "No se pudo."; };
-    root.querySelector("#l-nickb").onclick = async () => { const nick = root.querySelector("#l-nick2").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/nick", { method: "POST", headers: JH, body: JSON.stringify({ nick }) }); if (r.ok && d && d.ok) boot(); else msg.textContent = (d && d.message) || "No se pudo."; };
+    const msg = root.querySelector("#s-msg");
+    const showB = (which) => { root.querySelector("#s-link").style.display = which === "link" ? "block" : "none"; root.querySelector("#s-new").style.display = which === "new" ? "block" : "none"; };
+    root.querySelector("#s-yes").onclick = () => showB("link");
+    root.querySelector("#s-no").onclick = () => showB("new");
+    root.querySelector("#s-lgo").onclick = async () => { msg.textContent = "..."; const res = await api("/api/auth/google/link", { method: "POST", headers: JH, body: JSON.stringify({ nick: root.querySelector("#s-lnick").value.trim(), pin: root.querySelector("#s-lpin").value.trim() }) }); if (res.r.ok && res.d && res.d.logged) enterApp(); else msg.textContent = (res.d && res.d.message) || "No se pudo."; };
+    root.querySelector("#s-ngo").onclick = async () => { msg.textContent = "..."; const res = await api("/api/auth/google/new", { method: "POST", headers: JH, body: JSON.stringify({ nick: root.querySelector("#s-nnick").value.trim() }) }); if (res.r.ok && res.d && res.d.logged) enterApp(); else msg.textContent = (res.d && res.d.message) || "No se pudo."; };
   }
 
   /* ---------- Shell ---------- */
@@ -272,7 +290,6 @@
     body().innerHTML =
       '<div style="display:flex;gap:14px;align-items:center"><span class="pf-ava" style="width:56px;height:64px">' + avatar(d.char ? d.char.head : "o") + '</span><div><div style="font-size:20px;font-weight:800">' + esc(d.nick) + '</div><div class="pf-dimc" style="padding:0">' + esc(maskMail(d.email)) + (desde ? " · desde " + desde : "") + '</div></div></div>' +
       '<div style="margin-top:14px"><textarea class="pf-input" id="c-bio" maxlength="140" placeholder="Tu bio (140)" style="border-radius:12px;min-height:60px;width:100%">' + esc(d.bio || "") + '</textarea><div class="pf-row" style="margin-top:8px"><button class="pf-btn" id="c-bsave">Guardar bio</button><span class="pf-msg" id="c-bmsg"></span><button class="pf-btn ghost pf-mini" id="c-out" style="margin-left:auto">Salir</button></div></div>' +
-      (!d.pin ? '<div class="pf-h">Entrar sin mail</div><div class="pf-row"><input class="pf-input" id="c-pin" type="password" inputmode="numeric" maxlength="6" placeholder="creá un PIN (4-6 números)" /><button class="pf-btn" id="c-pinsave">Guardar PIN</button></div><p class="pf-msg" id="c-pinmsg">Con un PIN entrás sin gastar mails.</p>' : "") +
       '<div class="pf-h">Tus números</div>' +
       '<div class="pf-fila"><b>El Botón</b><span>' + (d.caido ? "Caído N° " + fmt.format(d.caido) : "No caíste") + '</span></div>' +
       '<div class="pf-fila"><b>Récord TeTristo</b><span>' + fmt.format((d.best && d.best.tetristo) || 0) + '</span></div>' +
@@ -280,8 +297,6 @@
       (d.char ? '<div class="pf-fila"><b>El Pueblo</b><span>Vida ' + d.char.vida + " · Hambre " + d.char.hambre + " · Sueño " + d.char.sueno + '</span></div>' : "");
     body().querySelector("#c-out").onclick = async () => { await api("/api/hub/logout", { method: "POST", headers: JH, body: "{}" }); boot(); };
     body().querySelector("#c-bsave").onclick = async () => { const bm = body().querySelector("#c-bmsg"); bm.textContent = "..."; const { r, d: dd } = await api("/api/hub/bio", { method: "POST", headers: JH, body: JSON.stringify({ bio: body().querySelector("#c-bio").value }) }); if (r.ok) { bm.textContent = "Guardada."; me.bio = dd && dd.bio; } else bm.textContent = (dd && dd.message) || "No se pudo."; };
-    const ps = body().querySelector("#c-pinsave");
-    if (ps) ps.onclick = async () => { const pm = body().querySelector("#c-pinmsg"); pm.textContent = "..."; const { r, d: dd } = await api("/api/hub/pin", { method: "POST", headers: JH, body: JSON.stringify({ pin: body().querySelector("#c-pin").value.trim() }) }); if (r.ok) { pm.textContent = (dd && dd.message) || "PIN guardado."; me.pin = true; } else pm.textContent = (dd && dd.message) || "No se pudo."; };
   }
 
   /* ---------- Columna derecha (persistente): Chat Global + Mensajes ---------- */

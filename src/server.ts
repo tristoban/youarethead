@@ -1,4 +1,4 @@
-import Fastify, { FastifyInstance, FastifyRequest } from 'fastify';
+import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { Pool } from 'pg';
 import { createHash, randomBytes, randomInt, pbkdf2Sync } from 'node:crypto';
@@ -15,6 +15,10 @@ const LAUNCHED = (process.env.LAUNCHED ?? 'true').toLowerCase() === 'true';
 const ADMIN_KEY = process.env.ADMIN_KEY ?? '';
 const ADMIN_TOKEN = ADMIN_KEY ? createHash('sha256').update('yath-admin:' + ADMIN_KEY + ':' + IP_SALT).digest('hex').slice(0, 32) : '';
 const ADMIN_NICKS = new Set((process.env.ADMIN_NICKS ?? 'tristoban').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? '';
+const GOOGLE_REDIRECT = process.env.GOOGLE_REDIRECT ?? `${PUBLIC_URL}/api/auth/google/callback`;
+const GOOGLE_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -126,6 +130,9 @@ export async function initDb(db: Db): Promise<void> {
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS banned BOOLEAN NOT NULL DEFAULT false;`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS banned_reason TEXT;`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS google_sub TEXT;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS avatar TEXT;`);
+  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS hub_users_google_uidx ON hub_users (google_sub) WHERE google_sub IS NOT NULL;`);
   await db.query(`ALTER TABLE hub_users ALTER COLUMN email DROP NOT NULL;`);
   await db.query(`ALTER TABLE hub_users ALTER COLUMN email_norm DROP NOT NULL;`);
   await db.query(`
@@ -270,6 +277,28 @@ async function adminUser(db: Db, req: FastifyRequest): Promise<{ id: number; nic
   return { id: u.id, nick: u.nick };
 }
 
+// ---- Google OAuth (login único) ----
+const SESS_COOKIE = (sess: string) => 'yath_sess=' + sess + '; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax';
+function redir(reply: FastifyReply, url: string): FastifyReply { return reply.code(302).header('location', url).send(); }
+const oauthState = new Map<string, { ret: string; ts: number }>();
+const oauthPending = new Map<string, { sub: string; email: string; name: string; avatar: string; ts: number }>();
+function cleanupOauth(): void {
+  const now = Date.now();
+  for (const [k, v] of oauthState) if (now - v.ts > 600000) oauthState.delete(k);
+  for (const [k, v] of oauthPending) if (now - v.ts > 600000) oauthPending.delete(k);
+}
+function safeReturn(p: unknown): string { return typeof p === 'string' && /^\/[A-Za-z0-9/_-]*$/.test(p) && !p.startsWith('//') ? p : '/perfil'; }
+function readCookie(req: FastifyRequest, name: string): string {
+  const c = req.headers.cookie;
+  if (typeof c !== 'string') return '';
+  const m = c.split(';').map((s) => s.trim()).find((s) => s.startsWith(name + '='));
+  return m ? m.slice(name.length + 1) : '';
+}
+function suggestNick(name: string, email: string): string {
+  const base = (name || email.split('@')[0] || 'user').toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '').slice(0, 12);
+  return base.length >= 2 ? base : 'user';
+}
+
 const HEADS = ['o', 'O', 'ö', 'ø', '@', '°'];
 const NPC_LINES = [
   'Tristo: "¿Café? Acá la noche no termina nunca."',
@@ -312,25 +341,9 @@ async function puebloSave(db: Db, p: PuebloP): Promise<void> {
   await db.query('UPDATE pueblo_chars SET vida = $2, hambre = $3, sueno = $4, x = $5, y = $6, last_tick = now() WHERE user_id = $1', [p.id, p.vida, p.hambre, p.sueno, p.x, p.y]);
 }
 
-async function sendHubCode(to: string, code: string): Promise<boolean> {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) { console.warn('[mail] RESEND_API_KEY ausente: no se envía'); return false; }
-  const html =
-    '<div style="background:#060606;color:#f5f5f7;font-family:Arial,Helvetica,sans-serif;padding:40px 24px;text-align:center">' +
-    '<div style="max-width:480px;margin:0 auto">' +
-    '<h1 style="font-size:26px;letter-spacing:-.02em;margin:0 0 6px">Tristo&#39;s</h1>' +
-    '<p style="color:#9a9aa2;margin:0 0 22px">Tu código para entrar:</p>' +
-    `<div style="font-size:40px;font-weight:800;letter-spacing:10px;background:#101014;border:1px solid #2a2a30;border-radius:12px;padding:18px 12px;margin:0 0 18px">${code}</div>` +
-    '<p style="color:#6c6c72;font-size:12px;margin:24px 0 0">Si no fuiste vos, ignorá este mail.<br>youarethead.com.ar</p>' +
-    '</div></div>';
-  try {
-    const r = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ from: FROM_EMAIL, to, subject: `Tu código: ${code} — Tristo's`, html }),
-    });
-    return r.ok;
-  } catch { return false; }
+async function sendHubCode(_to: string, _code: string): Promise<boolean> {
+  // Login por mail DISCONTINUADO. Nunca se envía mail (sin cuota Resend). Se mantiene la firma por compat.
+  return false;
 }
 function getClientIp(req: FastifyRequest): string {
   const cf = req.headers['cf-connecting-ip'];
@@ -379,28 +392,9 @@ async function upsertPending(db: Db, emailRaw: string, ip: string, ua: string): 
   }
 }
 
-async function sendConfirmEmail(to: string, code: string, token: string): Promise<boolean> {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) { console.warn('[mail] RESEND_API_KEY ausente: no se envía'); return false; }
-  const link = `${PUBLIC_URL}/api/confirm?token=${encodeURIComponent(token)}`;
-  const html =
-    '<div style="background:#060606;color:#f5f5f7;font-family:Arial,Helvetica,sans-serif;padding:40px 24px;text-align:center">' +
-    '<div style="max-width:480px;margin:0 auto">' +
-    '<h1 style="font-size:26px;letter-spacing:-.02em;margin:0 0 6px">YOU ARE THE AD</h1>' +
-    '<p style="color:#9a9aa2;margin:0 0 22px">Tu código para confirmar y sumar a la lista:</p>' +
-    `<div style="font-size:40px;font-weight:800;letter-spacing:10px;background:#101014;border:1px solid #2a2a30;border-radius:12px;padding:18px 12px;margin:0 0 18px">${code}</div>` +
-    '<p style="color:#9a9aa2;margin:0 0 20px">Pegalo en la página.</p>' +
-    `<a href="${link}" style="display:inline-block;background:#f5f5f7;color:#060606;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:10px">o confirmá con este botón</a>` +
-    '<p style="color:#6c6c72;font-size:12px;margin:24px 0 0">Si no fuiste vos, ignorá este mail.<br>youarethead.com.ar</p>' +
-    '</div></div>';
-  try {
-    const r = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ from: FROM_EMAIL, to, subject: `Tu código: ${code} — YOU ARE THE AD`, html }),
-    });
-    return r.ok;
-  } catch { return false; }
+async function sendConfirmEmail(_to: string, _code: string, _token: string): Promise<boolean> {
+  // Wishlist por mail DISCONTINUADA. Anotarse = crear cuenta. Nunca se envía mail (sin cuota Resend).
+  return false;
 }
 
 function page(title: string, body: string): string {
@@ -565,95 +559,139 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.code(201).send({ ok: true, message: { id: Number(row?.id ?? 0), name, body: text, t: row?.created_at }, nameLocked: !!(hubU && hubU.nick) || chatNames.has(ipHash) });
   });
 
-  app.post('/api/hub/login', async (req, reply) => {
-    const body = (req.body ?? {}) as { email?: unknown };
-    const emailRaw = typeof body.email === 'string' ? body.email.trim() : '';
-    if (!emailRaw || emailRaw.length > 254 || !EMAIL_RE.test(emailRaw)) return reply.code(400).send({ ok: false, error: 'invalid_email', message: 'Ese mail no parece válido.' });
-    const ipHash = hashIp(getClientIp(req));
-    const now = Date.now();
-    const last = hubMailRate.get(ipHash) ?? 0;
-    if (now - last < 20000) return reply.code(429).send({ ok: false, error: 'slow', message: 'Esperá unos segundos y probá de nuevo.' });
-    hubMailRate.set(ipHash, now);
-    const code = newCode();
-    await db.query("INSERT INTO hub_users (email, email_norm, code, code_expires, code_attempts) VALUES ($1, $2, $3, now() + interval '30 minutes', 0) ON CONFLICT (email_norm) DO UPDATE SET code = $3, code_expires = now() + interval '30 minutes', code_attempts = 0", [emailRaw, emailRaw.toLowerCase(), code]);
-    await sendHubCode(emailRaw, code);
-    return reply.code(201).send({ ok: true, pending: true, message: 'Te mandamos un código al mail.' });
+  app.post('/api/hub/login', async (_req, reply) => {
+    // Login por mail discontinuado. Entrá con nick + PIN, o migrá tu cuenta vieja en /api/hub/claim.
+    return reply.code(410).send({ ok: false, error: 'mail_discontinued', message: 'El login por mail se discontinuó. Entrá con tu nick + PIN. Si tu cuenta es vieja y no tiene PIN, reclamala con tu nick.' });
   });
 
-  app.post('/api/hub/registrar', async (req, reply) => {
-    const body = (req.body ?? {}) as { nick?: unknown; pin?: unknown };
-    const nick = typeof body.nick === 'string' ? body.nick.replace(/\s+/g, ' ').trim().slice(0, 14).trim() : '';
-    const pin = typeof body.pin === 'string' ? body.pin.trim() : '';
+  app.post('/api/hub/registrar', async (_req, reply) => reply.code(410).send({ ok: false, error: 'pin_off', message: 'Ahora se entra solo con Google.' }));
+
+  app.post('/api/hub/claim', async (_req, reply) => reply.code(410).send({ ok: false, error: 'pin_off', message: 'Ahora se entra solo con Google. Si tenías cuenta, vinculala al entrar.' }));
+
+  app.get('/api/auth/google', async (req, reply) => {
+    if (!GOOGLE_ENABLED) return redir(reply, '/perfil?oauth=off');
+    cleanupOauth();
+    const ret = safeReturn((req.query as { return?: unknown })?.return);
+    const state = randomBytes(16).toString('hex');
+    oauthState.set(state, { ret, ts: Date.now() });
+    const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    u.searchParams.set('client_id', GOOGLE_CLIENT_ID);
+    u.searchParams.set('redirect_uri', GOOGLE_REDIRECT);
+    u.searchParams.set('response_type', 'code');
+    u.searchParams.set('scope', 'openid email profile');
+    u.searchParams.set('state', state);
+    u.searchParams.set('prompt', 'select_account');
+    return redir(reply, u.toString());
+  });
+
+  app.get('/api/auth/google/callback', async (req, reply) => {
+    if (!GOOGLE_ENABLED) return redir(reply, '/perfil?oauth=off');
+    cleanupOauth();
+    const q = (req.query ?? {}) as { code?: unknown; state?: unknown; error?: unknown };
+    const code = typeof q.code === 'string' ? q.code : '';
+    const state = typeof q.state === 'string' ? q.state : '';
+    const st = state ? oauthState.get(state) : undefined;
+    if (q.error || !code || !st) return redir(reply, '/perfil?oauth=error');
+    oauthState.delete(state);
+    const ret = st.ret;
+    let profile: { sub: string; email: string; verified: boolean; name: string; picture: string } | null = null;
+    try {
+      const tok = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ code, client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, redirect_uri: GOOGLE_REDIRECT, grant_type: 'authorization_code' }).toString(),
+      });
+      if (!tok.ok) return redir(reply, '/perfil?oauth=error');
+      const tj = (await tok.json()) as { access_token?: string };
+      if (!tj.access_token) return redir(reply, '/perfil?oauth=error');
+      const ui = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { authorization: `Bearer ${tj.access_token}` } });
+      if (!ui.ok) return redir(reply, '/perfil?oauth=error');
+      const uj = (await ui.json()) as Record<string, unknown>;
+      profile = { sub: String(uj.sub ?? ''), email: String(uj.email ?? ''), verified: uj.email_verified === true || uj.email_verified === 'true', name: String(uj.name ?? ''), picture: String(uj.picture ?? '') };
+    } catch { return redir(reply, '/perfil?oauth=error'); }
+    if (!profile.sub) return redir(reply, '/perfil?oauth=error');
+    const sub = profile.sub;
+    const bySub = await db.query('SELECT id, nick, banned FROM hub_users WHERE google_sub = $1', [sub]);
+    const subRow = bySub.rows[0];
+    if (subRow) {
+      if (subRow.banned === true) return redir(reply, '/perfil?oauth=banned');
+      const sess = newToken();
+      await db.query('UPDATE hub_users SET session = $2, avatar = COALESCE(avatar, $3) WHERE id = $1', [subRow.id, sess, profile.picture || null]);
+      reply.header('set-cookie', SESS_COOKIE(sess));
+      return redir(reply, ret);
+    }
+    if (profile.verified && profile.email) {
+      const byMail = await db.query('SELECT id, nick, banned, google_sub FROM hub_users WHERE email_norm = $1', [profile.email.toLowerCase()]);
+      const mr = byMail.rows[0];
+      if (mr && !mr.google_sub) {
+        if (mr.banned === true) return redir(reply, '/perfil?oauth=banned');
+        const sess = newToken();
+        await db.query('UPDATE hub_users SET google_sub = $2, session = $3, avatar = COALESCE(avatar, $4) WHERE id = $1', [mr.id, sub, sess, profile.picture || null]);
+        reply.header('set-cookie', SESS_COOKIE(sess));
+        return redir(reply, ret + (ret.includes('?') ? '&' : '?') + 'oauth=migrated');
+      }
+    }
+    const pid = randomBytes(16).toString('hex');
+    oauthPending.set(pid, { sub, email: profile.email, name: profile.name, avatar: profile.picture, ts: Date.now() });
+    reply.header('set-cookie', `yath_oauth=${pid}; Path=/; Max-Age=600; HttpOnly; SameSite=Lax`);
+    return redir(reply, '/perfil?oauth=setup');
+  });
+
+  app.get('/api/auth/google/pending', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const pid = readCookie(req, 'yath_oauth');
+    const p = pid ? oauthPending.get(pid) : undefined;
+    if (!p) return { ok: false };
+    return { ok: true, email: p.email, suggest: suggestNick(p.name, p.email) };
+  });
+
+  app.post('/api/auth/google/new', async (req, reply) => {
+    const pid = readCookie(req, 'yath_oauth');
+    const p = pid ? oauthPending.get(pid) : undefined;
+    if (!p) return reply.code(440).send({ ok: false, error: 'expired', message: 'Se venció el ingreso con Google. Entrá de nuevo.' });
+    const nick = typeof ((req.body ?? {}) as { nick?: unknown }).nick === 'string' ? ((req.body) as { nick: string }).nick.replace(/\s+/g, ' ').trim().slice(0, 14).trim() : '';
     if (nick.length < 2) return reply.code(400).send({ ok: false, error: 'bad_nick', message: 'Nick muy corto (2-14).' });
     if (offensiveAlias(nick) || offensiveText(nick)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Ese nick no va.' });
-    if (!/^[0-9]{4,6}$/.test(pin)) return reply.code(400).send({ ok: false, error: 'bad_pin', message: 'El PIN son 4 a 6 números.' });
     const nickNorm = nick.toLowerCase();
     const ex = await db.query('SELECT 1 AS k FROM hub_users WHERE nick_norm = $1', [nickNorm]);
     if (ex.rows.length) return reply.code(409).send({ ok: false, error: 'taken', message: 'Ese nick ya está tomado.' });
+    let email: string | null = p.email || null;
+    let emailNorm: string | null = email ? email.toLowerCase() : null;
+    if (emailNorm) { const e2 = await db.query('SELECT 1 AS k FROM hub_users WHERE email_norm = $1', [emailNorm]); if (e2.rows.length) { email = null; emailNorm = null; } }
     const sess = newToken();
-    const rec = randomBytes(5).toString('hex').toUpperCase();
-    await db.query('INSERT INTO hub_users (nick, nick_norm, pin_hash, session, recovery_hash) VALUES ($1, $2, $3, $4, $5)', [nick, nickNorm, pinHash(pin, nickNorm), sess, recoveryHash(rec)]);
-    reply.header('set-cookie', 'yath_sess=' + sess + '; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax');
-    return reply.code(201).send({ ok: true, logged: true, nick, recovery: rec });
+    await db.query('INSERT INTO hub_users (nick, nick_norm, google_sub, email, email_norm, session, avatar) VALUES ($1, $2, $3, $4, $5, $6, $7)', [nick, nickNorm, p.sub, email, emailNorm, sess, p.avatar || null]);
+    oauthPending.delete(pid);
+    reply.header('set-cookie', [SESS_COOKIE(sess), 'yath_oauth=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax']);
+    return reply.code(201).send({ ok: true, logged: true, nick });
   });
 
-  app.post('/api/hub/pin-login', async (req, reply) => {
+  app.post('/api/auth/google/link', async (req, reply) => {
+    const pid = readCookie(req, 'yath_oauth');
+    const p = pid ? oauthPending.get(pid) : undefined;
+    if (!p) return reply.code(440).send({ ok: false, error: 'expired', message: 'Se venció el ingreso con Google. Entrá de nuevo.' });
     const body = (req.body ?? {}) as { nick?: unknown; pin?: unknown };
     const nick = typeof body.nick === 'string' ? body.nick.trim() : '';
     const pin = typeof body.pin === 'string' ? body.pin.trim() : '';
-    if (!nick || !/^[0-9]{4,6}$/.test(pin)) return reply.code(400).send({ ok: false, error: 'bad', message: 'Nick o PIN inválido.' });
-    const ipHash = hashIp(getClientIp(req));
-    const now = Date.now();
-    if (now - (pinRate.get(ipHash) ?? 0) < 1000) return reply.code(429).send({ ok: false, error: 'slow', message: 'Esperá un toque.' });
-    pinRate.set(ipHash, now);
+    if (!nick || !/^[0-9]{4,6}$/.test(pin)) return reply.code(400).send({ ok: false, error: 'bad', message: 'Poné tu nick viejo y tu PIN.' });
     const nickNorm = nick.toLowerCase();
-    const f = pinFails.get(nickNorm);
-    if (f && f.until > now) return reply.code(429).send({ ok: false, error: 'locked', message: 'Demasiados intentos. Probá en un minuto.' });
-    const { rows } = await db.query('SELECT id, nick, pin_hash, banned FROM hub_users WHERE nick_norm = $1', [nickNorm]);
+    const { rows } = await db.query('SELECT id, nick, pin_hash, google_sub, banned FROM hub_users WHERE nick_norm = $1', [nickNorm]);
     const row = rows[0];
-    if (!row || !row.pin_hash || String(row.pin_hash) !== pinHash(pin, nickNorm)) {
-      const nf = (f ? f.n : 0) + 1;
-      pinFails.set(nickNorm, { n: nf, until: nf >= 8 ? now + 60000 : 0 });
-      const noPin = row && !row.pin_hash;
-      return reply.code(401).send({ ok: false, error: noPin ? 'sin_pin' : 'bad_login', message: noPin ? 'Esa cuenta no tiene PIN. Entrá por mail y creá uno en tu perfil.' : 'Nick o PIN incorrecto.' });
-    }
-    if (row.banned === true) return reply.code(403).send({ ok: false, error: 'banned', message: 'Tu cuenta está suspendida.' });
-    pinFails.delete(nickNorm);
+    if (!row) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese nick.' });
+    if (row.banned === true) return reply.code(403).send({ ok: false, error: 'banned', message: 'Esa cuenta está suspendida.' });
+    if (row.google_sub) return reply.code(409).send({ ok: false, error: 'linked', message: 'Esa cuenta ya está vinculada a otro Google.' });
+    if (!row.pin_hash || String(row.pin_hash) !== pinHash(pin, nickNorm)) return reply.code(401).send({ ok: false, error: 'bad_login', message: 'Nick o PIN incorrecto. Si nunca tuviste PIN, entrá como cuenta nueva.' });
     const sess = newToken();
-    await db.query('UPDATE hub_users SET session = $2 WHERE id = $1', [row.id, sess]);
-    reply.header('set-cookie', 'yath_sess=' + sess + '; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax');
+    await db.query('UPDATE hub_users SET google_sub = $2, session = $3, avatar = COALESCE(avatar, $4) WHERE id = $1', [row.id, p.sub, sess, p.avatar || null]);
+    oauthPending.delete(pid);
+    reply.header('set-cookie', [SESS_COOKIE(sess), 'yath_oauth=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax']);
     return reply.code(200).send({ ok: true, logged: true, nick: row.nick });
   });
 
-  app.post('/api/hub/pin', async (req, reply) => {
-    const u = await hubUserBySession(db, req);
-    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
-    if (!u.nick) return reply.code(400).send({ ok: false, error: 'sin_nick', message: 'Primero reservá tu nick.' });
-    const pin = typeof ((req.body ?? {}) as { pin?: unknown }).pin === 'string' ? ((req.body) as { pin: string }).pin.trim() : '';
-    if (!/^[0-9]{4,6}$/.test(pin)) return reply.code(400).send({ ok: false, error: 'bad_pin', message: 'El PIN son 4 a 6 números.' });
-    await db.query('UPDATE hub_users SET pin_hash = $2 WHERE id = $1', [u.id, pinHash(pin, u.nick.toLowerCase())]);
-    return { ok: true, message: 'PIN guardado. Ya podés entrar con nick + PIN.' };
-  });
+  app.post('/api/hub/pin-login', async (_req, reply) => reply.code(410).send({ ok: false, error: 'pin_off', message: 'Ahora se entra solo con Google.' }));
 
-  app.post('/api/hub/recuperar', async (req, reply) => {
-    const body = (req.body ?? {}) as { nick?: unknown; recovery?: unknown; pin?: unknown };
-    const nick = typeof body.nick === 'string' ? body.nick.trim() : '';
-    const recovery = typeof body.recovery === 'string' ? body.recovery.replace(/\s+/g, '').toUpperCase() : '';
-    const pin = typeof body.pin === 'string' ? body.pin.trim() : '';
-    if (!nick || !recovery || !/^[0-9]{4,6}$/.test(pin)) return reply.code(400).send({ ok: false, error: 'bad', message: 'Completá nick, código y PIN nuevo (4-6 números).' });
-    const ipHash = hashIp(getClientIp(req));
-    const now = Date.now();
-    if (now - (pinRate.get(ipHash) ?? 0) < 1000) return reply.code(429).send({ ok: false, error: 'slow', message: 'Esperá un toque.' });
-    pinRate.set(ipHash, now);
-    const nickNorm = nick.toLowerCase();
-    const { rows } = await db.query('SELECT id, nick, recovery_hash FROM hub_users WHERE nick_norm = $1', [nickNorm]);
-    const row = rows[0];
-    if (!row || !row.recovery_hash || String(row.recovery_hash) !== recoveryHash(recovery)) return reply.code(401).send({ ok: false, error: 'bad_recovery', message: 'Nick o código de recuperación incorrecto.' });
-    const sess = newToken();
-    await db.query('UPDATE hub_users SET pin_hash = $2, session = $3 WHERE id = $1', [row.id, pinHash(pin, nickNorm), sess]);
-    reply.header('set-cookie', 'yath_sess=' + sess + '; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax');
-    return reply.code(200).send({ ok: true, logged: true, nick: row.nick });
-  });
+  app.post('/api/hub/pin', async (_req, reply) => reply.code(410).send({ ok: false, error: 'pin_off', message: 'Ahora se entra solo con Google.' }));
+
+  app.post('/api/hub/recuperar', async (_req, reply) => reply.code(410).send({ ok: false, error: 'pin_off', message: 'Ahora se entra solo con Google.' }));
 
   app.post('/api/hub/verify', async (req, reply) => {
     const body = (req.body ?? {}) as { email?: unknown; code?: unknown };
