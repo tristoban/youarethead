@@ -97,19 +97,28 @@
     const record = score > best;
     if (n>=4 || (record && !wasRecord)) barrage(record ? 4 : 3); else flashOne();
     if (record) { best = score; localStorage.setItem("yg_best", String(best)); updateHud(); }
+    checkRank();
   }
 
   let flashQ = [], flashing = false;
   function flashOne() { enqueue(1); }
   function barrage(k) { enqueue(k); }
-  function enqueue(k) { if (reduce) return; for (let i=0;i<k;i++) flashQ.push(PHRASES[Math.floor(Math.random()*PHRASES.length)]); if (!flashing) runFlash(); }
+  function enqueue(k) { if (reduce) return; for (let i=0;i<k;i++) flashQ.push({ text: PHRASES[Math.floor(Math.random()*PHRASES.length)], white: false }); if (!flashing) runFlash(); }
+  function rankFlash(rank) { if (reduce) return; flashQ.push({ text: "#" + rank, white: true }); if (!flashing) runFlash(); }
   function runFlash() {
     if (flashQ.length === 0) { flashing = false; return; }
-    flashing = true; const p = flashQ.shift();
-    flashEl.firstChild.textContent = p;
-    flashEl.classList.toggle("yg-inv", Math.random() < 0.5);
+    flashing = true; const it = flashQ.shift();
+    flashEl.firstChild.textContent = it.text;
+    flashEl.classList.toggle("yg-inv", !it.white);
     flashEl.classList.add("yg-on");
-    setTimeout(() => { flashEl.classList.remove("yg-on"); setTimeout(runFlash, 300); }, 80);
+    setTimeout(() => { flashEl.classList.remove("yg-on"); setTimeout(runFlash, 300); }, it.white ? 95 : 80);
+  }
+  let myRank = null, peeking = false;
+  async function peekRank(sc) { try { const r = await fetch("/api/rank?game=tetristo&score=" + sc, { headers: { accept: "application/json" } }); const d = await r.json(); return d && d.ok ? d : null; } catch (_) { return null; } }
+  function setRank(rank) { setText("yg-rank", rank ? "#" + fmt.format(rank) : "—"); }
+  function checkRank() {
+    if (peeking) return; peeking = true;
+    peekRank(score).then((d) => { peeking = false; if (!d) return; const nr = d.rank; if (myRank != null && nr < myRank && nr <= 10) rankFlash(nr); myRank = nr; setRank(nr); });
   }
   function shake() { if (reduce || !shell) return; shell.classList.remove("yg-shake"); void shell.offsetWidth; shell.classList.add("yg-shake"); }
   function popup(n) { if (!popEl) return; popEl.textContent = ["", "¡LÍNEA!", "¡DOBLE!", "¡TRIPLE!", "¡TETRISTO!"][n] || ""; popEl.classList.remove("yg-go"); void popEl.offsetWidth; popEl.classList.add("yg-go"); }
@@ -186,8 +195,9 @@
 
   function startGame() {
     resetBoard(); score=0; lines=0; level=1; dropInt=800; over=false; paused=false; savedThisRun=false;
-    holdType=null; holdUsed=false; lockTimer=0; lockResets=0;
+    holdType=null; holdUsed=false; lockTimer=0; lockResets=0; myRank=null; peeking=false; setRank(0);
     nextType=null; bag=[]; spawn(); updateHud(); hideScreen(); running=true; lastDrop=0;
+    peekRank(0).then((d) => { if (d) { myRank = d.rank; setRank(d.rank); } });
     window.cancelAnimationFrame(raf); raf = window.requestAnimationFrame(loop); draw();
   }
   function endGame() {
@@ -200,11 +210,13 @@
     screenEl.innerHTML =
       '<h2>TeTristo</h2>' +
       '<div class="yg-final">¿Podés ser el N°1?</div>' +
+      '<div class="yg-final" id="yg-startpos"></div>' +
       '<button class="yg-btn" id="yg-play">JUGAR</button>' +
-      '<div class="yg-warn">Aviso: el juego tiene destellos rápidos. Si sos sensible a las luces, mejor no juegues.</div>' +
+      '<div class="yg-warn">AVISO — No apto para personas fotosensibles ni con epilepsia. El juego tiene destellos. Jugás bajo tu responsabilidad.</div>' +
       '<div class="yg-lb" id="yg-lb"></div>';
     screenEl.classList.add("yg-show");
     const pb = document.getElementById("yg-play"); if (pb) pb.onclick = startGame;
+    peekRank(0).then((d) => { const e = document.getElementById("yg-startpos"); if (e && d) e.textContent = "Sos uno de " + fmt.format(d.total) + ". Arrancás último: subí al top 10."; });
   }
   function showOver() {
     screenEl.innerHTML =
@@ -290,6 +302,7 @@
           '<div class="yg-stat">Reserva</div>' +
           '<canvas id="yg-hold" width="96" height="96" title="Guardar en reserva"></canvas>' +
           '<div class="yg-stat">Récord<b id="yg-best">0</b></div>' +
+          '<div class="yg-stat">Puesto<b id="yg-rank">—</b></div>' +
           '<div class="yg-hint">← → mover · ↑ rotar · ↓ bajar<br>espacio: caída · C: reserva · P: pausa · Esc: salir</div>' +
           '<div class="yg-mobilectrl">' +
             '<div class="yg-stick" id="yg-stick"><div class="yg-knob" id="yg-knob"></div></div>' +

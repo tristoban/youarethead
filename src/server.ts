@@ -480,6 +480,19 @@ export function buildApp(db: Db): FastifyInstance {
 
   app.get('/api/scores', async (req, reply) => { reply.header('cache-control', 'no-store'); const g = ((req.query ?? {}) as { game?: unknown }).game; return { ok: true, scores: await topScores(db, g === 'parpadeo' ? 'parpadeo' : 'tetristo') }; });
 
+  app.get('/api/rank', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const q = (req.query ?? {}) as { game?: unknown; score?: unknown };
+    const game = q.game === 'parpadeo' ? 'parpadeo' : 'tetristo';
+    const sc = Math.floor(Number(q.score));
+    const score = Number.isInteger(sc) && sc >= 0 ? sc : 0;
+    const gt = await db.query('SELECT count(*) AS c FROM scores WHERE game = $1 AND score > $2', [game, score]);
+    const tot = await db.query('SELECT count(*) AS c FROM scores WHERE game = $1', [game]);
+    const rank = Number((gt.rows[0]?.c as string | number | bigint | undefined) ?? 0) + 1;
+    const total = Number((tot.rows[0]?.c as string | number | bigint | undefined) ?? 0);
+    return { ok: true, rank, total };
+  });
+
   app.post('/api/score', async (req, reply) => {
     const body = (req.body ?? {}) as { alias?: unknown; score?: unknown; game?: unknown };
     const game = body.game === 'parpadeo' ? 'parpadeo' : 'tetristo';
