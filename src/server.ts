@@ -19,6 +19,8 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? '';
 const GOOGLE_REDIRECT = process.env.GOOGLE_REDIRECT ?? `${PUBLIC_URL}/api/auth/google/callback`;
 const GOOGLE_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
+const ADMIN_EMAILS = new Set((process.env.ADMIN_EMAILS ?? 'matiasivanponcedeleon@gmail.com').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+const FOUNDER_MAX = Number(process.env.FOUNDER_MAX ?? 100);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -133,6 +135,15 @@ export async function initDb(db: Db): Promise<void> {
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS google_sub TEXT;`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS avatar TEXT;`);
   await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS hub_users_google_uidx ON hub_users (google_sub) WHERE google_sub IS NOT NULL;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS muted BOOLEAN NOT NULL DEFAULT false;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS muted_reason TEXT;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS banner TEXT;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS accent TEXT;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS estado TEXT;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS location TEXT;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS links JSONB NOT NULL DEFAULT '[]'::jsonb;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS pinned BIGINT;`);
+  await db.query(`CREATE TABLE IF NOT EXISTS site_config (key TEXT PRIMARY KEY, value TEXT);`);
   await db.query(`ALTER TABLE hub_users ALTER COLUMN email DROP NOT NULL;`);
   await db.query(`ALTER TABLE hub_users ALTER COLUMN email_norm DROP NOT NULL;`);
   await db.query(`
@@ -257,24 +268,28 @@ function muralString(): string {
   return muralCache;
 }
 
-async function hubUserBySession(db: Db, req: FastifyRequest): Promise<{ id: number; nick: string | null } | null> {
+async function hubUserBySession(db: Db, req: FastifyRequest): Promise<{ id: number; nick: string | null; muted: boolean } | null> {
   const c = req.headers.cookie;
   if (typeof c !== 'string') return null;
   const m = c.split(';').map((s) => s.trim()).find((s) => s.startsWith('yath_sess='));
   if (!m) return null;
   const tok = m.slice(10);
   if (!tok || tok.length < 20) return null;
-  const { rows } = await db.query('SELECT id, nick, banned FROM hub_users WHERE session = $1', [tok]);
+  const { rows } = await db.query('SELECT id, nick, banned, muted FROM hub_users WHERE session = $1', [tok]);
   const r = rows[0];
   if (!r || r.banned === true) return null;
-  return { id: Number(r.id), nick: (r.nick as string | null) ?? null };
+  return { id: Number(r.id), nick: (r.nick as string | null) ?? null, muted: r.muted === true };
 }
 
 function isAdminNick(nick: string | null | undefined): boolean { return !!nick && ADMIN_NICKS.has(nick.toLowerCase()); }
+function isAdminEmail(email: unknown): boolean { return typeof email === 'string' && ADMIN_EMAILS.has(email.toLowerCase()); }
 async function adminUser(db: Db, req: FastifyRequest): Promise<{ id: number; nick: string } | null> {
   const u = await hubUserBySession(db, req);
-  if (!u || !u.nick || !isAdminNick(u.nick)) return null;
-  return { id: u.id, nick: u.nick };
+  if (!u) return null;
+  if (isAdminNick(u.nick)) return { id: u.id, nick: u.nick || '' };
+  const e = await db.query('SELECT email FROM hub_users WHERE id = $1', [u.id]);
+  if (isAdminEmail(e.rows[0]?.email)) return { id: u.id, nick: u.nick || '' };
+  return null;
 }
 
 // ---- Google OAuth (login único) ----
@@ -541,6 +556,7 @@ export function buildApp(db: Db): FastifyInstance {
     if (!name) name = 'ANÓN';
     const ipHash = hashIp(getClientIp(req));
     const hubU = await hubUserBySession(db, req);
+    if (hubU && hubU.muted) return reply.code(403).send({ ok: false, error: 'muted', message: 'Estás silenciado.' });
     let lockedName = chatNames.get(ipHash);
     if (hubU && hubU.nick) { name = hubU.nick; lockedName = name; }
     else if (lockedName) name = lockedName;
@@ -731,7 +747,7 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
     if (!u) return { ok: true, logged: false, nick: null };
-    const det = await db.query('SELECT email, bio, created_at, pin_hash, avatar FROM hub_users WHERE id = $1', [u.id]);
+    const det = await db.query('SELECT email, bio, created_at, pin_hash, avatar, banner, accent, estado, location, links, pinned FROM hub_users WHERE id = $1', [u.id]);
     const r = det.rows[0] ?? {};
     let caido = 0;
     const c = await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [u.id]);
@@ -742,8 +758,10 @@ export function buildApp(db: Db): FastifyInstance {
     const ch = await db.query('SELECT head, vida, hambre, sueno FROM pueblo_chars WHERE user_id = $1', [u.id]);
     const cr = ch.rows[0];
     return {
-      ok: true, logged: true, nick: u.nick, admin: isAdminNick(u.nick),
-      email: String(r.email ?? ''), pin: !!r.pin_hash, avatar: (r.avatar as string | null) ?? null, bio: (r.bio as string | null) ?? '', desde: r.created_at ?? null, caido,
+      ok: true, logged: true, nick: u.nick, admin: isAdminNick(u.nick) || isAdminEmail(r.email),
+      email: String(r.email ?? ''), pin: !!r.pin_hash, avatar: (r.avatar as string | null) ?? null,
+      banner: (r.banner as string | null) ?? null, accent: (r.accent as string | null) ?? null, estado: (r.estado as string | null) ?? '', location: (r.location as string | null) ?? '', links: (r.links as unknown) ?? [], pinned: r.pinned ? Number(r.pinned) : null, founder: u.id <= FOUNDER_MAX,
+      bio: (r.bio as string | null) ?? '', desde: r.created_at ?? null, caido,
       best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0 },
       char: cr ? { head: String(cr.head ?? 'o'), vida: Math.round(Number(cr.vida ?? 0)), hambre: Math.round(Number(cr.hambre ?? 0)), sueno: Math.round(Number(cr.sueno ?? 0)) } : null,
     };
@@ -777,9 +795,9 @@ export function buildApp(db: Db): FastifyInstance {
     const qr = (req.query ?? {}) as { q?: unknown };
     const q = typeof qr.q === 'string' ? qr.q.trim().toLowerCase() : '';
     const rows = q
-      ? (await db.query("SELECT nick, banned, banned_reason, created_at FROM hub_users WHERE nick IS NOT NULL AND nick_norm LIKE $1 ORDER BY banned DESC, created_at DESC LIMIT 60", ['%' + q + '%'])).rows
-      : (await db.query("SELECT nick, banned, banned_reason, created_at FROM hub_users WHERE nick IS NOT NULL ORDER BY created_at DESC LIMIT 60")).rows;
-    const users = rows.map((r) => ({ nick: r.nick, banned: r.banned === true, reason: (r.banned_reason as string | null) ?? '', desde: r.created_at ?? null, admin: isAdminNick(r.nick as string) }));
+      ? (await db.query("SELECT nick, banned, banned_reason, muted, created_at FROM hub_users WHERE nick IS NOT NULL AND nick_norm LIKE $1 ORDER BY banned DESC, muted DESC, created_at DESC LIMIT 60", ['%' + q + '%'])).rows
+      : (await db.query("SELECT nick, banned, banned_reason, muted, created_at FROM hub_users WHERE nick IS NOT NULL ORDER BY created_at DESC LIMIT 60")).rows;
+    const users = rows.map((r) => ({ nick: r.nick, banned: r.banned === true, muted: r.muted === true, reason: (r.banned_reason as string | null) ?? '', desde: r.created_at ?? null, admin: isAdminNick(r.nick as string) }));
     return { ok: true, users };
   });
 
@@ -806,6 +824,120 @@ export function buildApp(db: Db): FastifyInstance {
     const { rows } = await db.query('UPDATE hub_users SET banned = false, banned_reason = NULL, banned_at = NULL WHERE nick_norm = $1 RETURNING nick', [nick.toLowerCase()]);
     if (!rows.length) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese nick.' });
     return { ok: true, nick: rows[0]?.nick ?? nick, banned: false };
+  });
+
+  app.post('/api/admin/mute', async (req, reply) => {
+    const a = await adminUser(db, req);
+    if (!a) return reply.code(403).send({ ok: false, error: 'forbidden' });
+    const nick = typeof ((req.body ?? {}) as { nick?: unknown }).nick === 'string' ? ((req.body) as { nick: string }).nick.trim() : '';
+    if (!nick) return reply.code(400).send({ ok: false, error: 'bad', message: 'Falta el nick.' });
+    if (isAdminNick(nick.toLowerCase())) return reply.code(400).send({ ok: false, error: 'is_admin', message: 'No podés silenciar a un admin.' });
+    const { rows } = await db.query('UPDATE hub_users SET muted = true WHERE nick_norm = $1 RETURNING nick', [nick.toLowerCase()]);
+    if (!rows.length) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese nick.' });
+    return { ok: true, nick: rows[0]?.nick ?? nick, muted: true };
+  });
+
+  app.post('/api/admin/unmute', async (req, reply) => {
+    const a = await adminUser(db, req);
+    if (!a) return reply.code(403).send({ ok: false, error: 'forbidden' });
+    const nick = typeof ((req.body ?? {}) as { nick?: unknown }).nick === 'string' ? ((req.body) as { nick: string }).nick.trim() : '';
+    if (!nick) return reply.code(400).send({ ok: false, error: 'bad', message: 'Falta el nick.' });
+    const { rows } = await db.query('UPDATE hub_users SET muted = false WHERE nick_norm = $1 RETURNING nick', [nick.toLowerCase()]);
+    if (!rows.length) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese nick.' });
+    return { ok: true, nick: rows[0]?.nick ?? nick, muted: false };
+  });
+
+  app.post('/api/admin/config', async (req, reply) => {
+    const a = await adminUser(db, req);
+    if (!a) return reply.code(403).send({ ok: false, error: 'forbidden' });
+    const body = (req.body ?? {}) as { video?: unknown };
+    const video = typeof body.video === 'string' ? body.video.trim().slice(0, 400) : '';
+    if (video && !/^https?:\/\//.test(video)) return reply.code(400).send({ ok: false, error: 'bad_url', message: 'La URL tiene que empezar con http(s).' });
+    await db.query("INSERT INTO site_config (key, value) VALUES ('latest_video', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [video || null]);
+    return { ok: true, video };
+  });
+
+  app.get('/api/config', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const { rows } = await db.query("SELECT value FROM site_config WHERE key = 'latest_video'");
+    return { ok: true, video: (rows[0]?.value as string | null) ?? '' };
+  });
+
+  app.get('/api/social/perfil', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const nick = String(((req.query ?? {}) as { nick?: unknown }).nick ?? '').trim();
+    if (!nick) return reply.code(400).send({ ok: false, error: 'bad' });
+    const { rows } = await db.query('SELECT id, nick, avatar, banner, accent, bio, estado, location, links, pinned, created_at FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()]);
+    const r = rows[0];
+    if (!r) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese perfil.' });
+    const uid = Number(r.id);
+    const meU = await hubUserBySession(db, req);
+    const nl = String(r.nick ?? '').toLowerCase();
+    const bt = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'tetristo' AND lower(alias) = $1", [nl]);
+    const bp = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'parpadeo' AND lower(alias) = $1", [nl]);
+    const fc = await db.query("SELECT count(*) AS c FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado'", [uid]);
+    const ca = await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [uid]);
+    const posts = (await db.query('SELECT id, nick, body, created_at FROM posts WHERE user_id = $1 ORDER BY id DESC LIMIT 20', [uid])).rows.map((p) => ({ id: Number(p.id), nick: p.nick, body: p.body, t: p.created_at, avatar: (r.avatar as string | null) ?? null }));
+    let pinned: Record<string, unknown> | null = null;
+    if (r.pinned) { const pp = (await db.query('SELECT id, nick, body, created_at FROM posts WHERE id = $1 AND user_id = $2', [Number(r.pinned), uid])).rows[0]; if (pp) pinned = { id: Number(pp.id), nick: pp.nick, body: pp.body, t: pp.created_at, avatar: (r.avatar as string | null) ?? null }; }
+    let rel = 'none';
+    if (meU) { if (meU.id === uid) rel = 'me'; else { const am = await db.query('SELECT estado FROM amigos WHERE (a = $1 AND b = $2) OR (a = $2 AND b = $1)', [meU.id, uid]); const ar = am.rows[0]; if (ar) rel = ar.estado === 'aceptado' ? 'amigos' : 'pendiente'; } }
+    return { ok: true, perfil: {
+      nick: r.nick, avatar: (r.avatar as string | null) ?? null, banner: (r.banner as string | null) ?? null, accent: (r.accent as string | null) ?? null,
+      bio: (r.bio as string | null) ?? '', estado: (r.estado as string | null) ?? '', location: (r.location as string | null) ?? '', links: (r.links as unknown) ?? [],
+      desde: r.created_at ?? null, founder: uid <= FOUNDER_MAX, admin: isAdminNick(r.nick as string),
+      best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0 },
+      amigos: Number(fc.rows[0]?.c ?? 0) || 0, caido: ca.rows[0] ? Number(ca.rows[0].n ?? 0) : 0,
+      posts, pinned, rel,
+    } };
+  });
+
+  app.post('/api/hub/profile', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const b = (req.body ?? {}) as { bio?: unknown; estado?: unknown; location?: unknown; accent?: unknown; links?: unknown };
+    const bio = typeof b.bio === 'string' ? b.bio.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+    const estado = typeof b.estado === 'string' ? b.estado.replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+    const location = typeof b.location === 'string' ? b.location.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
+    const accent = typeof b.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(b.accent.trim()) ? b.accent.trim() : null;
+    if (offensiveText(bio) || offensiveText(estado) || offensiveText(location)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Eso no va.' });
+    const links: { title: string; url: string }[] = [];
+    if (Array.isArray(b.links)) {
+      for (const it of b.links.slice(0, 12)) {
+        const o = (it ?? {}) as { title?: unknown; url?: unknown };
+        const t = typeof o.title === 'string' ? o.title.replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+        const url = typeof o.url === 'string' ? o.url.trim().slice(0, 300) : '';
+        if (t && /^https?:\/\//.test(url)) links.push({ title: t, url });
+      }
+    }
+    if (links.some((l) => offensiveText(l.title))) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Un link no va.' });
+    await db.query('UPDATE hub_users SET bio = $2, estado = $3, location = $4, accent = $5, links = $6::jsonb WHERE id = $1', [u.id, bio, estado, location, accent, JSON.stringify(links)]);
+    return { ok: true, bio, estado, location, accent, links };
+  });
+
+  app.post('/api/hub/banner', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const raw = ((req.body ?? {}) as { dataUrl?: unknown }).dataUrl;
+    if (raw === null || raw === '') { await db.query('UPDATE hub_users SET banner = NULL WHERE id = $1', [u.id]); return { ok: true, banner: null }; }
+    const dataUrl = typeof raw === 'string' ? raw : '';
+    if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(dataUrl)) return reply.code(400).send({ ok: false, error: 'bad_img', message: 'Imagen inválida.' });
+    if (dataUrl.length > 500000) return reply.code(413).send({ ok: false, error: 'too_big', message: 'El banner es muy pesado. Probá una más chica.' });
+    await db.query('UPDATE hub_users SET banner = $2 WHERE id = $1', [u.id, dataUrl]);
+    return { ok: true, banner: dataUrl };
+  });
+
+  app.post('/api/hub/pin-post', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const raw = ((req.body ?? {}) as { id?: unknown }).id;
+    if (raw === null) { await db.query('UPDATE hub_users SET pinned = NULL WHERE id = $1', [u.id]); return { ok: true, pinned: null }; }
+    const pid = Math.floor(Number(raw));
+    if (!Number.isInteger(pid) || pid <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
+    const own = await db.query('SELECT 1 FROM posts WHERE id = $1 AND user_id = $2', [pid, u.id]);
+    if (!own.rows.length) return reply.code(404).send({ ok: false, error: 'not_found', message: 'Ese post no es tuyo.' });
+    await db.query('UPDATE hub_users SET pinned = $2 WHERE id = $1', [u.id, pid]);
+    return { ok: true, pinned: pid };
   });
 
   app.get('/api/social/usuarios', async (req, reply) => {
@@ -880,6 +1012,7 @@ export function buildApp(db: Db): FastifyInstance {
     const u = await hubUserBySession(db, req);
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
     const body = (req.body ?? {}) as { nick?: unknown; body?: unknown };
+    if (u.muted) return reply.code(403).send({ ok: false, error: 'muted', message: 'Estás silenciado.' });
     const otro = await userByNick(String(body.nick ?? ''));
     if (!otro) return reply.code(404).send({ ok: false, error: 'no_existe' });
     if (!(await sonAmigos(u.id, otro.id))) return reply.code(403).send({ ok: false, error: 'no_amigos', message: 'Tienen que ser amigos.' });
@@ -913,6 +1046,7 @@ export function buildApp(db: Db): FastifyInstance {
     const u = await hubUserBySession(db, req);
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
     if (!u.nick) return reply.code(400).send({ ok: false, error: 'sin_nick', message: 'Primero reservá tu nick.' });
+    if (u.muted) return reply.code(403).send({ ok: false, error: 'muted', message: 'Estás silenciado. No podés postear.' });
     const raw = ((req.body ?? {}) as { body?: unknown }).body;
     const text = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().slice(0, 280).trim() : '';
     if (!text) return reply.code(400).send({ ok: false, error: 'empty', message: 'Escribí algo.' });
@@ -994,6 +1128,7 @@ export function buildApp(db: Db): FastifyInstance {
     const u = await hubUserBySession(db, req);
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
     const body = (req.body ?? {}) as { id?: unknown; body?: unknown };
+    if (u.muted) return reply.code(403).send({ ok: false, error: 'muted', message: 'Estás silenciado.' });
     const gid = Math.floor(Number(body.id));
     if (!Number.isInteger(gid) || gid <= 0) return reply.code(400).send({ ok: false, error: 'grupo' });
     if (!(await esMiembro(gid, u.id))) return reply.code(403).send({ ok: false, error: 'no_miembro' });
@@ -1186,6 +1321,10 @@ export function buildApp(db: Db): FastifyInstance {
   app.get('/tristos', async (_req, reply) => {
     reply.header('cache-control', 'no-store');
     return reply.sendFile('tristos.html');
+  });
+  app.get('/tristo', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return reply.sendFile('tristo.html');
   });
   app.get('/', async (req, reply) => {
     reply.header('cache-control', 'no-store');

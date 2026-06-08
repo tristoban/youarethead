@@ -39,6 +39,41 @@
 .pf-ava canvas { image-rendering: pixelated; }
 .pf-ava img, .pf-ava .pf-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
+/* ---- Perfil público + editor ---- */
+.pf-u { cursor: pointer; }
+.pf-u:hover { text-decoration: underline; }
+.pf-banner { height: 130px; border-radius: 14px; background-size: cover; background-position: center; margin: 0 0 -34px; border: 1px solid rgba(255,255,255,.1); }
+.pf-bnedit { display: flex; align-items: flex-start; justify-content: flex-end; }
+.pf-bnbtns { display: flex; gap: 6px; padding: 8px; }
+.pf-uhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; padding: 0 4px; }
+.pf-uava { width: 76px !important; height: 86px !important; border-width: 3px; box-shadow: 0 4px 16px rgba(0,0,0,.45); }
+.pf-uact { display: flex; gap: 6px; flex-wrap: wrap; padding-bottom: 6px; }
+.pf-uname { font-size: 22px; font-weight: 800; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pf-tag { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; }
+.pf-umeta { color: #9a9aa2; font-size: 13px; margin-top: 8px; }
+.pf-links { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.pf-link { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid rgba(255,255,255,.16); border-radius: 12px; background: rgba(255,255,255,.04); color: #f5f5f7; text-decoration: none; font-weight: 700; font-size: 14px; transition: background .12s; }
+.pf-link:hover { background: rgba(255,255,255,.09); }
+.pf-link-i { display: flex; }
+.pf-link-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-link-x { color: #6c6c72; }
+.pf-pinlbl { font-size: 11px; color: #e2b23c; font-weight: 700; padding: 8px 18px 0; }
+.pf-pinrow { padding: 2px 18px 8px; }
+.pf-pinrow a { color: #6b8cff; font-size: 12px; font-weight: 700; cursor: pointer; }
+
+/* ---- Carrusel de novedades ---- */
+.pf-carousel { margin: 0 0 14px; }
+.pf-cslide { display: block; border-radius: 14px; padding: 18px; text-decoration: none; color: #fff; border: 1px solid rgba(255,255,255,.12); }
+.pf-cslide.s-remera { background: linear-gradient(120deg, #6b8cff40, #0a0a0d); }
+.pf-cslide.s-video { background: linear-gradient(120deg, #D23B4740, #0a0a0d); }
+.pf-cslide.s-tristo { background: linear-gradient(120deg, #e2b23c40, #0a0a0d); }
+.pf-cs-k { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #cfcfd6; margin-bottom: 4px; }
+.pf-cs-t { font-size: 17px; font-weight: 700; line-height: 1.3; }
+.pf-cs-t b { font-weight: 800; }
+.pf-cdots { display: flex; gap: 6px; justify-content: center; margin-top: 8px; }
+.pf-cdots span { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.25); cursor: pointer; }
+.pf-cdots span.on { background: #f5f5f7; }
+
 /* Card compacta para login/setup (no estira como la del feed) */
 .pf-auth { background: var(--pf-card); border: 1px solid rgba(255,255,255,.12); border-radius: 16px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); overflow: hidden; }
 

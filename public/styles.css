@@ -52,6 +52,9 @@ a { color: inherit; text-decoration: none; }
 .nav-links a:hover { color: var(--ink); }
 .nav-cta { color: var(--ink) !important; border: 1px solid var(--line); padding: 9px 16px; border-radius: 8px; }
 .nav-cta:hover { background: var(--ink); color: var(--bg) !important; }
+.nav-yata { display: inline-flex; align-items: center; padding: 0 4px; }
+.nav-yata img { height: 30px; width: auto; display: block; opacity: .92; transition: opacity .12s, transform .12s; }
+.nav-yata:hover img { opacity: 1; transform: scale(1.04); }
 
 /* ---- Hero ---- */
 .hero { min-height: 100svh; display: flex; align-items: center; padding: calc(var(--nav-h) + 24px) 0 64px; }

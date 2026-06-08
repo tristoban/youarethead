@@ -25,6 +25,23 @@
     return cv.outerHTML;
   }
   function maskMail(e) { const a = String(e).split("@"); if (a.length !== 2) return ""; return (a[0] || "").slice(0, 2) + "***@" + a[1]; }
+  const PLATS = [
+    ["instagram", "Instagram", '<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1" fill="currentColor" stroke="none"/>'],
+    ["youtu", "YouTube", '<rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10.5 9.2l4.5 2.8-4.5 2.8z" fill="currentColor" stroke="none"/>'],
+    ["tiktok", "TikTok", '<path d="M14 4c.4 2.4 1.9 3.9 4.3 4.1v2.6c-1.6 0-3.1-.5-4.3-1.4V15a4.8 4.8 0 11-4.8-4.8c.3 0 .6 0 .9.1v2.6a2.2 2.2 0 101.6 2.1V4z"/>'],
+    ["twitch", "Twitch", '<path d="M5 3h15v10l-4 4h-4l-3 3H6v-3H5z"/><path d="M11 8v4M15.5 8v4"/>'],
+    ["steam", "Steam", '<circle cx="12" cy="12" r="9"/><circle cx="15.2" cy="9" r="2.2"/><circle cx="9" cy="15" r="1.9"/>'],
+    ["whatsapp", "WhatsApp", '<path d="M4 20l1.4-3.8A8 8 0 1112 20a8 8 0 01-4-1.1z"/>'],
+    ["wa.me", "WhatsApp", '<path d="M4 20l1.4-3.8A8 8 0 1112 20a8 8 0 01-4-1.1z"/>'],
+    ["discord", "Discord", '<path d="M6 7a15 15 0 0112 0l2 9-3.2 2-1.4-2a10 10 0 01-6.8 0L7.2 18 4 16z"/>'],
+    ["spotify", "Spotify", '<circle cx="12" cy="12" r="9"/><path d="M7.5 10c3.5-1 6.5-.5 9 1M8.5 13c2.6-.7 4.6-.3 6.5.8"/>'],
+    ["nintendo", "Nintendo", '<rect x="4" y="4" width="16" height="16" rx="6"/><path d="M12 4v16"/><circle cx="8.5" cy="9" r="1.3" fill="currentColor" stroke="none"/>'],
+    ["x.com", "X", '<path d="M5 5l14 14M19 5L5 19"/>'],
+    ["twitter", "X", '<path d="M5 5l14 14M19 5L5 19"/>'],
+  ];
+  function platOf(url) { const u = String(url).toLowerCase(); for (const p of PLATS) if (u.includes(p[0])) return p; return ["", "Link", '<circle cx="12" cy="12" r="9"/><path d="M3.5 12h17M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/>']; }
+  function linkSvg(paths) { return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + "</svg>"; }
+  function uname(nick) { return '<b class="pf-u" data-u="' + esc(nick) + '">' + esc(nick) + "</b>"; }
   function avaPic(photo, head) { return photo ? '<img class="pf-img" src="' + esc(photo) + '" alt="" referrerpolicy="no-referrer" />' : avatar(head); }
   function resizeImg(file, cb) {
     const fr = new FileReader();
@@ -33,6 +50,16 @@
       const ctx = cv.getContext("2d"), scale = Math.max(S / img.width, S / img.height), w = img.width * scale, h = img.height * scale;
       ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
       try { cb(cv.toDataURL("image/jpeg", 0.82)); } catch (_) { cb(null); }
+    }; img.onerror = () => cb(null); img.src = String(fr.result); };
+    fr.onerror = () => cb(null); fr.readAsDataURL(file);
+  }
+  function resizeBanner(file, cb) {
+    const fr = new FileReader();
+    fr.onload = () => { const img = new Image(); img.onload = () => {
+      const W = 1000, H = 300, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+      const ctx = cv.getContext("2d"), scale = Math.max(W / img.width, H / img.height), w = img.width * scale, h = img.height * scale;
+      ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+      try { cb(cv.toDataURL("image/jpeg", 0.8)); } catch (_) { cb(null); }
     }; img.onerror = () => cb(null); img.src = String(fr.result); };
     fr.onerror = () => cb(null); fr.readAsDataURL(file);
   }
@@ -142,6 +169,7 @@
     root.querySelector("#pf-postbtn").onclick = () => { setView("feed"); const t = root.querySelector("#pf-post"); if (t) t.focus(); };
     root.querySelector("#pf-me").onclick = () => setView("perfil");
     root.querySelector("#pf-logout").onclick = async () => { await api("/api/hub/logout", { method: "POST", headers: JH, body: "{}" }); boot(); };
+    if (!root.__uwired) { root.__uwired = true; root.addEventListener("click", (e) => { const el = e.target.closest ? e.target.closest("[data-u]") : null; if (el) { e.preventDefault(); viewUser(el.getAttribute("data-u")); } }); }
     rightRail();
     setView("feed");
   }
@@ -165,11 +193,12 @@
   }
 
   /* ---------- Feed ---------- */
-  function postHTML(p) { return '<div class="pf-post"><span class="pf-ava">' + avaPic(p.avatar, headFor(p.nick)) + '</span><div class="pf-pb"><div class="pf-ph"><b>' + esc(p.nick) + '</b><span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><p>' + esc(p.body) + "</p></div></div>"; }
+  function postHTML(p) { return '<div class="pf-post"><span class="pf-ava">' + avaPic(p.avatar, headFor(p.nick)) + '</span><div class="pf-pb"><div class="pf-ph">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><p>' + esc(p.body) + "</p></div></div>"; }
   function viewFeed() {
     let scope = "ti";
     chead("Feed", '<div class="pf-tabs2"><button data-s="ti" class="on">Para ti</button><button data-s="amigos">Amigos</button></div>');
     body().innerHTML =
+      '<div id="pf-carousel" class="pf-carousel"></div>' +
       '<div class="pf-comp"><span class="pf-ava">' + avaPic(me.avatar, me.char ? me.char.head : "o") + '</span><div class="pf-cbox"><textarea id="pf-post" maxlength="280" placeholder="¿Qué está pasando ahí adentro?"></textarea><div class="pf-crow"><button class="pf-cbtn" id="pf-pub">Postear</button></div><p class="pf-msg" id="pf-pmsg"></p></div></div>' +
       '<div id="pf-feed"><p class="pf-dimc">Cargando…</p></div>';
     async function load() {
@@ -178,7 +207,7 @@
       const posts = (d && d.posts) || [];
       box.innerHTML = posts.length ? posts.map(postHTML).join("") : '<p class="pf-empty">' + (scope === "amigos" ? "Tus amigos no postearon nada todavía." : "Nadie publicó nada. Sé la primera voz del encierro.") + "</p>";
     }
-    load(); vt.push(setInterval(() => { if (!document.hidden) load(); }, 12000));
+    load(); mountCarousel(); vt.push(setInterval(() => { if (!document.hidden) load(); }, 12000));
     root.querySelector("#pf-chead").querySelectorAll("[data-s]").forEach((b) => { b.onclick = () => { scope = b.getAttribute("data-s"); root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.remove("on")); b.classList.add("on"); load(); }; });
     body().querySelector("#pf-pub").onclick = async () => { const ta = body().querySelector("#pf-post"), pm = body().querySelector("#pf-pmsg"); pm.textContent = "..."; const { r, d } = await api("/api/social/post", { method: "POST", headers: JH, body: JSON.stringify({ body: ta.value }) }); if (r.ok) { ta.value = ""; pm.textContent = ""; scope = "ti"; root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.toggle("on", x.getAttribute("data-s") === "ti")); load(); } else pm.textContent = (d && d.message) || "No se pudo."; };
   }
@@ -187,10 +216,16 @@
   function viewAdmin() {
     chead("Admin");
     body().innerHTML =
+      '<div class="pf-h">Último video (carrusel)</div>' +
+      '<div class="pf-row"><input class="pf-input" id="ad-vid" placeholder="https://youtu.be/..." /><button class="pf-btn" id="ad-vidsave">Guardar</button></div>' +
+      '<p class="pf-msg" id="ad-vidmsg" style="min-height:1em"></p>' +
+      '<div class="pf-h">Usuarios</div>' +
       '<div class="pf-row"><input class="pf-input" id="ad-q" maxlength="20" placeholder="buscar por nick…" /><button class="pf-btn" id="ad-go">Buscar</button></div>' +
       '<p class="pf-msg" id="ad-msg" style="min-height:1em"></p>' +
       '<div id="ad-list"><p class="pf-dimc">Cargando…</p></div>';
     const qEl = body().querySelector("#ad-q"), am = body().querySelector("#ad-msg");
+    (async () => { try { const c = await (await fetch("/api/config", AH)).json(); if (c && c.video) body().querySelector("#ad-vid").value = c.video; } catch (_) {} })();
+    body().querySelector("#ad-vidsave").onclick = async () => { const vm = body().querySelector("#ad-vidmsg"); vm.textContent = "..."; const { r, d } = await api("/api/admin/config", { method: "POST", headers: JH, body: JSON.stringify({ video: body().querySelector("#ad-vid").value.trim() }) }); vm.textContent = r.ok ? "Guardado." : ((d && d.message) || "No se pudo."); };
     async function load() {
       const q = qEl.value.trim();
       const { d } = await api("/api/admin/users" + (q ? "?q=" + encodeURIComponent(q) : ""), AH);
@@ -198,26 +233,96 @@
       if (!d || !d.ok) { box.innerHTML = '<p class="pf-empty">No se pudo cargar (¿sos admin?).</p>'; return; }
       const us = d.users || [];
       box.innerHTML = us.length ? us.map((u) => {
-        const tag = u.admin ? ' <span class="pf-dimc">· admin</span>' : (u.banned ? ' <span style="color:#D23B47">· baneado</span>' : "");
+        const tags = (u.admin ? ' <span class="pf-dimc">· admin</span>' : "") + (u.banned ? ' <span style="color:#D23B47">· baneado</span>' : "") + (u.muted ? ' <span style="color:#e2b23c">· muteado</span>' : "");
         const rs = u.banned && u.reason ? '<br><span class="pf-dimc">' + esc(u.reason) + "</span>" : "";
-        const btn = u.admin ? "" : (u.banned ? '<button class="pf-btn ghost pf-mini" data-unban="' + esc(u.nick) + '">Desbanear</button>' : '<button class="pf-btn pf-mini" data-ban="' + esc(u.nick) + '">Banear</button>');
-        return '<div class="pf-fila"><span><b>' + esc(u.nick) + "</b>" + tag + rs + "</span>" + btn + "</div>";
+        let btn = "";
+        if (!u.admin) {
+          btn += u.muted ? '<button class="pf-btn ghost pf-mini" data-unmute="' + esc(u.nick) + '">Desmutear</button>' : '<button class="pf-btn ghost pf-mini" data-mute="' + esc(u.nick) + '">Mutear</button>';
+          btn += u.banned ? '<button class="pf-btn ghost pf-mini" data-unban="' + esc(u.nick) + '">Desbanear</button>' : '<button class="pf-btn pf-mini" data-ban="' + esc(u.nick) + '">Banear</button>';
+        }
+        return '<div class="pf-fila"><span>' + uname(u.nick) + tags + rs + '</span><span style="display:flex;gap:6px">' + btn + "</span></div>";
       }).join("") : '<p class="pf-empty">Sin resultados.</p>';
-      box.querySelectorAll("[data-ban]").forEach((b) => b.onclick = async () => {
-        const nick = b.getAttribute("data-ban");
-        const reason = window.prompt("Motivo del baneo a " + nick + " (opcional):", "") || "";
-        am.textContent = "..."; const { r, dd } = await api("/api/admin/ban", { method: "POST", headers: JH, body: JSON.stringify({ nick, reason }) }).then((x) => ({ r: x.r, dd: x.d }));
-        am.textContent = r.ok ? "Baneado: " + nick : ((dd && dd.message) || "No se pudo."); load();
-      });
-      box.querySelectorAll("[data-unban]").forEach((b) => b.onclick = async () => {
-        const nick = b.getAttribute("data-unban");
-        am.textContent = "..."; const { r, dd } = await api("/api/admin/unban", { method: "POST", headers: JH, body: JSON.stringify({ nick }) }).then((x) => ({ r: x.r, dd: x.d }));
-        am.textContent = r.ok ? "Desbaneado: " + nick : ((dd && dd.message) || "No se pudo."); load();
-      });
+      const act = async (path, nick, extra) => { am.textContent = "..."; const { r, d: dd } = await api(path, { method: "POST", headers: JH, body: JSON.stringify(Object.assign({ nick }, extra || {})) }); am.textContent = r.ok ? "Listo: " + nick : ((dd && dd.message) || "No se pudo."); load(); };
+      box.querySelectorAll("[data-ban]").forEach((b) => b.onclick = () => { const nick = b.getAttribute("data-ban"); const reason = window.prompt("Motivo del baneo a " + nick + " (opcional):", "") || ""; act("/api/admin/ban", nick, { reason }); });
+      box.querySelectorAll("[data-unban]").forEach((b) => b.onclick = () => act("/api/admin/unban", b.getAttribute("data-unban")));
+      box.querySelectorAll("[data-mute]").forEach((b) => b.onclick = () => act("/api/admin/mute", b.getAttribute("data-mute")));
+      box.querySelectorAll("[data-unmute]").forEach((b) => b.onclick = () => act("/api/admin/unmute", b.getAttribute("data-unmute")));
     }
     body().querySelector("#ad-go").onclick = load;
     qEl.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
     load();
+  }
+
+  async function mountCarousel() {
+    const el = body().querySelector("#pf-carousel"); if (!el) return;
+    let remaining = null, video = "";
+    try { const s = await (await fetch("/api/stats", AH)).json(); if (s && typeof s.remaining === "number") remaining = s.remaining; } catch (_) {}
+    try { const c = await (await fetch("/api/config", AH)).json(); video = (c && c.video) || ""; } catch (_) {}
+    const videoUrl = video || "https://www.youtube.com/@tristoban/videos";
+    const slides = [
+      { cls: "s-remera", html: '<div class="pf-cs-k">LA REMERA</div><div class="pf-cs-t">' + (remaining != null ? "Faltan <b>" + fmt.format(remaining) + "</b> para que salga a la venta" : "Anotate para que salga a la venta") + "</div>", href: "/" },
+      { cls: "s-video", html: '<div class="pf-cs-k">Último video</div><div class="pf-cs-t">Mirá lo nuevo de Insomnio Crónico &#8599;</div>', href: videoUrl, blank: true },
+      { cls: "s-tristo", html: '<div class="pf-cs-k">Tristo</div><div class="pf-cs-t">Todas las redes y links en un solo lugar &#8599;</div>', href: "/tristo" },
+    ];
+    let i = 0;
+    const render = () => {
+      const s = slides[i];
+      el.innerHTML = '<a class="pf-cslide ' + s.cls + '" href="' + s.href + '"' + (s.blank ? ' target="_blank" rel="noopener"' : "") + ">" + s.html + "</a>" +
+        '<div class="pf-cdots">' + slides.map((_, k) => '<span class="' + (k === i ? "on" : "") + '" data-k="' + k + '"></span>').join("") + "</div>";
+      el.querySelectorAll("[data-k]").forEach((dot) => dot.onclick = (e) => { e.preventDefault(); e.stopPropagation(); i = Number(dot.getAttribute("data-k")); render(); });
+    };
+    render();
+    vt.push(setInterval(() => { if (!document.hidden) { i = (i + 1) % slides.length; render(); } }, 6000));
+  }
+
+  /* ---------- Perfil público ---------- */
+  function badges(p) {
+    let h = "";
+    if (p.admin) h += '<span class="pf-tag" style="background:#6b8cff;color:#06070d">verificado</span>';
+    if (p.founder) h += '<span class="pf-tag" style="background:#e2b23c;color:#06070d">fundador</span>';
+    return h;
+  }
+  async function viewUser(nick) {
+    clearView(); cur = "user";
+    root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
+    chead("Perfil");
+    body().innerHTML = '<p class="pf-dimc">Cargando…</p>';
+    const { r, d } = await api("/api/social/perfil?nick=" + encodeURIComponent(nick), AH);
+    if (!r.ok || !d || !d.ok) { body().innerHTML = '<p class="pf-empty">No se encontró ese perfil.</p>'; return; }
+    const p = d.perfil, acc = (typeof p.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(p.accent)) ? p.accent : "var(--pf-acc)";
+    const desde = p.desde ? new Date(p.desde).toLocaleDateString("es-AR", { month: "long", year: "numeric" }) : "";
+    const banner = p.banner ? '<div class="pf-banner" style="background-image:url(\'' + esc(p.banner) + '\')"></div>' : '<div class="pf-banner" style="background:linear-gradient(120deg,' + acc + '33,#0a0a0d)"></div>';
+    const links = (Array.isArray(p.links) ? p.links : []).map((l) => { const pl = platOf(l.url); return '<a class="pf-link" href="' + esc(l.url) + '" target="_blank" rel="noopener" style="border-color:' + acc + '55"><span class="pf-link-i" style="color:' + acc + '">' + linkSvg(pl[2]) + '</span><span class="pf-link-t">' + esc(l.title) + '</span><span class="pf-link-x">&#8599;</span></a>'; }).join("");
+    let action = "";
+    if (p.rel === "me") action = '<button class="pf-btn" id="pu-edit">Editar perfil</button>';
+    else if (p.rel === "amigos") action = '<button class="pf-btn" id="pu-msg">Mensaje</button>';
+    else if (p.rel === "pendiente") action = '<button class="pf-btn ghost" disabled>Pendiente</button>';
+    else action = '<button class="pf-btn" id="pu-add">Agregar amigo</button>';
+    const isAdm = me && me.admin && p.rel !== "me";
+    const modTools = isAdm ? '<button class="pf-btn ghost pf-mini" id="pu-mute">Mutear</button><button class="pf-btn ghost pf-mini" id="pu-ban">Banear</button>' : "";
+    body().innerHTML =
+      banner +
+      '<div class="pf-uhead"><span class="pf-ava pf-uava">' + avaPic(p.avatar, headFor(p.nick)) + '</span>' +
+      '<div class="pf-uact">' + action + modTools + '</div></div>' +
+      '<div class="pf-uname">' + esc(p.nick) + " " + badges(p) + '</div>' +
+      '<div class="pf-dimc" style="padding:2px 0">@' + esc(p.nick) + (p.estado ? " · " + esc(p.estado) : "") + '</div>' +
+      (p.bio ? '<p style="margin:8px 0 0;white-space:pre-wrap">' + esc(p.bio) + "</p>" : "") +
+      '<div class="pf-umeta">' + (p.location ? esc(p.location) + " · " : "") + (desde ? "desde " + desde : "") + " · " + fmt.format(p.amigos) + " amigos</div>" +
+      (links ? '<div class="pf-links">' + links + "</div>" : "") +
+      '<div class="pf-h">Números</div>' +
+      '<div class="pf-fila"><b>TeTristo</b><span>' + fmt.format(p.best.tetristo) + '</span></div>' +
+      '<div class="pf-fila"><b>No Parpadees</b><span>' + fmt.format(p.best.parpadeo) + '</span></div>' +
+      (p.caido ? '<div class="pf-fila"><b>El Botón</b><span>Caído N° ' + fmt.format(p.caido) + '</span></div>' : "") +
+      '<div class="pf-h">Posteos</div><div id="pu-posts"></div>';
+    const box = body().querySelector("#pu-posts");
+    const list = (p.pinned ? [Object.assign({ pin: true }, p.pinned)] : []).concat(p.posts || []);
+    box.innerHTML = list.length ? list.map((x) => (x.pin ? '<div class="pf-pinlbl">Fijado</div>' : "") + postHTML(x) + (p.rel === "me" ? '<div class="pf-pinrow"><a data-pin="' + (x.pin ? "0" : x.id) + '">' + (x.pin ? "Quitar fijado" : "Fijar arriba") + "</a></div>" : "")).join("") : '<p class="pf-empty">Todavía no posteó nada.</p>';
+    box.querySelectorAll("[data-pin]").forEach((a) => a.onclick = async () => { const id = Number(a.getAttribute("data-pin")); const { r } = await api("/api/hub/pin-post", { method: "POST", headers: JH, body: JSON.stringify({ id: id || null }) }); if (r.ok) { me.pinned = id || null; viewUser(p.nick); } });
+    const edit = body().querySelector("#pu-edit"); if (edit) edit.onclick = () => setView("perfil");
+    const msgb = body().querySelector("#pu-msg"); if (msgb) msgb.onclick = () => { window.__dmOpen = p.nick; setView("mensajes"); };
+    const add = body().querySelector("#pu-add"); if (add) add.onclick = async () => { add.disabled = true; add.textContent = "..."; const res = await api("/api/social/amigos/pedir", { method: "POST", headers: JH, body: JSON.stringify({ nick: p.nick }) }); add.textContent = res.r.ok ? "Solicitud enviada" : ((res.d && res.d.message) || "No se pudo."); };
+    const mute = body().querySelector("#pu-mute"); if (mute) mute.onclick = async () => { const res = await api("/api/admin/mute", { method: "POST", headers: JH, body: JSON.stringify({ nick: p.nick }) }); mute.textContent = res.r.ok ? "Muteado" : "Error"; };
+    const ban = body().querySelector("#pu-ban"); if (ban) ban.onclick = async () => { if (!window.confirm("¿Banear a " + p.nick + "?")) return; const res = await api("/api/admin/ban", { method: "POST", headers: JH, body: JSON.stringify({ nick: p.nick, reason: "" }) }); ban.textContent = res.r.ok ? "Baneado" : "Error"; };
   }
 
   /* ---------- Amigos ---------- */
@@ -227,9 +332,9 @@
     async function load() {
       const { d } = await api("/api/social/amigos", AH); if (!d || !d.ok) return;
       const sol = body().querySelector("#a-sol");
-      sol.innerHTML = (d.recibidas || []).length ? '<h3 class="pf-h">Solicitudes</h3>' + d.recibidas.map((n) => '<div class="pf-fila"><b>' + esc(n) + '</b><span><button class="pf-btn pf-mini" data-ok="' + esc(n) + '">Aceptar</button> <button class="pf-btn ghost pf-mini" data-no="' + esc(n) + '">No</button></span></div>').join("") : "";
+      sol.innerHTML = (d.recibidas || []).length ? '<h3 class="pf-h">Solicitudes</h3>' + d.recibidas.map((n) => '<div class="pf-fila">' + uname(n) + '<span><button class="pf-btn pf-mini" data-ok="' + esc(n) + '">Aceptar</button> <button class="pf-btn ghost pf-mini" data-no="' + esc(n) + '">No</button></span></div>').join("") : "";
       const lst = body().querySelector("#a-list");
-      lst.innerHTML = (d.amigos || []).length ? d.amigos.map((n) => '<div class="pf-fila"><b>' + esc(n) + '</b><button class="pf-btn ghost pf-mini" data-dm="' + esc(n) + '">Mensaje</button></div>').join("") : '<p class="pf-dimc">Todavía no tenés amigos.' + ((d.enviadas || []).length ? " Pendientes: " + d.enviadas.map(esc).join(", ") + "." : "") + "</p>";
+      lst.innerHTML = (d.amigos || []).length ? d.amigos.map((n) => '<div class="pf-fila">' + uname(n) + '<button class="pf-btn ghost pf-mini" data-dm="' + esc(n) + '">Mensaje</button></div>').join("") : '<p class="pf-dimc">Todavía no tenés amigos.' + ((d.enviadas || []).length ? " Pendientes: " + d.enviadas.map(esc).join(", ") + "." : "") + "</p>";
       body().querySelectorAll("[data-ok]").forEach((b) => b.onclick = async () => { await api("/api/social/amigos/responder", { method: "POST", headers: JH, body: JSON.stringify({ nick: b.getAttribute("data-ok"), aceptar: true }) }); load(); });
       body().querySelectorAll("[data-no]").forEach((b) => b.onclick = async () => { await api("/api/social/amigos/responder", { method: "POST", headers: JH, body: JSON.stringify({ nick: b.getAttribute("data-no"), aceptar: false }) }); load(); });
       body().querySelectorAll("[data-dm]").forEach((b) => b.onclick = () => { window.__dmOpen = b.getAttribute("data-dm"); setView("mensajes"); });
@@ -240,7 +345,7 @@
       if (q.length < 2) { res.innerHTML = '<p class="pf-dimc">Al menos 2 letras.</p>'; return; }
       const { d } = await api("/api/social/usuarios?q=" + encodeURIComponent(q), AH);
       const us = (d && d.usuarios) || [];
-      res.innerHTML = us.length ? us.map((n) => '<div class="pf-fila"><b>' + esc(n) + '</b><button class="pf-btn pf-mini" data-add="' + esc(n) + '">Agregar</button></div>').join("") : '<p class="pf-dimc">Nadie con ese nick.</p>';
+      res.innerHTML = us.length ? us.map((n) => '<div class="pf-fila">' + uname(n) + '<button class="pf-btn pf-mini" data-add="' + esc(n) + '">Agregar</button></div>').join("") : '<p class="pf-dimc">Nadie con ese nick.</p>';
       res.querySelectorAll("[data-add]").forEach((b) => b.onclick = async () => { const { d: dd } = await api("/api/social/amigos/pedir", { method: "POST", headers: JH, body: JSON.stringify({ nick: b.getAttribute("data-add") }) }); b.outerHTML = '<span class="pf-dimc">' + esc((dd && dd.message) || "Listo") + "</span>"; load(); });
     }
     body().querySelector("#a-go").onclick = buscar;
@@ -303,28 +408,52 @@
 
   /* ---------- Cuenta ---------- */
   function viewCuenta() {
-    chead("Perfil");
+    chead("Editar perfil");
     const d = me, desde = d.desde ? new Date(d.desde).toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" }) : "";
+    const acc = (typeof d.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(d.accent)) ? d.accent : "#6b8cff";
     body().innerHTML =
-      '<div style="display:flex;gap:14px;align-items:center">' +
-        '<span class="pf-ava" id="c-ava" style="width:56px;height:64px;cursor:pointer" title="Cambiar foto">' + avaPic(d.avatar, d.char ? d.char.head : "o") + '</span>' +
-        '<div style="min-width:0"><div style="font-size:20px;font-weight:800">' + esc(d.nick) + '</div>' +
-        '<div class="pf-dimc" style="padding:0">' + esc(maskMail(d.email)) + (desde ? " · desde " + desde : "") + '</div>' +
-        '<div class="pf-row" style="margin-top:6px"><button class="pf-btn ghost pf-mini" id="c-photo">Cambiar foto</button>' + (d.avatar ? '<button class="pf-btn ghost pf-mini" id="c-photodel">Quitar</button>' : "") + '<span class="pf-msg" id="c-pmsg" style="margin:0"></span></div>' +
-        '</div></div><input type="file" id="c-file" accept="image/*" style="display:none" />' +
-      '<div style="margin-top:14px"><textarea class="pf-input" id="c-bio" maxlength="140" placeholder="Tu bio (140)" style="border-radius:12px;min-height:60px;width:100%">' + esc(d.bio || "") + '</textarea><div class="pf-row" style="margin-top:8px"><button class="pf-btn" id="c-bsave">Guardar bio</button><span class="pf-msg" id="c-bmsg"></span><button class="pf-btn ghost pf-mini" id="c-out" style="margin-left:auto">Salir</button></div></div>' +
+      '<div class="pf-banner pf-bnedit" style="' + (d.banner ? "background-image:url('" + esc(d.banner) + "')" : "background:linear-gradient(120deg," + acc + "33,#0a0a0d)") + '"><div class="pf-bnbtns"><button class="pf-btn ghost pf-mini" id="c-bn">Portada</button>' + (d.banner ? '<button class="pf-btn ghost pf-mini" id="c-bndel">Quitar</button>' : "") + '</div></div>' +
+      '<div class="pf-uhead"><span class="pf-ava pf-uava" id="c-ava" style="cursor:pointer" title="Cambiar foto">' + avaPic(d.avatar, d.char ? d.char.head : "o") + '</span></div>' +
+      '<div class="pf-row" style="margin-top:6px"><button class="pf-btn ghost pf-mini" id="c-photo">Cambiar foto</button>' + (d.avatar ? '<button class="pf-btn ghost pf-mini" id="c-photodel">Quitar foto</button>' : "") + '<span class="pf-msg" id="c-pmsg" style="margin:0"></span></div>' +
+      '<div class="pf-uname" style="margin-top:8px">' + esc(d.nick) + " " + badges(d) + '</div>' +
+      '<div class="pf-dimc" style="padding:0">@' + esc(d.nick) + (desde ? " · desde " + desde : "") + '</div>' +
+      '<input type="file" id="c-file" accept="image/*" style="display:none" /><input type="file" id="c-bnfile" accept="image/*" style="display:none" />' +
+      '<div class="pf-h">Estado</div><input class="pf-input" id="c-estado" maxlength="80" placeholder="¿qué estás tramando?" value="' + esc(d.estado || "") + '" />' +
+      '<div class="pf-h">Bio</div><textarea class="pf-input" id="c-bio" maxlength="200" placeholder="Contá quién sos (200)" style="border-radius:12px;min-height:64px;width:100%">' + esc(d.bio || "") + '</textarea>' +
+      '<div class="pf-h">Ubicación</div><input class="pf-input" id="c-loc" maxlength="60" placeholder="Ciudad, país" value="' + esc(d.location || "") + '" />' +
+      '<div class="pf-h">Color de acento</div><div class="pf-row"><input type="color" id="c-accent" value="' + acc + '" style="width:48px;height:38px;border:0;background:none;cursor:pointer;padding:0" /><span class="pf-dimc">Personalizá tu perfil</span></div>' +
+      '<div class="pf-h">Tus links</div><div id="c-links"></div><button class="pf-btn ghost pf-mini" id="c-linkadd" style="margin-top:8px">+ Agregar link</button>' +
+      '<div class="pf-row" style="margin-top:16px"><button class="pf-btn" id="c-save">Guardar perfil</button><span class="pf-msg" id="c-smsg"></span><button class="pf-btn ghost pf-mini" id="c-out" style="margin-left:auto">Cerrar sesión</button></div>' +
       '<div class="pf-h">Tus números</div>' +
       '<div class="pf-fila"><b>El Botón</b><span>' + (d.caido ? "Caído N° " + fmt.format(d.caido) : "No caíste") + '</span></div>' +
       '<div class="pf-fila"><b>Récord TeTristo</b><span>' + fmt.format((d.best && d.best.tetristo) || 0) + '</span></div>' +
-      '<div class="pf-fila"><b>Récord No Parpadees</b><span>' + fmt.format((d.best && d.best.parpadeo) || 0) + '</span></div>' +
-      (d.char ? '<div class="pf-fila"><b>El Pueblo</b><span>Vida ' + d.char.vida + " · Hambre " + d.char.hambre + " · Sueño " + d.char.sueno + '</span></div>' : "");
+      '<div class="pf-fila"><b>Récord No Parpadees</b><span>' + fmt.format((d.best && d.best.parpadeo) || 0) + '</span></div>';
+    const linksBox = body().querySelector("#c-links");
+    let links = (Array.isArray(d.links) ? d.links : []).map((l) => ({ title: l.title || "", url: l.url || "" }));
+    function renderLinks() {
+      linksBox.innerHTML = links.length ? links.map((l, i) => '<div class="pf-row" style="margin-bottom:6px"><input class="pf-input" data-lt="' + i + '" maxlength="40" placeholder="título" value="' + esc(l.title) + '" /><input class="pf-input" data-lu="' + i + '" maxlength="300" placeholder="https://..." value="' + esc(l.url) + '" /><button class="pf-btn ghost pf-mini" data-lx="' + i + '">&#10005;</button></div>').join("") : '<p class="pf-dimc" style="padding:4px 0">Sin links todavía.</p>';
+      linksBox.querySelectorAll("[data-lt]").forEach((inp) => inp.oninput = () => { links[Number(inp.getAttribute("data-lt"))].title = inp.value; });
+      linksBox.querySelectorAll("[data-lu]").forEach((inp) => inp.oninput = () => { links[Number(inp.getAttribute("data-lu"))].url = inp.value; });
+      linksBox.querySelectorAll("[data-lx]").forEach((b) => b.onclick = () => { links.splice(Number(b.getAttribute("data-lx")), 1); renderLinks(); });
+    }
+    renderLinks();
+    body().querySelector("#c-linkadd").onclick = () => { if (links.length < 12) { links.push({ title: "", url: "" }); renderLinks(); } };
+    body().querySelector("#c-save").onclick = async () => {
+      const sm = body().querySelector("#c-smsg"); sm.textContent = "...";
+      const payload = { bio: body().querySelector("#c-bio").value, estado: body().querySelector("#c-estado").value, location: body().querySelector("#c-loc").value, accent: body().querySelector("#c-accent").value, links: links.filter((l) => l.title.trim() && /^https?:\/\//.test(l.url.trim())) };
+      const { r, d: dd } = await api("/api/hub/profile", { method: "POST", headers: JH, body: JSON.stringify(payload) });
+      if (r.ok && dd) { me.bio = dd.bio; me.estado = dd.estado; me.location = dd.location; me.accent = dd.accent; me.links = dd.links; sm.textContent = "¡Guardado!"; } else sm.textContent = (dd && dd.message) || "No se pudo.";
+    };
     body().querySelector("#c-out").onclick = async () => { await api("/api/hub/logout", { method: "POST", headers: JH, body: "{}" }); boot(); };
-    body().querySelector("#c-bsave").onclick = async () => { const bm = body().querySelector("#c-bmsg"); bm.textContent = "..."; const { r, d: dd } = await api("/api/hub/bio", { method: "POST", headers: JH, body: JSON.stringify({ bio: body().querySelector("#c-bio").value }) }); if (r.ok) { bm.textContent = "Guardada."; me.bio = dd && dd.bio; } else bm.textContent = (dd && dd.message) || "No se pudo."; };
-    const fileEl = body().querySelector("#c-file"), pmsg = body().querySelector("#c-pmsg"), pick = () => fileEl.click();
-    body().querySelector("#c-photo").onclick = pick; body().querySelector("#c-ava").onclick = pick;
+    const fileEl = body().querySelector("#c-file"), pmsg = body().querySelector("#c-pmsg");
     const setChip = () => { const chip = root.querySelector("#pf-me .pf-ava"); if (chip) chip.innerHTML = avaPic(me.avatar, me.char ? me.char.head : "o"); };
+    body().querySelector("#c-photo").onclick = () => fileEl.click(); body().querySelector("#c-ava").onclick = () => fileEl.click();
     fileEl.onchange = () => { const f = fileEl.files && fileEl.files[0]; if (!f) return; pmsg.textContent = "Subiendo…"; resizeImg(f, async (dataUrl) => { if (!dataUrl) { pmsg.textContent = "No se pudo leer la imagen."; return; } const { r, d: dd } = await api("/api/hub/avatar", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl }) }); if (r.ok) { me.avatar = dd.avatar; setChip(); viewCuenta(); } else pmsg.textContent = (dd && dd.message) || "No se pudo."; }); };
-    const del = body().querySelector("#c-photodel"); if (del) del.onclick = async () => { pmsg.textContent = "..."; const { r } = await api("/api/hub/avatar", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl: null }) }); if (r.ok) { me.avatar = null; setChip(); viewCuenta(); } };
+    const pdel = body().querySelector("#c-photodel"); if (pdel) pdel.onclick = async () => { const { r } = await api("/api/hub/avatar", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl: null }) }); if (r.ok) { me.avatar = null; setChip(); viewCuenta(); } };
+    const bnFile = body().querySelector("#c-bnfile");
+    body().querySelector("#c-bn").onclick = () => bnFile.click();
+    bnFile.onchange = () => { const f = bnFile.files && bnFile.files[0]; if (!f) return; const sm = body().querySelector("#c-smsg"); sm.textContent = "Subiendo portada…"; resizeBanner(f, async (dataUrl) => { if (!dataUrl) { sm.textContent = "No se pudo."; return; } const { r, d: dd } = await api("/api/hub/banner", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl }) }); if (r.ok) { me.banner = dd.banner; sm.textContent = "Portada lista."; viewCuenta(); } else sm.textContent = (dd && dd.message) || "No se pudo."; }); };
+    const bnDel = body().querySelector("#c-bndel"); if (bnDel) bnDel.onclick = async () => { const { r } = await api("/api/hub/banner", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl: null }) }); if (r.ok) { me.banner = null; viewCuenta(); } };
   }
 
   /* ---------- Columna derecha (persistente): Chat Global + Mensajes ---------- */
@@ -340,7 +469,7 @@
     async function send() { const t = txt.value.trim(); if (!t) return; const { r: rr } = await api("/api/chat", { method: "POST", headers: JH, body: JSON.stringify({ body: t }) }); if (rr.ok) { txt.value = ""; load(); } }
     r.querySelector("#rg-send").onclick = send; txt.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
     r.querySelector("#rg-full").onclick = () => setView("chat");
-    async function prev() { const { d } = await api("/api/social/amigos", AH); const box = r.querySelector("#rg-prev"); if (!box) return; const am = (d && d.amigos) || []; box.innerHTML = am.length ? am.slice(0, 6).map((n) => '<div class="pf-prev" data-n="' + esc(n) + '"><span class="pf-ava">' + avatar(headFor(n)) + '</span><div><b>' + esc(n) + '</b><span>tocá para escribir</span></div></div>').join("") : '<p class="pf-dimc" style="padding:14px">Agregá amigos para chatear.</p>'; box.querySelectorAll("[data-n]").forEach((b) => b.onclick = () => { window.__dmOpen = b.getAttribute("data-n"); setView("mensajes"); }); }
+    async function prev() { const { d } = await api("/api/social/amigos", AH); const box = r.querySelector("#rg-prev"); if (!box) return; const am = (d && d.amigos) || []; box.innerHTML = am.length ? am.slice(0, 6).map((n) => '<div class="pf-prev" data-n="' + esc(n) + '"><span class="pf-ava">' + avatar(headFor(n)) + '</span><div>' + uname(n) + '<span>tocá para escribir</span></div></div>').join("") : '<p class="pf-dimc" style="padding:14px">Agregá amigos para chatear.</p>'; box.querySelectorAll("[data-n]").forEach((b) => b.onclick = () => { window.__dmOpen = b.getAttribute("data-n"); setView("mensajes"); }); }
     prev(); rt.push(setInterval(() => { if (!document.hidden) prev(); }, 20000));
   }
 
