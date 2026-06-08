@@ -25,6 +25,17 @@
     return cv.outerHTML;
   }
   function maskMail(e) { const a = String(e).split("@"); if (a.length !== 2) return ""; return (a[0] || "").slice(0, 2) + "***@" + a[1]; }
+  function avaPic(photo, head) { return photo ? '<img class="pf-img" src="' + esc(photo) + '" alt="" referrerpolicy="no-referrer" />' : avatar(head); }
+  function resizeImg(file, cb) {
+    const fr = new FileReader();
+    fr.onload = () => { const img = new Image(); img.onload = () => {
+      const S = 256, cv = document.createElement("canvas"); cv.width = S; cv.height = S;
+      const ctx = cv.getContext("2d"), scale = Math.max(S / img.width, S / img.height), w = img.width * scale, h = img.height * scale;
+      ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+      try { cb(cv.toDataURL("image/jpeg", 0.82)); } catch (_) { cb(null); }
+    }; img.onerror = () => cb(null); img.src = String(fr.result); };
+    fr.onerror = () => cb(null); fr.readAsDataURL(file);
+  }
 
   const IC = {
     inicio: '<path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/>',
@@ -36,6 +47,8 @@
     chat: '<path d="M5 5h14v10H9l-4 4z"/>',
     perfil: '<circle cx="12" cy="8" r="4"/><path d="M5 20c0-4 3.2-6 7-6s7 2 7 6"/>',
     admin: '<path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/>',
+    tienda: '<path d="M5 8h14l-1 11H6z"/><path d="M9 8a3 3 0 016 0"/>',
+    salir: '<path d="M14 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2v-2"/><path d="M10 12h10m0 0l-3-3m3 3l-3 3"/>',
   };
   function ic(n) { return '<svg class="pf-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + IC[n] + "</svg>"; }
 
@@ -62,7 +75,7 @@
   function login(err) {
     const emsg = err === "error" ? "No se pudo entrar con Google. Probá de nuevo." : err === "banned" ? "Tu cuenta está suspendida." : err === "off" ? "El ingreso con Google todavía no está activo. Volvé en un rato." : "";
     root.innerHTML =
-      '<div style="max-width:400px;margin:12vh auto 0;text-align:center" class="pf-center"><div class="pf-body">' +
+      '<div style="max-width:380px;margin:12vh auto 0;text-align:center" class="pf-auth"><div class="pf-body">' +
       '<h2 class="pf-ctitle" style="padding:0 0 4px">Entrá a youarethead</h2>' +
       '<p class="pf-dimc" style="padding:0 0 14px">Una cuenta, una identidad. Entrá con Google: rápido y seguro.</p>' +
       (emsg ? '<p class="pf-msg" style="color:#ff6b6b;margin:0 0 8px">' + emsg + '</p>' : '') +
@@ -71,7 +84,7 @@
   }
   function migrationModal(done) {
     root.innerHTML =
-      '<div style="max-width:430px;margin:10vh auto 0;text-align:center" class="pf-center"><div class="pf-body">' +
+      '<div style="max-width:400px;margin:10vh auto 0;text-align:center" class="pf-auth"><div class="pf-body">' +
       '<h2 class="pf-ctitle" style="padding:0 0 6px">Nos fue mejor de lo esperado</h2>' +
       '<p class="pf-dimc" style="padding:0 0 14px">Superamos todas las expectativas de usuarios. Para mantener tu cuenta segura, ahora se entra con Google. Tu cuenta, tus amigos y tus posts siguen igual.</p>' +
       '<button class="pf-btn" id="mg-ok" style="width:100%">Entendido</button>' +
@@ -83,7 +96,7 @@
     if (!d || !d.ok) { login("error"); return; }
     const suggest = d.suggest || "";
     root.innerHTML =
-      '<div style="max-width:430px;margin:8vh auto 0" class="pf-center"><div class="pf-body">' +
+      '<div style="max-width:400px;margin:8vh auto 0" class="pf-auth"><div class="pf-body">' +
       '<h2 class="pf-ctitle" style="padding:0 0 6px;text-align:center">Nos fue mejor de lo esperado</h2>' +
       '<p class="pf-dimc" style="padding:0 0 12px;text-align:left">Superamos todas las expectativas de usuarios. Para mantener tu cuenta segura migramos el ingreso a Google. Una última cosa:</p>' +
       '<p style="font-weight:700;text-align:center;margin:0 0 10px">¿Ya tenías cuenta acá antes?</p>' +
@@ -114,10 +127,13 @@
     root.innerHTML =
       '<div class="pf-app">' +
         '<aside class="pf-left"><a href="/" class="pf-brand">youarethead.com.ar</a><nav class="pf-nav" id="pf-nav">' +
-          '<a href="/">' + ic("inicio") + '<span>Inicio</span></a>' + navItem("feed", "Feed") + navItem("juegos", "Juegos") + navItem("canal", "Insomnio Crónico") +
-          navItem("mensajes", "Mensajes") + navItem("amigos", "Amigos") + navItem("chat", "Chat Global") + navItem("perfil", "Perfil") + (me.admin ? navItem("admin", "Admin") : "") +
+          '<a href="/">' + ic("inicio") + '<span>Inicio</span></a>' + navItem("feed", "Feed") +
+          navItem("mensajes", "Mensajes") + navItem("amigos", "Amigos") + navItem("chat", "Chat Global") +
+          navItem("juegos", "Juegos") + navItem("tienda", "Tienda") + navItem("canal", "Insomnio Crónico") +
+          navItem("perfil", "Perfil") + (me.admin ? navItem("admin", "Admin") : "") +
           '<button class="pf-postbtn" id="pf-postbtn">Postear</button>' +
-          '<div class="pf-me" id="pf-me"><span class="pf-ava">' + avatar(myHead) + '</span><div><b>' + esc(me.nick) + '</b><span>@' + esc(me.nick) + '</span></div></div>' +
+          '<div class="pf-me" id="pf-me"><span class="pf-ava">' + avaPic(me.avatar, myHead) + '</span><div><b>' + esc(me.nick) + '</b><span>@' + esc(me.nick) + '</span></div></div>' +
+          '<button class="pf-logout" id="pf-logout">' + ic("salir") + '<span>Cerrar sesión</span></button>' +
         '</nav></aside>' +
         '<main class="pf-center"><div class="pf-chead" id="pf-chead"></div><div id="pf-body"></div></main>' +
         '<aside class="pf-right" id="pf-right"></aside>' +
@@ -125,12 +141,14 @@
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => { b.onclick = () => setView(b.getAttribute("data-v")); });
     root.querySelector("#pf-postbtn").onclick = () => { setView("feed"); const t = root.querySelector("#pf-post"); if (t) t.focus(); };
     root.querySelector("#pf-me").onclick = () => setView("perfil");
+    root.querySelector("#pf-logout").onclick = async () => { await api("/api/hub/logout", { method: "POST", headers: JH, body: "{}" }); boot(); };
     rightRail();
     setView("feed");
   }
   function navItem(v, label) {
     if (v === "juegos") return '<a href="/tristos">' + ic("juegos") + "<span>" + label + "</span></a>";
     if (v === "canal") return '<a href="https://www.youtube.com/@tristoban" target="_blank" rel="noopener">' + ic("canal") + "<span>" + label + "</span></a>";
+    if (v === "tienda") return '<button class="pf-soon" disabled>' + ic("tienda") + "<span>" + label + '</span><span class="pf-badge">pronto</span></button>';
     return '<button data-v="' + v + '">' + ic(v) + "<span>" + label + "</span></button>";
   }
   function chead(title, tabsHTML) { root.querySelector("#pf-chead").innerHTML = '<div class="pf-ctitle">' + title + "</div>" + (tabsHTML || ""); }
@@ -147,12 +165,12 @@
   }
 
   /* ---------- Feed ---------- */
-  function postHTML(p) { return '<div class="pf-post"><span class="pf-ava">' + avatar(headFor(p.nick)) + '</span><div class="pf-pb"><div class="pf-ph"><b>' + esc(p.nick) + '</b><span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><p>' + esc(p.body) + "</p></div></div>"; }
+  function postHTML(p) { return '<div class="pf-post"><span class="pf-ava">' + avaPic(p.avatar, headFor(p.nick)) + '</span><div class="pf-pb"><div class="pf-ph"><b>' + esc(p.nick) + '</b><span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><p>' + esc(p.body) + "</p></div></div>"; }
   function viewFeed() {
     let scope = "ti";
     chead("Feed", '<div class="pf-tabs2"><button data-s="ti" class="on">Para ti</button><button data-s="amigos">Amigos</button></div>');
     body().innerHTML =
-      '<div class="pf-comp"><span class="pf-ava">' + avatar(me.char ? me.char.head : "o") + '</span><div class="pf-cbox"><textarea id="pf-post" maxlength="280" placeholder="¿Qué está pasando ahí adentro?"></textarea><div class="pf-crow"><button class="pf-cbtn" id="pf-pub">Postear</button></div><p class="pf-msg" id="pf-pmsg"></p></div></div>' +
+      '<div class="pf-comp"><span class="pf-ava">' + avaPic(me.avatar, me.char ? me.char.head : "o") + '</span><div class="pf-cbox"><textarea id="pf-post" maxlength="280" placeholder="¿Qué está pasando ahí adentro?"></textarea><div class="pf-crow"><button class="pf-cbtn" id="pf-pub">Postear</button></div><p class="pf-msg" id="pf-pmsg"></p></div></div>' +
       '<div id="pf-feed"><p class="pf-dimc">Cargando…</p></div>';
     async function load() {
       const { d } = await api("/api/social/feed" + (scope === "amigos" ? "?scope=amigos" : ""), AH);
@@ -288,7 +306,12 @@
     chead("Perfil");
     const d = me, desde = d.desde ? new Date(d.desde).toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" }) : "";
     body().innerHTML =
-      '<div style="display:flex;gap:14px;align-items:center"><span class="pf-ava" style="width:56px;height:64px">' + avatar(d.char ? d.char.head : "o") + '</span><div><div style="font-size:20px;font-weight:800">' + esc(d.nick) + '</div><div class="pf-dimc" style="padding:0">' + esc(maskMail(d.email)) + (desde ? " · desde " + desde : "") + '</div></div></div>' +
+      '<div style="display:flex;gap:14px;align-items:center">' +
+        '<span class="pf-ava" id="c-ava" style="width:56px;height:64px;cursor:pointer" title="Cambiar foto">' + avaPic(d.avatar, d.char ? d.char.head : "o") + '</span>' +
+        '<div style="min-width:0"><div style="font-size:20px;font-weight:800">' + esc(d.nick) + '</div>' +
+        '<div class="pf-dimc" style="padding:0">' + esc(maskMail(d.email)) + (desde ? " · desde " + desde : "") + '</div>' +
+        '<div class="pf-row" style="margin-top:6px"><button class="pf-btn ghost pf-mini" id="c-photo">Cambiar foto</button>' + (d.avatar ? '<button class="pf-btn ghost pf-mini" id="c-photodel">Quitar</button>' : "") + '<span class="pf-msg" id="c-pmsg" style="margin:0"></span></div>' +
+        '</div></div><input type="file" id="c-file" accept="image/*" style="display:none" />' +
       '<div style="margin-top:14px"><textarea class="pf-input" id="c-bio" maxlength="140" placeholder="Tu bio (140)" style="border-radius:12px;min-height:60px;width:100%">' + esc(d.bio || "") + '</textarea><div class="pf-row" style="margin-top:8px"><button class="pf-btn" id="c-bsave">Guardar bio</button><span class="pf-msg" id="c-bmsg"></span><button class="pf-btn ghost pf-mini" id="c-out" style="margin-left:auto">Salir</button></div></div>' +
       '<div class="pf-h">Tus números</div>' +
       '<div class="pf-fila"><b>El Botón</b><span>' + (d.caido ? "Caído N° " + fmt.format(d.caido) : "No caíste") + '</span></div>' +
@@ -297,6 +320,11 @@
       (d.char ? '<div class="pf-fila"><b>El Pueblo</b><span>Vida ' + d.char.vida + " · Hambre " + d.char.hambre + " · Sueño " + d.char.sueno + '</span></div>' : "");
     body().querySelector("#c-out").onclick = async () => { await api("/api/hub/logout", { method: "POST", headers: JH, body: "{}" }); boot(); };
     body().querySelector("#c-bsave").onclick = async () => { const bm = body().querySelector("#c-bmsg"); bm.textContent = "..."; const { r, d: dd } = await api("/api/hub/bio", { method: "POST", headers: JH, body: JSON.stringify({ bio: body().querySelector("#c-bio").value }) }); if (r.ok) { bm.textContent = "Guardada."; me.bio = dd && dd.bio; } else bm.textContent = (dd && dd.message) || "No se pudo."; };
+    const fileEl = body().querySelector("#c-file"), pmsg = body().querySelector("#c-pmsg"), pick = () => fileEl.click();
+    body().querySelector("#c-photo").onclick = pick; body().querySelector("#c-ava").onclick = pick;
+    const setChip = () => { const chip = root.querySelector("#pf-me .pf-ava"); if (chip) chip.innerHTML = avaPic(me.avatar, me.char ? me.char.head : "o"); };
+    fileEl.onchange = () => { const f = fileEl.files && fileEl.files[0]; if (!f) return; pmsg.textContent = "Subiendo…"; resizeImg(f, async (dataUrl) => { if (!dataUrl) { pmsg.textContent = "No se pudo leer la imagen."; return; } const { r, d: dd } = await api("/api/hub/avatar", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl }) }); if (r.ok) { me.avatar = dd.avatar; setChip(); viewCuenta(); } else pmsg.textContent = (dd && dd.message) || "No se pudo."; }); };
+    const del = body().querySelector("#c-photodel"); if (del) del.onclick = async () => { pmsg.textContent = "..."; const { r } = await api("/api/hub/avatar", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl: null }) }); if (r.ok) { me.avatar = null; setChip(); viewCuenta(); } };
   }
 
   /* ---------- Columna derecha (persistente): Chat Global + Mensajes ---------- */

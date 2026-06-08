@@ -731,7 +731,7 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
     if (!u) return { ok: true, logged: false, nick: null };
-    const det = await db.query('SELECT email, bio, created_at, pin_hash FROM hub_users WHERE id = $1', [u.id]);
+    const det = await db.query('SELECT email, bio, created_at, pin_hash, avatar FROM hub_users WHERE id = $1', [u.id]);
     const r = det.rows[0] ?? {};
     let caido = 0;
     const c = await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [u.id]);
@@ -743,7 +743,7 @@ export function buildApp(db: Db): FastifyInstance {
     const cr = ch.rows[0];
     return {
       ok: true, logged: true, nick: u.nick, admin: isAdminNick(u.nick),
-      email: String(r.email ?? ''), pin: !!r.pin_hash, bio: (r.bio as string | null) ?? '', desde: r.created_at ?? null, caido,
+      email: String(r.email ?? ''), pin: !!r.pin_hash, avatar: (r.avatar as string | null) ?? null, bio: (r.bio as string | null) ?? '', desde: r.created_at ?? null, caido,
       best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0 },
       char: cr ? { head: String(cr.head ?? 'o'), vida: Math.round(Number(cr.vida ?? 0)), hambre: Math.round(Number(cr.hambre ?? 0)), sueno: Math.round(Number(cr.sueno ?? 0)) } : null,
     };
@@ -757,6 +757,18 @@ export function buildApp(db: Db): FastifyInstance {
     if (offensiveText(bio)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Esa bio no va.' });
     await db.query('UPDATE hub_users SET bio = $2 WHERE id = $1', [u.id, bio]);
     return { ok: true, bio };
+  });
+
+  app.post('/api/hub/avatar', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const raw = ((req.body ?? {}) as { dataUrl?: unknown }).dataUrl;
+    if (raw === null || raw === '') { await db.query('UPDATE hub_users SET avatar = NULL WHERE id = $1', [u.id]); return { ok: true, avatar: null }; }
+    const dataUrl = typeof raw === 'string' ? raw : '';
+    if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(dataUrl)) return reply.code(400).send({ ok: false, error: 'bad_img', message: 'Imagen inválida.' });
+    if (dataUrl.length > 300000) return reply.code(413).send({ ok: false, error: 'too_big', message: 'La foto es muy pesada. Probá una más chica.' });
+    await db.query('UPDATE hub_users SET avatar = $2 WHERE id = $1', [u.id, dataUrl]);
+    return { ok: true, avatar: dataUrl };
   });
 
   app.get('/api/admin/users', async (req, reply) => {
@@ -890,11 +902,11 @@ export function buildApp(db: Db): FastifyInstance {
     const scope = ((req.query ?? {}) as { scope?: unknown }).scope;
     let rows;
     if (scope === 'amigos') {
-      rows = (await db.query("SELECT p.id, p.nick, p.body, p.created_at FROM posts p WHERE p.user_id = $1 OR p.user_id IN (SELECT CASE WHEN a = $1 THEN b ELSE a END FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado') ORDER BY p.id DESC LIMIT 30", [u.id])).rows;
+      rows = (await db.query("SELECT p.id, p.nick, p.body, p.created_at, u.avatar FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id WHERE p.user_id = $1 OR p.user_id IN (SELECT CASE WHEN a = $1 THEN b ELSE a END FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado') ORDER BY p.id DESC LIMIT 30", [u.id])).rows;
     } else {
-      rows = (await db.query('SELECT id, nick, body, created_at FROM posts ORDER BY id DESC LIMIT 30')).rows;
+      rows = (await db.query('SELECT p.id, p.nick, p.body, p.created_at, u.avatar FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id ORDER BY p.id DESC LIMIT 30')).rows;
     }
-    return { ok: true, posts: rows.map((r) => ({ id: Number(r.id), nick: r.nick, body: r.body, t: r.created_at })) };
+    return { ok: true, posts: rows.map((r) => ({ id: Number(r.id), nick: r.nick, body: r.body, t: r.created_at, avatar: (r.avatar as string | null) ?? null })) };
   });
 
   app.post('/api/social/post', async (req, reply) => {
