@@ -1,6 +1,8 @@
 /* ====== Tristo's Game Hub ====== */
 
 .th-main { min-height: 100svh; display: flex; justify-content: center; align-items: flex-start; padding: 88px 14px 48px; }
+.th-col { flex-direction: column; align-items: center; gap: 14px; }
+.th-col .hd-chat { width: 100%; max-width: 680px; }
 #th-page { width: 100%; max-width: 680px; }
 
 .th-shell {

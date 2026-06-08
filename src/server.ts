@@ -11,7 +11,7 @@ const IP_SALT = process.env.IP_SALT ?? 'youarethead-default-salt-cambiame';
 const ONE_PER_IP = (process.env.ONE_PER_IP ?? 'true').toLowerCase() !== 'false';
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? 'https://youarethead.com.ar').replace(/\/+$/, '');
 const FROM_EMAIL = process.env.FROM_EMAIL ?? 'YOU ARE THE AD <noreply@youarethead.com.ar>';
-const LAUNCHED = (process.env.LAUNCHED ?? 'false').toLowerCase() === 'true';
+const LAUNCHED = (process.env.LAUNCHED ?? 'true').toLowerCase() === 'true';
 const ADMIN_KEY = process.env.ADMIN_KEY ?? '';
 const ADMIN_TOKEN = ADMIN_KEY ? createHash('sha256').update('yath-admin:' + ADMIN_KEY + ':' + IP_SALT).digest('hex').slice(0, 32) : '';
 
