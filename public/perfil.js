@@ -102,6 +102,7 @@
   function view() { return root.querySelector("#pf-view"); }
   function go(t, arg) {
     clearTimers();
+    window.YATH_CONV = null;
     if (t === "feed") tabFeed();
     else if (t === "amigos") tabAmigos();
     else if (t === "msgs") tabMsgs(arg);
@@ -194,6 +195,7 @@
       box.querySelectorAll("[data-g]").forEach((b) => { b.onclick = () => { gsel = { id: Number(b.getAttribute("data-g")), nombre: b.getAttribute("data-n") }; con = null; maxId = 0; marca(box, b); clearTimers(); gConv(); }; });
     }
     function dmConv() {
+      window.YATH_CONV = { dm: con };
       const c = view().querySelector("#pf-dmc");
       c.innerHTML = '<div class="pf-dmh">con <b>' + esc(con) + '</b></div><div class="pf-dmlog" id="pf-dmlog"></div>' +
         '<div class="pf-row"><input id="pf-dmtxt" maxlength="300" placeholder="escribí…" autocomplete="off" /><button class="th-btn" id="pf-dmsend">Enviar</button></div><p class="th-msg" id="pf-dmmsg"></p>';
@@ -219,6 +221,7 @@
       txt.addEventListener("keydown", (e) => { if (e.key === "Enter") enviar(); });
     }
     function gConv() {
+      window.YATH_CONV = { g: gsel.id };
       const c = view().querySelector("#pf-dmc");
       c.innerHTML = '<div class="pf-dmh"><b># ' + esc(gsel.nombre) + '</b> · <span class="th-dim" id="pf-gmiem"></span><br><a href="#" id="pf-gadd">+ sumar amigo</a> · <a href="#" id="pf-gout">salir del grupo</a></div>' +
         '<div class="pf-dmlog" id="pf-dmlog"></div>' +

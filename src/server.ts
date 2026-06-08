@@ -808,6 +808,20 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.code(201).send({ ok: true, mensaje: { id: Number(row?.id ?? 0), mio: true, nick: u.nick ?? '', body: text, t: row?.created_at } });
   });
 
+  app.get('/api/social/nuevos', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const dm = await db.query('SELECT d.id, u2.nick FROM dms d JOIN hub_users u2 ON u2.id = d.de WHERE d.para = $1 ORDER BY d.id DESC LIMIT 1', [u.id]);
+    const gr = await db.query('SELECT m.id, m.nick, m.grupo_id, g.nombre FROM grupo_msgs m JOIN grupos g ON g.id = m.grupo_id WHERE m.de <> $1 AND m.grupo_id IN (SELECT grupo_id FROM grupo_miembros WHERE user_id = $1) ORDER BY m.id DESC LIMIT 1', [u.id]);
+    const dr = dm.rows[0], gg = gr.rows[0];
+    return {
+      ok: true,
+      dm: dr ? { id: Number(dr.id), de: dr.nick } : null,
+      grupo: gg ? { id: Number(gg.id), gid: Number(gg.grupo_id), de: gg.nick, nombre: gg.nombre } : null,
+    };
+  });
+
   app.post('/api/hub/logout', async (req, reply) => {
     const u = await hubUserBySession(db, req);
     if (u) await db.query('UPDATE hub_users SET session = NULL WHERE id = $1', [u.id]);
