@@ -12,7 +12,7 @@
     if (!t) {
       t = document.createElement("a");
       t.id = "yath-toast";
-      t.href = "/perfil";
+      t.href = "/yata";
       t.style.cssText = "position:fixed;right:14px;bottom:72px;z-index:99990;background:rgba(8,8,11,.92);border:1px solid rgba(255,255,255,.3);color:#fff;font:700 12px Montserrat,system-ui,sans-serif;padding:11px 16px;border-radius:10px;text-decoration:none;max-width:260px;box-shadow:0 12px 40px rgba(0,0,0,.5);display:none";
       document.body.appendChild(t);
     }

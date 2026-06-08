@@ -190,6 +190,7 @@ export async function initDb(db: Db): Promise<void> {
   `);
   await db.query(`CREATE INDEX IF NOT EXISTS comments_post_idx ON comments (post_id, id);`);
   await db.query(`CREATE TABLE IF NOT EXISTS post_likes (post_id BIGINT NOT NULL, user_id BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (post_id, user_id));`);
+  await db.query(`CREATE TABLE IF NOT EXISTS comment_likes (comment_id BIGINT NOT NULL, user_id BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (comment_id, user_id));`);
   await db.query(`
     CREATE TABLE IF NOT EXISTS grupos (
       id BIGSERIAL PRIMARY KEY,
@@ -318,7 +319,7 @@ function cleanupOauth(): void {
   for (const [k, v] of oauthState) if (now - v.ts > 600000) oauthState.delete(k);
   for (const [k, v] of oauthPending) if (now - v.ts > 600000) oauthPending.delete(k);
 }
-function safeReturn(p: unknown): string { return typeof p === 'string' && /^\/[A-Za-z0-9/_-]*$/.test(p) && !p.startsWith('//') ? p : '/perfil'; }
+function safeReturn(p: unknown): string { return typeof p === 'string' && /^\/[A-Za-z0-9/_-]*$/.test(p) && !p.startsWith('//') ? p : '/yata'; }
 function readCookie(req: FastifyRequest, name: string): string {
   const c = req.headers.cookie;
   if (typeof c !== 'string') return '';
@@ -601,7 +602,7 @@ export function buildApp(db: Db): FastifyInstance {
   app.post('/api/hub/claim', async (_req, reply) => reply.code(410).send({ ok: false, error: 'pin_off', message: 'Ahora se entra solo con Google. Si tenías cuenta, vinculala al entrar.' }));
 
   app.get('/api/auth/google', async (req, reply) => {
-    if (!GOOGLE_ENABLED) return redir(reply, '/perfil?oauth=off');
+    if (!GOOGLE_ENABLED) return redir(reply, '/yata?oauth=off');
     cleanupOauth();
     const ret = safeReturn((req.query as { return?: unknown })?.return);
     const state = randomBytes(16).toString('hex');
@@ -617,13 +618,13 @@ export function buildApp(db: Db): FastifyInstance {
   });
 
   app.get('/api/auth/google/callback', async (req, reply) => {
-    if (!GOOGLE_ENABLED) return redir(reply, '/perfil?oauth=off');
+    if (!GOOGLE_ENABLED) return redir(reply, '/yata?oauth=off');
     cleanupOauth();
     const q = (req.query ?? {}) as { code?: unknown; state?: unknown; error?: unknown };
     const code = typeof q.code === 'string' ? q.code : '';
     const state = typeof q.state === 'string' ? q.state : '';
     const st = state ? oauthState.get(state) : undefined;
-    if (q.error || !code || !st) return redir(reply, '/perfil?oauth=error');
+    if (q.error || !code || !st) return redir(reply, '/yata?oauth=error');
     oauthState.delete(state);
     const ret = st.ret;
     let profile: { sub: string; email: string; verified: boolean; name: string; picture: string } | null = null;
@@ -633,20 +634,20 @@ export function buildApp(db: Db): FastifyInstance {
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ code, client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, redirect_uri: GOOGLE_REDIRECT, grant_type: 'authorization_code' }).toString(),
       });
-      if (!tok.ok) return redir(reply, '/perfil?oauth=error');
+      if (!tok.ok) return redir(reply, '/yata?oauth=error');
       const tj = (await tok.json()) as { access_token?: string };
-      if (!tj.access_token) return redir(reply, '/perfil?oauth=error');
+      if (!tj.access_token) return redir(reply, '/yata?oauth=error');
       const ui = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { authorization: `Bearer ${tj.access_token}` } });
-      if (!ui.ok) return redir(reply, '/perfil?oauth=error');
+      if (!ui.ok) return redir(reply, '/yata?oauth=error');
       const uj = (await ui.json()) as Record<string, unknown>;
       profile = { sub: String(uj.sub ?? ''), email: String(uj.email ?? ''), verified: uj.email_verified === true || uj.email_verified === 'true', name: String(uj.name ?? ''), picture: String(uj.picture ?? '') };
-    } catch { return redir(reply, '/perfil?oauth=error'); }
-    if (!profile.sub) return redir(reply, '/perfil?oauth=error');
+    } catch { return redir(reply, '/yata?oauth=error'); }
+    if (!profile.sub) return redir(reply, '/yata?oauth=error');
     const sub = profile.sub;
     const bySub = await db.query('SELECT id, nick, banned FROM hub_users WHERE google_sub = $1', [sub]);
     const subRow = bySub.rows[0];
     if (subRow) {
-      if (subRow.banned === true) return redir(reply, '/perfil?oauth=banned');
+      if (subRow.banned === true) return redir(reply, '/yata?oauth=banned');
       const sess = newToken();
       await db.query('UPDATE hub_users SET session = $2, avatar = COALESCE(avatar, $3) WHERE id = $1', [subRow.id, sess, profile.picture || null]);
       reply.header('set-cookie', SESS_COOKIE(sess));
@@ -656,7 +657,7 @@ export function buildApp(db: Db): FastifyInstance {
       const byMail = await db.query('SELECT id, nick, banned, google_sub FROM hub_users WHERE email_norm = $1', [profile.email.toLowerCase()]);
       const mr = byMail.rows[0];
       if (mr && !mr.google_sub) {
-        if (mr.banned === true) return redir(reply, '/perfil?oauth=banned');
+        if (mr.banned === true) return redir(reply, '/yata?oauth=banned');
         const sess = newToken();
         await db.query('UPDATE hub_users SET google_sub = $2, session = $3, avatar = COALESCE(avatar, $4) WHERE id = $1', [mr.id, sub, sess, profile.picture || null]);
         reply.header('set-cookie', SESS_COOKIE(sess));
@@ -666,7 +667,7 @@ export function buildApp(db: Db): FastifyInstance {
     const pid = randomBytes(16).toString('hex');
     oauthPending.set(pid, { sub, email: profile.email, name: profile.name, avatar: profile.picture, ts: Date.now() });
     reply.header('set-cookie', `yath_oauth=${pid}; Path=/; Max-Age=600; HttpOnly; SameSite=Lax`);
-    return redir(reply, '/perfil?oauth=setup');
+    return redir(reply, '/yata?oauth=setup');
   });
 
   app.get('/api/auth/google/pending', async (req, reply) => {
@@ -1090,10 +1091,10 @@ export function buildApp(db: Db): FastifyInstance {
     const meId = meU ? meU.id : 0;
     const pr = (await db.query('SELECT p.id, p.nick, p.title, p.body, p.created_at, u.avatar, (SELECT count(*) FROM post_likes pl WHERE pl.post_id = p.id) AS nlik, EXISTS(SELECT 1 FROM post_likes pl2 WHERE pl2.post_id = p.id AND pl2.user_id = $2) AS liked FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id WHERE p.id = $1', [id, meId])).rows[0];
     if (!pr) return reply.code(404).send({ ok: false, error: 'not_found', message: 'Ese posteo no existe.' });
-    const cs = (await db.query('SELECT c.id, c.parent_id, c.nick, c.body, c.created_at, u.avatar FROM comments c LEFT JOIN hub_users u ON u.id = c.user_id WHERE c.post_id = $1 ORDER BY c.id ASC LIMIT 300', [id])).rows;
+    const cs = (await db.query('SELECT c.id, c.parent_id, c.nick, c.body, c.created_at, u.avatar, (SELECT count(*) FROM comment_likes cl WHERE cl.comment_id = c.id) AS nlik, EXISTS(SELECT 1 FROM comment_likes cl2 WHERE cl2.comment_id = c.id AND cl2.user_id = $2) AS liked FROM comments c LEFT JOIN hub_users u ON u.id = c.user_id WHERE c.post_id = $1 ORDER BY c.id ASC LIMIT 300', [id, meId])).rows;
     return { ok: true,
       post: { id: Number(pr.id), nick: pr.nick, title: (pr.title as string | null) ?? '', body: pr.body, t: pr.created_at, avatar: (pr.avatar as string | null) ?? null, nlik: Number(pr.nlik ?? 0), liked: pr.liked === true },
-      comments: cs.map((c) => ({ id: Number(c.id), parent: c.parent_id ? Number(c.parent_id) : null, nick: c.nick, body: c.body, t: c.created_at, avatar: (c.avatar as string | null) ?? null })) };
+      comments: cs.map((c) => ({ id: Number(c.id), parent: c.parent_id ? Number(c.parent_id) : null, nick: c.nick, body: c.body, t: c.created_at, avatar: (c.avatar as string | null) ?? null, nlik: Number(c.nlik ?? 0), liked: c.liked === true })) };
   });
 
   app.post('/api/social/post', async (req, reply) => {
@@ -1149,6 +1150,21 @@ export function buildApp(db: Db): FastifyInstance {
     if (had.rows.length) { await db.query('DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2', [postId, u.id]); liked = false; }
     else { await db.query('INSERT INTO post_likes (post_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [postId, u.id]); liked = true; }
     const cnt = await db.query('SELECT count(*) AS c FROM post_likes WHERE post_id = $1', [postId]);
+    return { ok: true, liked, count: Number(cnt.rows[0]?.c ?? 0) };
+  });
+
+  app.post('/api/social/clike', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const cid = Math.floor(Number(((req.body ?? {}) as { commentId?: unknown }).commentId));
+    if (!Number.isInteger(cid) || cid <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
+    const ex = await db.query('SELECT 1 FROM comments WHERE id = $1', [cid]);
+    if (!ex.rows.length) return reply.code(404).send({ ok: false, error: 'no_comment' });
+    const had = await db.query('SELECT 1 FROM comment_likes WHERE comment_id = $1 AND user_id = $2', [cid, u.id]);
+    let liked: boolean;
+    if (had.rows.length) { await db.query('DELETE FROM comment_likes WHERE comment_id = $1 AND user_id = $2', [cid, u.id]); liked = false; }
+    else { await db.query('INSERT INTO comment_likes (comment_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [cid, u.id]); liked = true; }
+    const cnt = await db.query('SELECT count(*) AS c FROM comment_likes WHERE comment_id = $1', [cid]);
     return { ok: true, liked, count: Number(cnt.rows[0]?.c ?? 0) };
   });
 
@@ -1401,10 +1417,11 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.code(400).send({ ok: false, error: 'accion' });
   });
 
-  app.get('/perfil', async (_req, reply) => {
+  app.get('/yata', async (_req, reply) => {
     reply.header('cache-control', 'no-store');
     return reply.sendFile('perfil.html');
   });
+  app.get('/perfil', async (req, reply) => { const u = (req.raw && req.raw.url) || ''; const q = u.indexOf('?'); return redir(reply, '/yata' + (q >= 0 ? u.slice(q) : '')); });
   app.get('/u/:nick', async (_req, reply) => {
     reply.header('cache-control', 'no-store');
     return reply.sendFile('perfil.html');

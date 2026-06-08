@@ -56,6 +56,11 @@
     const { r, d } = await api("/api/social/like", { method: "POST", headers: JH, body: JSON.stringify({ postId: Number(id) }) });
     if (r.ok && d) { btn.classList.toggle("on", !!d.liked); const sp = btn.querySelector("span"); if (sp) sp.textContent = d.count; }
   }
+  async function toggleClike(btn) {
+    const id = btn.getAttribute("data-clike");
+    const { r, d } = await api("/api/social/clike", { method: "POST", headers: JH, body: JSON.stringify({ commentId: Number(id) }) });
+    if (r.ok && d) { btn.classList.toggle("on", !!d.liked); const sp = btn.querySelector("span"); if (sp) sp.textContent = d.count; }
+  }
   function avaPic(photo, head) { return photo ? '<img class="pf-img" src="' + esc(photo) + '" alt="" referrerpolicy="no-referrer" />' : avatar(head); }
   function resizeImg(file, cb) {
     const fr = new FileReader();
@@ -113,7 +118,7 @@
   }
   async function guestProfile(nick) {
     const { r, d } = await api("/api/social/perfil?nick=" + encodeURIComponent(nick), AH);
-    if (!r.ok || !d || !d.ok) { root.innerHTML = '<div class="pf-guest"><p class="pf-empty">No se encontró ese perfil.</p><a class="pf-btn pf-spin" href="/perfil">Entrá a youarethead</a></div>'; return; }
+    if (!r.ok || !d || !d.ok) { root.innerHTML = '<div class="pf-guest"><p class="pf-empty">No se encontró ese perfil.</p><a class="pf-btn pf-spin" href="/yata">Entrá a youarethead</a></div>'; return; }
     const p = d.perfil, acc = (typeof p.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(p.accent)) ? p.accent : "var(--pf-acc)";
     const links = (Array.isArray(p.links) ? p.links : []).map((l) => { const pl = platOf(l.url); return '<a class="pf-link" href="' + esc(l.url) + '" target="_blank" rel="noopener"><span class="pf-link-i">' + linkSvg(pl[2]) + '</span><span class="pf-link-t">' + esc(l.title) + '</span><span class="pf-link-x">&#8599;</span></a>'; }).join("");
     const banner = p.banner ? '<div class="pf-banner" style="background-image:url(\'' + esc(p.banner) + '\')"></div>' : '<div class="pf-banner" style="background:linear-gradient(120deg,' + acc + '22,#0a0a0d)"></div>';
@@ -123,7 +128,7 @@
       '<div class="pf-dimc" style="padding:2px 0">@' + esc(p.nick) + (p.estado ? " · " + esc(p.estado) : "") + "</div>" +
       (p.bio ? '<p style="margin:8px 0 0;white-space:pre-wrap">' + esc(p.bio) + "</p>" : "") +
       (links ? '<div class="pf-links">' + links + "</div>" : "") +
-      '<a class="pf-btn pf-spin" href="/perfil" style="margin-top:18px;display:inline-flex">Entrá a youarethead</a>' +
+      '<a class="pf-btn pf-spin" href="/yata" style="margin-top:18px;display:inline-flex">Entrá a youarethead</a>' +
       "</div>";
   }
   async function enterApp() { const { d } = await api("/api/hub/me", AH); if (d && d.logged) { me = d; app(); } else login("error"); }
@@ -206,6 +211,7 @@
       const u = t.closest("[data-u]"); if (u) { e.preventDefault(); viewUser(u.getAttribute("data-u")); return; }
       const tg = t.closest("[data-tag]"); if (tg) { e.preventDefault(); viewFeedTag(tg.getAttribute("data-tag")); return; }
       const lk = t.closest("[data-like]"); if (lk) { e.preventDefault(); e.stopPropagation(); toggleLike(lk); return; }
+      const cl = t.closest("[data-clike]"); if (cl) { e.preventDefault(); e.stopPropagation(); toggleClike(cl); return; }
       const ps = t.closest("[data-post]"); if (ps) { e.preventDefault(); viewPost(Number(ps.getAttribute("data-post"))); return; }
     }); }
     rightRail();
@@ -282,10 +288,10 @@
     comments.forEach((c) => { const k = c.parent || 0; (byParent[k] = byParent[k] || []).push(c); });
     function render(parent, depth) {
       return (byParent[parent] || []).map((c) =>
-        '<div class="pf-cmt" style="margin-left:' + Math.min(depth, 4) * 16 + 'px">' +
-          '<div class="pf-cmt-h"><span class="pf-ava pf-ava-sm">' + avaPic(c.avatar, headFor(c.nick)) + "</span>" + uname(c.nick) + '<span class="pf-dimc"> · ' + cuando(c.t) + "</span></div>" +
+        '<div class="pf-cmt" style="margin-left:' + Math.min(depth, 5) * 18 + 'px">' +
+          '<div class="pf-cmt-h"><span class="pf-ava pf-ava-sm">' + avaPic(c.avatar, headFor(c.nick)) + '</span><div class="pf-cmt-meta">' + uname(c.nick) + "<span>" + cuando(c.t) + "</span></div></div>" +
           '<div class="pf-cmt-b">' + rich(c.body) + "</div>" +
-          '<a class="pf-reply" data-reply="' + c.id + '">Responder</a>' +
+          '<div class="pf-cmt-f"><button class="pf-like pf-like-sm' + (c.liked ? " on" : "") + '" data-clike="' + c.id + '" type="button" title="Me cala">' + skull() + "<span>" + (c.nlik || 0) + '</span></button><a class="pf-reply" data-reply="' + c.id + '">Responder</a></div>' +
           render(c.id, depth + 1) +
         "</div>"
       ).join("");
@@ -512,7 +518,7 @@
     chead("Chat Global");
     body().innerHTML = '<div class="pf-gclog" id="c-log" style="height:auto;min-height:46vh"><p class="pf-dimc">Cargando…</p></div><div class="pf-gcform" style="border:0;padding:12px 0 0"><input id="c-txt" maxlength="200" placeholder="escribí en el chat global…" autocomplete="off" /><button class="pf-btn" id="c-send">Enviar</button></div><p class="pf-msg" id="c-em"></p>';
     const log = body().querySelector("#c-log"), txt = body().querySelector("#c-txt"); let maxId = 0, first = true;
-    function add(m) { if (first) log.innerHTML = ""; const d = document.createElement("div"); d.className = "pf-gcm"; const b = document.createElement("b"); b.textContent = (m.name || "ANÓN") + ":"; const s = document.createElement("span"); s.textContent = " " + m.body; d.appendChild(b); d.appendChild(s); log.appendChild(d); if (m.id > maxId) maxId = m.id; }
+    function add(m) { if (first) { log.innerHTML = ""; first = false; } const d = document.createElement("div"); d.className = "pf-gcm"; const b = document.createElement("b"); b.textContent = (m.name || "ANÓN") + ":"; const s = document.createElement("span"); s.textContent = " " + m.body; d.appendChild(b); d.appendChild(s); log.appendChild(d); if (m.id > maxId) maxId = m.id; }
     async function load() { const { d } = await api("/api/chat" + (maxId ? "?since=" + maxId : ""), AH); if (d && d.messages && d.messages.length) { const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 80; d.messages.forEach(add); first = false; if (stick) log.scrollTop = log.scrollHeight; } else if (first) { log.innerHTML = '<p class="pf-dimc">Sé el primero.</p>'; } }
     load(); vt.push(setInterval(() => { if (!document.hidden) load(); }, 3000)); log.scrollTop = log.scrollHeight;
     async function send() { const t = txt.value.trim(); if (!t) return; const { r, d } = await api("/api/chat", { method: "POST", headers: JH, body: JSON.stringify({ body: t }) }); if (r.ok) { txt.value = ""; load(); } else body().querySelector("#c-em").textContent = (d && d.message) || "No se pudo."; }
@@ -574,9 +580,10 @@
     const r = root.querySelector("#pf-right"); if (!r) return;
     r.innerHTML =
       '<div class="pf-widget"><div class="pf-wh">Chat Global<span class="pf-live"><i></i>En vivo</span></div><div class="pf-gclog" id="rg-log"></div><div class="pf-gcform"><input id="rg-txt" maxlength="200" placeholder="escribí un mensaje…" autocomplete="off" /><button class="pf-btn pf-mini" id="rg-send">›</button></div><a class="pf-wlink" id="rg-full">Abrir en pantalla completa →</a></div>' +
-      '<div class="pf-widget"><div class="pf-wh">Mensajes</div><div id="rg-prev"><p class="pf-dimc">Cargando…</p></div></div>';
+      '<div class="pf-widget"><div class="pf-wh">Tus mensajes</div><div id="rg-prev"><p class="pf-dimc">Cargando…</p></div></div>' +
+      '<div class="pf-widget"><div class="pf-wh">Tops</div><div id="rg-tops"><p class="pf-dimc" style="padding:14px">Cargando…</p></div></div>';
     const log = r.querySelector("#rg-log"), txt = r.querySelector("#rg-txt"); let maxId = 0, first = true;
-    function add(m) { if (first) log.innerHTML = ""; const d = document.createElement("div"); d.className = "pf-gcm"; const b = document.createElement("b"); b.textContent = (m.name || "ANÓN") + ":"; const s = document.createElement("span"); s.textContent = " " + m.body; d.appendChild(b); d.appendChild(s); log.appendChild(d); if (m.id > maxId) maxId = m.id; if (window.YATH_villager && m.name) window.YATH_villager(m.name); }
+    function add(m) { if (first) { log.innerHTML = ""; first = false; } const d = document.createElement("div"); d.className = "pf-gcm"; const b = document.createElement("b"); b.textContent = (m.name || "ANÓN") + ":"; const s = document.createElement("span"); s.textContent = " " + m.body; d.appendChild(b); d.appendChild(s); log.appendChild(d); if (m.id > maxId) maxId = m.id; if (window.YATH_villager && m.name) window.YATH_villager(m.name); }
     async function load() { const { d } = await api("/api/chat" + (maxId ? "?since=" + maxId : ""), AH); if (d && d.messages && d.messages.length) { const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 80; d.messages.forEach(add); first = false; if (stick) log.scrollTop = log.scrollHeight; } else if (first) { log.innerHTML = '<p class="pf-dimc" style="padding:14px">Silencio…</p>'; } }
     load(); rt.push(setInterval(() => { if (!document.hidden) load(); }, 3500));
     async function send() { const t = txt.value.trim(); if (!t) return; const { r: rr } = await api("/api/chat", { method: "POST", headers: JH, body: JSON.stringify({ body: t }) }); if (rr.ok) { txt.value = ""; load(); } }
@@ -584,6 +591,23 @@
     r.querySelector("#rg-full").onclick = () => setView("chat");
     async function prev() { const { d } = await api("/api/social/amigos", AH); const box = r.querySelector("#rg-prev"); if (!box) return; const am = (d && d.amigos) || []; box.innerHTML = am.length ? am.slice(0, 6).map((n) => '<div class="pf-prev" data-n="' + esc(n) + '"><span class="pf-ava">' + avatar(headFor(n)) + '</span><div>' + uname(n) + '<span>tocá para escribir</span></div></div>').join("") : '<p class="pf-dimc" style="padding:14px">Agregá amigos para chatear.</p>'; box.querySelectorAll("[data-n]").forEach((b) => b.onclick = () => { window.__dmOpen = b.getAttribute("data-n"); setView("mensajes"); }); }
     prev(); rt.push(setInterval(() => { if (!document.hidden) prev(); }, 20000));
+    (function mountTops() {
+      const box = r.querySelector("#rg-tops"); if (!box) return;
+      const games = [{ k: "tetristo", t: "TeTristo", href: "/tristos" }, { k: "parpadeo", t: "No Parpadees", href: "/tristos" }, { k: "laberinto", t: "El Laberinto", href: "/laberinto" }];
+      const data = {};
+      Promise.all(games.map((g) => fetch("/api/scores?game=" + g.k, AH).then((x) => x.json()).then((d) => { data[g.k] = (d && d.scores) || []; }).catch(() => { data[g.k] = []; }))).then(() => {
+        let i = 0;
+        const render = () => {
+          const g = games[i], sc = (data[g.k] || []).slice(0, 5);
+          box.innerHTML = '<div class="pf-tops-h"><b>' + g.t + '</b><a class="pf-wlink2" href="' + g.href + '">Jugar →</a></div>' +
+            (sc.length ? '<ol class="pf-toplist">' + sc.map((s, k) => '<li><span>' + (k + 1) + ". " + esc(s.alias) + "</span><b>" + fmt.format(s.score) + "</b></li>").join("") + "</ol>" : '<p class="pf-dimc" style="padding:8px 0">Sin puntajes todavía.</p>') +
+            '<div class="pf-cdots" style="margin-top:8px">' + games.map((_, k) => '<span class="' + (k === i ? "on" : "") + '" data-tk="' + k + '"></span>').join("") + "</div>";
+          box.querySelectorAll("[data-tk]").forEach((dt) => dt.onclick = () => { i = Number(dt.getAttribute("data-tk")); render(); });
+        };
+        render();
+        rt.push(setInterval(() => { if (!document.hidden) { i = (i + 1) % games.length; render(); } }, 6000));
+      });
+    })();
   }
 
   boot();
