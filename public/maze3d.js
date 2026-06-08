@@ -95,26 +95,68 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   camera.add(torch); camera.add(torch.target); torch.position.set(0, 0, 0); torch.target.position.set(0, -0.05, -1);
   const glow = new THREE.PointLight(0xc2c6da, 1.2, 12, 1.4); camera.add(glow);
 
-  function noiseTex(base, lines) {
-    const s = 128, cv = document.createElement("canvas"); cv.width = cv.height = s;
-    const x = cv.getContext("2d");
-    x.fillStyle = base; x.fillRect(0, 0, s, s);
-    const img = x.getImageData(0, 0, s, s), d = img.data;
-    for (let i = 0; i < d.length; i += 4) { const n = (Math.random() * 28) | 0; d[i] += n - 14; d[i + 1] += n - 14; d[i + 2] += n - 14; }
-    x.putImageData(img, 0, 0);
-    if (lines) { x.strokeStyle = "rgba(0,0,0,.5)"; x.lineWidth = 3; x.strokeRect(0, 0, s, s); }
+  // --- Texturas procedurales: cripta / piedra antigua (reemplazables por PNG, ver hooks) ---
+  function stoneTex(size, cols, rows, baseHex, mortarHex, jitter) {
+    const cv = document.createElement("canvas"); cv.width = cv.height = size;
+    const c = cv.getContext("2d");
+    c.fillStyle = mortarHex; c.fillRect(0, 0, size, size);
+    const bw = size / cols, bh = size / rows, gap = Math.max(2, Math.round(size / 170));
+    const base = parseInt(baseHex.slice(1), 16), BR = (base >> 16) & 255, BG = (base >> 8) & 255, BB = base & 255;
+    function paint(bx, by, r, g, b) {
+      c.fillStyle = "rgb(" + r + "," + g + "," + b + ")"; c.fillRect(bx + gap, by + gap, bw - 2 * gap, bh - 2 * gap);
+      c.fillStyle = "rgba(255,255,255,0.07)"; c.fillRect(bx + gap, by + gap, bw - 2 * gap, gap);            // luz arriba
+      c.fillStyle = "rgba(0,0,0,0.26)"; c.fillRect(bx + gap, by + bh - 2 * gap, bw - 2 * gap, gap);          // sombra abajo
+    }
+    for (let row = 0; row < rows; row++) {
+      const off = (row % 2) ? bw / 2 : 0;
+      for (let col = -1; col <= cols; col++) {
+        const bx = col * bw + off, by = row * bh, j = (Math.random() * 2 - 1) * jitter;
+        const r = Math.max(0, Math.min(255, BR + j)) | 0, g = Math.max(0, Math.min(255, BG + j)) | 0, b = Math.max(0, Math.min(255, BB + j)) | 0;
+        paint(bx, by, r, g, b);
+        if (bx + bw > size) paint(bx - size, by, r, g, b);   // wrap horizontal → seamless
+        if (bx < 0) paint(bx + size, by, r, g, b);
+      }
+    }
+    const img = c.getImageData(0, 0, size, size), d = img.data;
+    for (let i = 0; i < d.length; i += 4) { const n = (Math.random() * 24 - 12) | 0; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+    c.putImageData(img, 0, 0);
     const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
   }
-  const wallTex = noiseTex("#303036", true);
-  const floorTex = noiseTex("#24242a", false); floorTex.repeat.set(40, 40);
+  function woodDoorTex(size) {
+    const cv = document.createElement("canvas"); cv.width = cv.height = size; const c = cv.getContext("2d");
+    c.fillStyle = "#241b13"; c.fillRect(0, 0, size, size);
+    const planks = 4, pw = size / planks;
+    for (let p = 0; p < planks; p++) {
+      const sh = 56 + (Math.random() * 20 | 0);
+      c.fillStyle = "rgb(" + sh + "," + ((sh * 0.72) | 0) + "," + ((sh * 0.44) | 0) + ")";
+      c.fillRect(p * pw + 2, 0, pw - 4, size);
+      c.strokeStyle = "rgba(0,0,0,0.18)"; c.lineWidth = 1;
+      for (let k = 0; k < 7; k++) { const yy = Math.random() * size; c.beginPath(); c.moveTo(p * pw + 2, yy); c.bezierCurveTo(p * pw + pw * 0.3, yy + 7, p * pw + pw * 0.7, yy - 7, p * pw + pw - 2, yy + 3); c.stroke(); }
+    }
+    [size * 0.17, size * 0.73].forEach((by) => {
+      c.fillStyle = "#15161a"; c.fillRect(0, by, size, size * 0.09);                                          // banda de hierro
+      c.fillStyle = "#42454c"; for (let bx = size * 0.09; bx < size; bx += size * 0.2) { c.beginPath(); c.arc(bx, by + size * 0.045, size * 0.02, 0, 7); c.fill(); }  // bulones
+    });
+    const img = c.getImageData(0, 0, size, size), d = img.data;
+    for (let i = 0; i < d.length; i += 4) { const n = (Math.random() * 20 - 10) | 0; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+    c.putImageData(img, 0, 0);
+    return new THREE.CanvasTexture(cv);
+  }
+  function hookTex(url, mat) { new THREE.TextureLoader().load(url, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; if (mat.map && mat.map.repeat) t.repeat.copy(mat.map.repeat); mat.map = t; mat.needsUpdate = true; }, undefined, () => {}); }
+
+  const wallTex = stoneTex(512, 4, 6, "#3c3c38", "#191a1c", 13);
+  const floorTex = stoneTex(512, 4, 4, "#34342f", "#161618", 12); floorTex.repeat.set(22, 22);
+  const ceilTex = stoneTex(512, 4, 4, "#2a2a2e", "#131315", 10); ceilTex.repeat.set(22, 22);
   const wallMat = new THREE.MeshLambertMaterial({ map: wallTex, color: 0xffffff, side: THREE.DoubleSide });
   const floorMat = new THREE.MeshLambertMaterial({ map: floorTex, color: 0xffffff });
-  new THREE.TextureLoader().load("/maze-wall.png", (t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; wallMat.map = t; wallMat.needsUpdate = true; }, undefined, () => {});
+  const ceilMat = new THREE.MeshLambertMaterial({ map: ceilTex, color: 0xffffff, side: THREE.DoubleSide });
+  const lockerTex = woodDoorTex(512);
+  hookTex("/maze-wall.png", wallMat); hookTex("/maze-floor.png", floorMat); hookTex("/maze-ceil.png", ceilMat);
 
   const wallGeoN = new THREE.PlaneGeometry(CELL, WALL_H);
   const FSIZE = 120;
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(FSIZE, FSIZE), floorMat); floor.rotation.x = -Math.PI / 2; scene.add(floor);
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(FSIZE, FSIZE), new THREE.MeshLambertMaterial({ map: floorTex, color: 0x6a6a76, side: THREE.DoubleSide })); ceil.rotation.x = Math.PI / 2; ceil.position.y = WALL_H; scene.add(ceil);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(FSIZE, FSIZE), ceilMat); ceil.rotation.x = Math.PI / 2; ceil.position.y = WALL_H; scene.add(ceil);
 
   // Paredes del nivel completo en un solo InstancedMesh (1 draw call)
   let wallInst = null;
@@ -180,8 +222,11 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   function setDoorLocked(locked) { const c = locked ? 0xd23b47 : 0x46d17f; doorMat.color.setHex(c); doorLight.color.setHex(c); }
 
   /* ---------- Lockers (escondites) ---------- */
-  const lockerMat = new THREE.MeshLambertMaterial({ color: 0x7a5632 });
+  const lockerSide = new THREE.MeshLambertMaterial({ map: lockerTex, color: 0xffffff });
+  const lockerDark = new THREE.MeshLambertMaterial({ color: 0x241b13 });
+  const lockerMats = [lockerSide, lockerSide, lockerDark, lockerDark, lockerSide, lockerSide]; // +x -x +y(tapa) -y(base) +z -z
   const lockerGeo = new THREE.BoxGeometry(CELL * 0.5, WALL_H * 0.86, CELL * 0.5);
+  hookTex("/maze-locker.png", lockerSide);
   const lockers = [];
   function clearLockers() { lockers.forEach((l) => scene.remove(l.mesh)); lockers.length = 0; }
   function placeLockers() {
@@ -190,7 +235,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     for (let i = 0; i < n; i++) {
       const cx = 1 + Math.floor(hash(40 + i, 41 + i, 3) * (MW - 2));
       const cz = 1 + Math.floor(hash(42 + i, 43 + i, 3) * (MH - 2));
-      const m = new THREE.Mesh(lockerGeo, lockerMat); m.position.set(cx * CELL + CELL / 2, WALL_H * 0.43, cz * CELL + CELL / 2); scene.add(m);
+      const m = new THREE.Mesh(lockerGeo, lockerMats); m.position.set(cx * CELL + CELL / 2, WALL_H * 0.43, cz * CELL + CELL / 2); scene.add(m);
       lockers.push({ mesh: m, cx, cz });
     }
   }
