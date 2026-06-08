@@ -1,7 +1,7 @@
 import Fastify, { FastifyInstance, FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { Pool } from 'pg';
-import { createHash, randomBytes, randomInt } from 'node:crypto';
+import { createHash, randomBytes, randomInt, pbkdf2Sync } from 'node:crypto';
 import { join } from 'node:path';
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -120,6 +120,9 @@ export async function initDb(db: Db): Promise<void> {
   await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS hub_users_nick_uidx ON hub_users (nick_norm) WHERE nick_norm IS NOT NULL;`);
   await db.query(`CREATE INDEX IF NOT EXISTS hub_users_session_idx ON hub_users (session);`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS bio TEXT;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS pin_hash TEXT;`);
+  await db.query(`ALTER TABLE hub_users ALTER COLUMN email DROP NOT NULL;`);
+  await db.query(`ALTER TABLE hub_users ALTER COLUMN email_norm DROP NOT NULL;`);
   await db.query(`
     CREATE TABLE IF NOT EXISTS amigos (
       id BIGSERIAL PRIMARY KEY,
@@ -325,6 +328,7 @@ function getClientIp(req: FastifyRequest): string {
   return req.ip;
 }
 function hashIp(ip: string): string { return createHash('sha256').update(`${IP_SALT}:${ip}`).digest('hex'); }
+function pinHash(pin: string, nickNorm: string): string { return pbkdf2Sync(pin, `${IP_SALT}:${nickNorm}`, 60000, 32, 'sha256').toString('hex'); }
 function isAdmin(req: FastifyRequest): boolean {
   if (!ADMIN_TOKEN) return false;
   const c = req.headers.cookie;
@@ -405,6 +409,8 @@ export function buildApp(db: Db): FastifyInstance {
   const hubMailRate = new Map<string, number>();
   const dmRate = new Map<number, number>();
   const postRate = new Map<number, number>();
+  const pinRate = new Map<string, number>();
+  const pinFails = new Map<string, { n: number; until: number }>();
   async function userByNick(nickRaw: string): Promise<{ id: number; nick: string } | null> {
     const n = nickRaw.trim().toLowerCase();
     if (!n) return null;
@@ -561,6 +567,59 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.code(201).send({ ok: true, pending: true, message: 'Te mandamos un código al mail.' });
   });
 
+  app.post('/api/hub/registrar', async (req, reply) => {
+    const body = (req.body ?? {}) as { nick?: unknown; pin?: unknown };
+    const nick = typeof body.nick === 'string' ? body.nick.replace(/\s+/g, ' ').trim().slice(0, 14).trim() : '';
+    const pin = typeof body.pin === 'string' ? body.pin.trim() : '';
+    if (nick.length < 2) return reply.code(400).send({ ok: false, error: 'bad_nick', message: 'Nick muy corto (2-14).' });
+    if (offensiveAlias(nick) || offensiveText(nick)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Ese nick no va.' });
+    if (!/^[0-9]{4,6}$/.test(pin)) return reply.code(400).send({ ok: false, error: 'bad_pin', message: 'El PIN son 4 a 6 números.' });
+    const nickNorm = nick.toLowerCase();
+    const ex = await db.query('SELECT 1 AS k FROM hub_users WHERE nick_norm = $1', [nickNorm]);
+    if (ex.rows.length) return reply.code(409).send({ ok: false, error: 'taken', message: 'Ese nick ya está tomado.' });
+    const sess = newToken();
+    await db.query('INSERT INTO hub_users (nick, nick_norm, pin_hash, session) VALUES ($1, $2, $3, $4)', [nick, nickNorm, pinHash(pin, nickNorm), sess]);
+    reply.header('set-cookie', 'yath_sess=' + sess + '; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax');
+    return reply.code(201).send({ ok: true, logged: true, nick });
+  });
+
+  app.post('/api/hub/pin-login', async (req, reply) => {
+    const body = (req.body ?? {}) as { nick?: unknown; pin?: unknown };
+    const nick = typeof body.nick === 'string' ? body.nick.trim() : '';
+    const pin = typeof body.pin === 'string' ? body.pin.trim() : '';
+    if (!nick || !/^[0-9]{4,6}$/.test(pin)) return reply.code(400).send({ ok: false, error: 'bad', message: 'Nick o PIN inválido.' });
+    const ipHash = hashIp(getClientIp(req));
+    const now = Date.now();
+    if (now - (pinRate.get(ipHash) ?? 0) < 1000) return reply.code(429).send({ ok: false, error: 'slow', message: 'Esperá un toque.' });
+    pinRate.set(ipHash, now);
+    const nickNorm = nick.toLowerCase();
+    const f = pinFails.get(nickNorm);
+    if (f && f.until > now) return reply.code(429).send({ ok: false, error: 'locked', message: 'Demasiados intentos. Probá en un minuto.' });
+    const { rows } = await db.query('SELECT id, nick, pin_hash FROM hub_users WHERE nick_norm = $1', [nickNorm]);
+    const row = rows[0];
+    if (!row || !row.pin_hash || String(row.pin_hash) !== pinHash(pin, nickNorm)) {
+      const nf = (f ? f.n : 0) + 1;
+      pinFails.set(nickNorm, { n: nf, until: nf >= 8 ? now + 60000 : 0 });
+      const noPin = row && !row.pin_hash;
+      return reply.code(401).send({ ok: false, error: noPin ? 'sin_pin' : 'bad_login', message: noPin ? 'Esa cuenta no tiene PIN. Entrá por mail y creá uno en tu perfil.' : 'Nick o PIN incorrecto.' });
+    }
+    pinFails.delete(nickNorm);
+    const sess = newToken();
+    await db.query('UPDATE hub_users SET session = $2 WHERE id = $1', [row.id, sess]);
+    reply.header('set-cookie', 'yath_sess=' + sess + '; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax');
+    return reply.code(200).send({ ok: true, logged: true, nick: row.nick });
+  });
+
+  app.post('/api/hub/pin', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    if (!u.nick) return reply.code(400).send({ ok: false, error: 'sin_nick', message: 'Primero reservá tu nick.' });
+    const pin = typeof ((req.body ?? {}) as { pin?: unknown }).pin === 'string' ? ((req.body) as { pin: string }).pin.trim() : '';
+    if (!/^[0-9]{4,6}$/.test(pin)) return reply.code(400).send({ ok: false, error: 'bad_pin', message: 'El PIN son 4 a 6 números.' });
+    await db.query('UPDATE hub_users SET pin_hash = $2 WHERE id = $1', [u.id, pinHash(pin, u.nick.toLowerCase())]);
+    return { ok: true, message: 'PIN guardado. Ya podés entrar con nick + PIN.' };
+  });
+
   app.post('/api/hub/verify', async (req, reply) => {
     const body = (req.body ?? {}) as { email?: unknown; code?: unknown };
     const emailRaw = typeof body.email === 'string' ? body.email.trim() : '';
@@ -598,7 +657,7 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
     if (!u) return { ok: true, logged: false, nick: null };
-    const det = await db.query('SELECT email, bio, created_at FROM hub_users WHERE id = $1', [u.id]);
+    const det = await db.query('SELECT email, bio, created_at, pin_hash FROM hub_users WHERE id = $1', [u.id]);
     const r = det.rows[0] ?? {};
     let caido = 0;
     const c = await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [u.id]);
@@ -610,7 +669,7 @@ export function buildApp(db: Db): FastifyInstance {
     const cr = ch.rows[0];
     return {
       ok: true, logged: true, nick: u.nick,
-      email: String(r.email ?? ''), bio: (r.bio as string | null) ?? '', desde: r.created_at ?? null, caido,
+      email: String(r.email ?? ''), pin: !!r.pin_hash, bio: (r.bio as string | null) ?? '', desde: r.created_at ?? null, caido,
       best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0 },
       char: cr ? { head: String(cr.head ?? 'o'), vida: Math.round(Number(cr.vida ?? 0)), hambre: Math.round(Number(cr.hambre ?? 0)), sueno: Math.round(Number(cr.sueno ?? 0)) } : null,
     };

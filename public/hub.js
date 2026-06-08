@@ -63,40 +63,30 @@
       '<div class="th-login">' +
         '<a href="#" class="th-back" id="th-back">← volver</a>' +
         '<h3>Entrar a Tristo&#39;s</h3>' +
-        '<p class="th-p th-dim">Sin contraseña: te mandamos un código al mail.</p>' +
-        '<div class="th-row" id="th-l1"><input id="th-email" type="email" placeholder="tu@mail.com" /><button class="th-btn" id="th-send">Mandar código</button></div>' +
-        '<div class="th-row th-hide" id="th-l2"><input id="th-code" inputmode="numeric" maxlength="6" placeholder="código de 6 dígitos" /><button class="th-btn" id="th-ver">Entrar</button></div>' +
-        '<div class="th-row th-hide" id="th-l3"><input id="th-nick" maxlength="14" placeholder="elegí tu nick" /><button class="th-btn" id="th-nickb">Guardar nick</button></div>' +
+        '<p class="th-p th-dim">Elegí un nick y un PIN. Sin mail.</p>' +
+        '<div class="th-row"><input id="th-nick" maxlength="14" placeholder="tu nick" /></div>' +
+        '<div class="th-row" style="margin-top:8px"><input id="th-pin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN (4-6 números)" /></div>' +
+        '<div class="th-row" style="margin-top:10px"><button class="th-btn" id="th-in" style="flex:1">Entrar</button><button class="th-btn th-ghost" id="th-reg" style="flex:1">Crear cuenta</button></div>' +
         '<p class="th-msg" id="th-lmsg"></p>' +
+        '<a href="#" class="th-back" id="th-mailt">¿Cuenta vieja con mail? Entrá acá →</a>' +
+        '<div id="th-mail" class="th-hide">' +
+          '<div class="th-row" id="th-l1"><input id="th-email" type="email" placeholder="tu@mail.com" /><button class="th-btn" id="th-send">Código</button></div>' +
+          '<div class="th-row th-hide" id="th-l2" style="margin-top:8px"><input id="th-code" inputmode="numeric" maxlength="6" placeholder="código" /><button class="th-btn" id="th-ver">Entrar</button></div>' +
+          '<div class="th-row th-hide" id="th-l3" style="margin-top:8px"><input id="th-nick2" maxlength="14" placeholder="elegí tu nick" /><button class="th-btn" id="th-nickb">Guardar</button></div>' +
+        '</div>' +
       '</div>';
     const msg = viewEl.querySelector("#th-lmsg");
-    const show = (id) => { ["th-l1", "th-l2", "th-l3"].forEach((k) => { const n = viewEl.querySelector("#" + k); if (n) n.classList.toggle("th-hide", k !== id); }); };
     viewEl.querySelector("#th-back").onclick = (e) => { e.preventDefault(); viewMenu(); };
+    const creds = () => ({ nick: viewEl.querySelector("#th-nick").value.trim(), pin: viewEl.querySelector("#th-pin").value.trim() });
+    const enter = (d) => { me = { logged: true, nick: d.nick || null }; paintIdent(); viewMenu(); };
+    viewEl.querySelector("#th-in").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/pin-login", { method: "POST", headers: JH, body: JSON.stringify(creds()) }); if (r.ok && d && d.logged) enter(d); else msg.textContent = (d && d.message) || "No se pudo."; };
+    viewEl.querySelector("#th-reg").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/registrar", { method: "POST", headers: JH, body: JSON.stringify(creds()) }); if (r.ok && d && d.logged) enter(d); else msg.textContent = (d && d.message) || "No se pudo."; };
     let email = "";
-    viewEl.querySelector("#th-send").onclick = async () => {
-      email = viewEl.querySelector("#th-email").value.trim();
-      msg.textContent = "...";
-      const { r, d } = await api("/api/hub/login", { method: "POST", headers: JH, body: JSON.stringify({ email }) });
-      msg.textContent = (d && d.message) || (r.ok ? "Código enviado." : "No se pudo.");
-      if (r.ok) show("th-l2");
-    };
-    viewEl.querySelector("#th-ver").onclick = async () => {
-      const code = viewEl.querySelector("#th-code").value.trim();
-      msg.textContent = "...";
-      const { r, d } = await api("/api/hub/verify", { method: "POST", headers: JH, body: JSON.stringify({ email, code }) });
-      if (r.ok && d && d.logged) {
-        me = { logged: true, nick: d.nick || null }; paintIdent();
-        if (!d.nick) { msg.textContent = "¡Adentro! Elegí tu nick."; show("th-l3"); }
-        else viewMenu();
-      } else msg.textContent = (d && d.message) || "No se pudo.";
-    };
-    viewEl.querySelector("#th-nickb").onclick = async () => {
-      const nick = viewEl.querySelector("#th-nick").value.trim();
-      msg.textContent = "...";
-      const { r, d } = await api("/api/hub/nick", { method: "POST", headers: JH, body: JSON.stringify({ nick }) });
-      if (r.ok && d && d.ok) { me.nick = d.nick; paintIdent(); viewMenu(); }
-      else msg.textContent = (d && d.message) || "No se pudo.";
-    };
+    const show = (id) => { ["th-l1", "th-l2", "th-l3"].forEach((k) => { const n = viewEl.querySelector("#" + k); if (n) n.classList.toggle("th-hide", k !== id); }); };
+    viewEl.querySelector("#th-mailt").onclick = (e) => { e.preventDefault(); viewEl.querySelector("#th-mail").classList.toggle("th-hide"); };
+    viewEl.querySelector("#th-send").onclick = async () => { email = viewEl.querySelector("#th-email").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/login", { method: "POST", headers: JH, body: JSON.stringify({ email }) }); msg.textContent = (d && d.message) || (r.ok ? "Código enviado." : "No se pudo."); if (r.ok) show("th-l2"); };
+    viewEl.querySelector("#th-ver").onclick = async () => { const code = viewEl.querySelector("#th-code").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/verify", { method: "POST", headers: JH, body: JSON.stringify({ email, code }) }); if (r.ok && d && d.logged) { me = { logged: true, nick: d.nick || null }; paintIdent(); if (!d.nick) { msg.textContent = "Elegí tu nick."; show("th-l3"); } else viewMenu(); } else msg.textContent = (d && d.message) || "No se pudo."; };
+    viewEl.querySelector("#th-nickb").onclick = async () => { const nick = viewEl.querySelector("#th-nick2").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/nick", { method: "POST", headers: JH, body: JSON.stringify({ nick }) }); if (r.ok && d && d.ok) { me.nick = d.nick; paintIdent(); viewMenu(); } else msg.textContent = (d && d.message) || "No se pudo."; };
   }
 
   /* ---------- El Botón ---------- */

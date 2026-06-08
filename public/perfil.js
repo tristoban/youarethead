@@ -28,6 +28,7 @@
 
   const IC = {
     inicio: '<path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/>',
+    feed: '<path d="M4 7h16M4 12h16M4 17h10"/>',
     juegos: '<rect x="3" y="8" width="18" height="9" rx="4"/><path d="M8 12.5h3M9.5 11v3"/><circle cx="16" cy="12.5" r=".6" fill="currentColor"/>',
     canal: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5z" fill="currentColor" stroke="none"/>',
     mensajes: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/>',
@@ -45,18 +46,29 @@
   /* ---------- Login ---------- */
   function login() {
     root.innerHTML =
-      '<div style="max-width:420px;margin:8vh auto 0" class="pf-center"><div class="pf-body">' +
-      '<h2 class="pf-ctitle" style="padding:0 0 6px">Entrar</h2>' +
-      '<p class="pf-dimc" style="padding:0 0 14px;text-align:left">Sin contraseña: te mandamos un código al mail. Tu nick queda reservado.</p>' +
-      '<div class="pf-row" id="l1"><input class="pf-input" id="l-email" type="email" placeholder="tu@mail.com" /><button class="pf-btn" id="l-send">Código</button></div>' +
-      '<div class="pf-row" id="l2" style="display:none;margin-top:8px"><input class="pf-input" id="l-code" inputmode="numeric" maxlength="6" placeholder="código de 6 dígitos" /><button class="pf-btn" id="l-ver">Entrar</button></div>' +
-      '<div class="pf-row" id="l3" style="display:none;margin-top:8px"><input class="pf-input" id="l-nick" maxlength="14" placeholder="elegí tu nick (único)" /><button class="pf-btn" id="l-nickb">Guardar</button></div>' +
-      '<p class="pf-msg" id="l-msg"></p></div></div>';
-    const msg = root.querySelector("#l-msg"); let email = "";
-    const show = (id) => ["l1", "l2", "l3"].forEach((k) => { root.querySelector("#" + k).style.display = k === id ? "flex" : "none"; });
+      '<div style="max-width:430px;margin:8vh auto 0" class="pf-center"><div class="pf-body">' +
+      '<h2 class="pf-ctitle" style="padding:0 0 4px">Entrar a youarethead</h2>' +
+      '<p class="pf-dimc" style="padding:0 0 14px;text-align:left">Elegí un nick y un PIN. Sin mail, sin vueltas.</p>' +
+      '<input class="pf-input" id="l-nick" maxlength="14" placeholder="tu nick" style="margin-bottom:8px" />' +
+      '<input class="pf-input" id="l-pin" type="password" inputmode="numeric" maxlength="6" placeholder="PIN (4 a 6 números)" />' +
+      '<div class="pf-row" style="margin-top:10px"><button class="pf-btn" id="l-in" style="flex:1">Entrar</button><button class="pf-btn ghost" id="l-reg" style="flex:1">Crear cuenta</button></div>' +
+      '<p class="pf-msg" id="l-msg"></p>' +
+      '<a class="pf-wlink" id="l-mailt" style="border:0;margin-top:4px;cursor:pointer">¿Cuenta vieja con mail? Entrá acá →</a>' +
+      '<div id="l-mail" style="display:none;border-top:1px solid rgba(255,255,255,.1);margin-top:6px;padding-top:12px">' +
+        '<div class="pf-row" id="l1"><input class="pf-input" id="l-email" type="email" placeholder="tu@mail.com" /><button class="pf-btn" id="l-send">Código</button></div>' +
+        '<div class="pf-row" id="l2" style="display:none;margin-top:8px"><input class="pf-input" id="l-code" inputmode="numeric" maxlength="6" placeholder="código" /><button class="pf-btn" id="l-ver">Entrar</button></div>' +
+        '<div class="pf-row" id="l3" style="display:none;margin-top:8px"><input class="pf-input" id="l-nick2" maxlength="14" placeholder="elegí tu nick" /><button class="pf-btn" id="l-nickb">Guardar</button></div>' +
+      '</div></div></div>';
+    const msg = root.querySelector("#l-msg");
+    const creds = () => ({ nick: root.querySelector("#l-nick").value.trim(), pin: root.querySelector("#l-pin").value.trim() });
+    root.querySelector("#l-in").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/pin-login", { method: "POST", headers: JH, body: JSON.stringify(creds()) }); if (r.ok && d && d.logged) boot(); else msg.textContent = (d && d.message) || "No se pudo."; };
+    root.querySelector("#l-reg").onclick = async () => { msg.textContent = "..."; const { r, d } = await api("/api/hub/registrar", { method: "POST", headers: JH, body: JSON.stringify(creds()) }); if (r.ok && d && d.logged) boot(); else msg.textContent = (d && d.message) || "No se pudo."; };
+    let email = "";
+    const show = (id) => ["l1", "l2", "l3"].forEach((k) => { const n = root.querySelector("#" + k); if (n) n.style.display = k === id ? "flex" : "none"; });
+    root.querySelector("#l-mailt").onclick = () => { const m = root.querySelector("#l-mail"); m.style.display = m.style.display === "none" ? "block" : "none"; };
     root.querySelector("#l-send").onclick = async () => { email = root.querySelector("#l-email").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/login", { method: "POST", headers: JH, body: JSON.stringify({ email }) }); msg.textContent = (d && d.message) || (r.ok ? "Código enviado." : "No se pudo."); if (r.ok) show("l2"); };
-    root.querySelector("#l-ver").onclick = async () => { const code = root.querySelector("#l-code").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/verify", { method: "POST", headers: JH, body: JSON.stringify({ email, code }) }); if (r.ok && d && d.logged) { if (!d.nick) { msg.textContent = "¡Adentro! Elegí tu nick."; show("l3"); } else boot(); } else msg.textContent = (d && d.message) || "No se pudo."; };
-    root.querySelector("#l-nickb").onclick = async () => { const nick = root.querySelector("#l-nick").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/nick", { method: "POST", headers: JH, body: JSON.stringify({ nick }) }); if (r.ok && d && d.ok) boot(); else msg.textContent = (d && d.message) || "No se pudo."; };
+    root.querySelector("#l-ver").onclick = async () => { const code = root.querySelector("#l-code").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/verify", { method: "POST", headers: JH, body: JSON.stringify({ email, code }) }); if (r.ok && d && d.logged) { if (!d.nick) { msg.textContent = "Elegí tu nick."; show("l3"); } else boot(); } else msg.textContent = (d && d.message) || "No se pudo."; };
+    root.querySelector("#l-nickb").onclick = async () => { const nick = root.querySelector("#l-nick2").value.trim(); msg.textContent = "..."; const { r, d } = await api("/api/hub/nick", { method: "POST", headers: JH, body: JSON.stringify({ nick }) }); if (r.ok && d && d.ok) boot(); else msg.textContent = (d && d.message) || "No se pudo."; };
   }
 
   /* ---------- Shell ---------- */
@@ -64,8 +76,8 @@
     const myHead = me.char ? me.char.head : "o";
     root.innerHTML =
       '<div class="pf-app">' +
-        '<aside class="pf-left"><div class="pf-brand">youarethead.com.ar</div><nav class="pf-nav" id="pf-nav">' +
-          navItem("inicio", "Inicio") + navItem("juegos", "Juegos") + navItem("canal", "Insomnio Crónico") +
+        '<aside class="pf-left"><a href="/" class="pf-brand">youarethead.com.ar</a><nav class="pf-nav" id="pf-nav">' +
+          '<a href="/">' + ic("inicio") + '<span>Inicio</span></a>' + navItem("feed", "Feed") + navItem("juegos", "Juegos") + navItem("canal", "Insomnio Crónico") +
           navItem("mensajes", "Mensajes") + navItem("amigos", "Amigos") + navItem("chat", "Chat Global") + navItem("perfil", "Perfil") +
           '<button class="pf-postbtn" id="pf-postbtn">Postear</button>' +
           '<div class="pf-me" id="pf-me"><span class="pf-ava">' + avatar(myHead) + '</span><div><b>' + esc(me.nick) + '</b><span>@' + esc(me.nick) + '</span></div></div>' +
@@ -74,10 +86,10 @@
         '<aside class="pf-right" id="pf-right"></aside>' +
       '</div>';
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => { b.onclick = () => setView(b.getAttribute("data-v")); });
-    root.querySelector("#pf-postbtn").onclick = () => { setView("inicio"); const t = root.querySelector("#pf-post"); if (t) t.focus(); };
+    root.querySelector("#pf-postbtn").onclick = () => { setView("feed"); const t = root.querySelector("#pf-post"); if (t) t.focus(); };
     root.querySelector("#pf-me").onclick = () => setView("perfil");
     rightRail();
-    setView("inicio");
+    setView("feed");
   }
   function navItem(v, label) {
     if (v === "juegos") return '<a href="/tristos">' + ic("juegos") + "<span>" + label + "</span></a>";
@@ -89,7 +101,7 @@
   function setView(v) {
     clearView(); cur = v;
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === v));
-    if (v === "inicio") viewFeed();
+    if (v === "feed") viewFeed();
     else if (v === "amigos") viewAmigos();
     else if (v === "mensajes") viewMsgs();
     else if (v === "chat") viewChat();
@@ -100,7 +112,7 @@
   function postHTML(p) { return '<div class="pf-post"><span class="pf-ava">' + avatar(headFor(p.nick)) + '</span><div class="pf-pb"><div class="pf-ph"><b>' + esc(p.nick) + '</b><span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><p>' + esc(p.body) + "</p></div></div>"; }
   function viewFeed() {
     let scope = "ti";
-    chead("Inicio", '<div class="pf-tabs2"><button data-s="ti" class="on">Para ti</button><button data-s="amigos">Amigos</button></div>');
+    chead("Feed", '<div class="pf-tabs2"><button data-s="ti" class="on">Para ti</button><button data-s="amigos">Amigos</button></div>');
     body().innerHTML =
       '<div class="pf-comp"><span class="pf-ava">' + avatar(me.char ? me.char.head : "o") + '</span><div class="pf-cbox"><textarea id="pf-post" maxlength="280" placeholder="¿Qué está pasando ahí adentro?"></textarea><div class="pf-crow"><button class="pf-cbtn" id="pf-pub">Postear</button></div><p class="pf-msg" id="pf-pmsg"></p></div></div>' +
       '<div id="pf-feed"><p class="pf-dimc">Cargando…</p></div>';
@@ -203,6 +215,7 @@
     body().innerHTML =
       '<div style="display:flex;gap:14px;align-items:center"><span class="pf-ava" style="width:56px;height:64px">' + avatar(d.char ? d.char.head : "o") + '</span><div><div style="font-size:20px;font-weight:800">' + esc(d.nick) + '</div><div class="pf-dimc" style="padding:0">' + esc(maskMail(d.email)) + (desde ? " · desde " + desde : "") + '</div></div></div>' +
       '<div style="margin-top:14px"><textarea class="pf-input" id="c-bio" maxlength="140" placeholder="Tu bio (140)" style="border-radius:12px;min-height:60px;width:100%">' + esc(d.bio || "") + '</textarea><div class="pf-row" style="margin-top:8px"><button class="pf-btn" id="c-bsave">Guardar bio</button><span class="pf-msg" id="c-bmsg"></span><button class="pf-btn ghost pf-mini" id="c-out" style="margin-left:auto">Salir</button></div></div>' +
+      (!d.pin ? '<div class="pf-h">Entrar sin mail</div><div class="pf-row"><input class="pf-input" id="c-pin" type="password" inputmode="numeric" maxlength="6" placeholder="creá un PIN (4-6 números)" /><button class="pf-btn" id="c-pinsave">Guardar PIN</button></div><p class="pf-msg" id="c-pinmsg">Con un PIN entrás sin gastar mails.</p>' : "") +
       '<div class="pf-h">Tus números</div>' +
       '<div class="pf-fila"><b>El Botón</b><span>' + (d.caido ? "Caído N° " + fmt.format(d.caido) : "No caíste") + '</span></div>' +
       '<div class="pf-fila"><b>Récord TeTristo</b><span>' + fmt.format((d.best && d.best.tetristo) || 0) + '</span></div>' +
@@ -210,6 +223,8 @@
       (d.char ? '<div class="pf-fila"><b>El Pueblo</b><span>Vida ' + d.char.vida + " · Hambre " + d.char.hambre + " · Sueño " + d.char.sueno + '</span></div>' : "");
     body().querySelector("#c-out").onclick = async () => { await api("/api/hub/logout", { method: "POST", headers: JH, body: "{}" }); boot(); };
     body().querySelector("#c-bsave").onclick = async () => { const bm = body().querySelector("#c-bmsg"); bm.textContent = "..."; const { r, d: dd } = await api("/api/hub/bio", { method: "POST", headers: JH, body: JSON.stringify({ bio: body().querySelector("#c-bio").value }) }); if (r.ok) { bm.textContent = "Guardada."; me.bio = dd && dd.bio; } else bm.textContent = (dd && dd.message) || "No se pudo."; };
+    const ps = body().querySelector("#c-pinsave");
+    if (ps) ps.onclick = async () => { const pm = body().querySelector("#c-pinmsg"); pm.textContent = "..."; const { r, d: dd } = await api("/api/hub/pin", { method: "POST", headers: JH, body: JSON.stringify({ pin: body().querySelector("#c-pin").value.trim() }) }); if (r.ok) { pm.textContent = (dd && dd.message) || "PIN guardado."; me.pin = true; } else pm.textContent = (dd && dd.message) || "No se pudo."; };
   }
 
   /* ---------- Columna derecha (persistente): Chat Global + Mensajes ---------- */
