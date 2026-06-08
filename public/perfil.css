@@ -1,46 +1,126 @@
-/* ====== Perfil ====== */
-#pf-root { width: 100%; max-width: 780px; margin: 0 auto; }
-.pf-top { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; }
-.pf-ava { width: 72px; height: 84px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.2); display: flex; align-items: center; justify-content: center; flex: none; }
+/* ====== Red social — layout 3 columnas (twitter-ish, en nuestra clave) ====== */
+:root { --pf-acc: #6b8cff; --pf-card: rgba(10,10,13,.72); }
+
+#pf-root { min-height: 100svh; padding: 14px; }
+.pf-loading { color: #6c6c72; text-align: center; padding: 80px 0; font-family: "Montserrat", sans-serif; }
+
+.pf-app {
+  display: grid; grid-template-columns: 232px minmax(0, 1fr) 320px; gap: 16px;
+  max-width: 1180px; margin: 0 auto; align-items: start;
+  font-family: "Montserrat", system-ui, sans-serif; color: #f5f5f7;
+}
+
+/* ---- Columna izquierda (nav) ---- */
+.pf-left { position: sticky; top: 14px; display: flex; flex-direction: column; gap: 4px; }
+.pf-brand { font-size: 13px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; padding: 8px 12px 14px; color: #fff; }
+.pf-nav button, .pf-nav a {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  background: none; border: 0; color: #cfcfd6; font: 600 15px "Montserrat", sans-serif;
+  padding: 11px 14px; border-radius: 999px; cursor: pointer; text-decoration: none; transition: background .12s, color .12s;
+}
+.pf-nav button:hover, .pf-nav a:hover { background: rgba(255,255,255,.06); color: #fff; }
+.pf-nav .on { color: #fff; font-weight: 800; }
+.pf-nav .on .pf-ic { color: var(--pf-acc); }
+.pf-ic { width: 22px; height: 22px; flex: none; color: #9a9aa2; }
+.pf-badge { margin-left: auto; background: var(--pf-acc); color: #06070d; font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 999px; }
+.pf-postbtn { margin: 10px 6px 0; background: #f5f5f7; color: #060606; border: 0; border-radius: 999px; padding: 13px; font: 800 14px "Montserrat", sans-serif; text-transform: uppercase; letter-spacing: .04em; cursor: pointer; }
+.pf-postbtn:hover { background: #d9d9de; }
+.pf-me { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 8px 10px; border-radius: 12px; cursor: pointer; }
+.pf-me:hover { background: rgba(255,255,255,.05); }
+.pf-me .pf-ava { width: 38px; height: 44px; }
+.pf-me b { font-size: 13px; } .pf-me span { font-size: 11px; color: #6c6c72; display: block; }
+
+.pf-ava { display: inline-flex; align-items: flex-end; justify-content: center; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.16); border-radius: 10px; overflow: hidden; }
 .pf-ava canvas { image-rendering: pixelated; }
-.pf-nick { font-size: 22px; font-weight: 800; margin: 0; }
-.pf-sub { font-size: 12px; color: #9a9aa2; margin: 2px 0 0; }
-.pf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 14px 0; }
-.pf-card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 12px 14px; }
-.pf-card label { display: block; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: #9a9aa2; margin-bottom: 4px; }
-.pf-card b { font-size: 18px; font-weight: 800; }
-.pf-bio textarea { width: 100%; min-height: 64px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.18); border-radius: 8px; padding: 10px 12px; color: #fff; font: 400 13px "Montserrat", sans-serif; outline: none; resize: vertical; }
-.pf-bio textarea:focus { border-color: rgba(255,255,255,.5); }
-.pf-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
-.pf-row input { flex: 1; min-width: 0; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.18); border-radius: 8px; padding: 11px 12px; color: #fff; font: inherit; outline: none; }
-.pf-out { margin-left: auto; }
 
-.pf-tabs { display: flex; gap: 6px; border-bottom: 1px solid rgba(255,255,255,.14); margin: 6px 0 16px; flex-wrap: wrap; }
-.pf-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: #9a9aa2; font: 700 12px "Montserrat", sans-serif; text-transform: uppercase; letter-spacing: .08em; padding: 10px 12px; cursor: pointer; }
-.pf-tabs button.on { color: #fff; border-bottom-color: #fff; }
-.pf-h { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: #9a9aa2; margin: 18px 0 8px; }
+/* ---- Centro ---- */
+.pf-center { background: var(--pf-card); border: 1px solid rgba(255,255,255,.12); border-radius: 16px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); min-height: 60vh; overflow: hidden; }
+.pf-chead { position: sticky; top: 0; z-index: 2; background: rgba(10,10,13,.82); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(255,255,255,.1); }
+.pf-ctitle { font-size: 18px; font-weight: 800; padding: 14px 18px 10px; }
+.pf-tabs2 { display: flex; }
+.pf-tabs2 button { flex: 1; background: none; border: 0; border-bottom: 2px solid transparent; color: #9a9aa2; font: 700 13px "Montserrat", sans-serif; padding: 12px; cursor: pointer; }
+.pf-tabs2 button.on { color: #fff; border-bottom-color: var(--pf-acc); }
+.pf-body { padding: 14px 18px 22px; }
 
-.pf-comp textarea { width: 100%; min-height: 64px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.18); border-radius: 8px; padding: 10px 12px; color: #fff; font: 400 13px "Montserrat", sans-serif; outline: none; resize: vertical; }
-.pf-feed { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
-.pf-post { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 12px 14px; }
-.pf-post .pf-ph { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
-.pf-post .pf-ph b { font-size: 13px; }
-.pf-post .pf-ph span { font-size: 11px; color: #6c6c72; }
-.pf-post p { margin: 0; font-size: 14px; line-height: 1.5; color: #e6e8ee; overflow-wrap: anywhere; }
+.pf-comp { display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.pf-comp .pf-ava { width: 40px; height: 46px; flex: none; }
+.pf-comp .pf-cbox { flex: 1; }
+.pf-comp textarea { width: 100%; background: none; border: 0; color: #fff; font: 400 17px "Montserrat", sans-serif; outline: none; resize: none; min-height: 44px; }
+.pf-comp textarea::placeholder { color: #5f5f66; }
+.pf-comp .pf-crow { display: flex; align-items: center; justify-content: flex-end; margin-top: 6px; }
+.pf-cbtn { background: var(--pf-acc); color: #06070d; border: 0; border-radius: 999px; padding: 9px 20px; font: 800 13px "Montserrat", sans-serif; cursor: pointer; }
+.pf-cbtn:disabled { opacity: .5; cursor: default; }
 
-.pf-fila { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
-.pf-mini { padding: 7px 12px; font-size: 11px; }
+.pf-post { display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,.07); }
+.pf-post .pf-ava { width: 40px; height: 46px; flex: none; }
+.pf-post .pf-pb { flex: 1; min-width: 0; }
+.pf-ph { display: flex; align-items: baseline; gap: 7px; margin-bottom: 3px; }
+.pf-ph b { font-size: 14px; } .pf-ph span { font-size: 12px; color: #6c6c72; }
+.pf-post p { margin: 0; font-size: 15px; line-height: 1.5; color: #e9ebf0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.pf-empty, .pf-dimc { color: #6c6c72; font-size: 14px; padding: 26px 18px; text-align: center; }
 
-.pf-dm { display: grid; grid-template-columns: 150px 1fr; gap: 12px; }
+/* ---- Buscar / filas (amigos) ---- */
+.pf-row { display: flex; gap: 8px; align-items: center; }
+.pf-row input, .pf-input { flex: 1; min-width: 0; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 11px 16px; color: #fff; font: inherit; outline: none; }
+.pf-row input:focus, .pf-input:focus { border-color: var(--pf-acc); }
+.pf-btn { background: #f5f5f7; color: #060606; border: 0; border-radius: 999px; padding: 10px 16px; font: 800 12px "Montserrat", sans-serif; text-transform: uppercase; cursor: pointer; }
+.pf-btn.ghost { background: transparent; color: #f5f5f7; border: 1px solid rgba(255,255,255,.25); }
+.pf-mini { padding: 7px 13px; font-size: 11px; }
+.pf-fila { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+.pf-fila b { font-size: 14px; }
+.pf-h { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #9a9aa2; margin: 18px 0 6px; }
+.pf-msg { min-height: 1em; font-size: 13px; color: #cfcfd6; margin-top: 8px; }
+.pf-msg.err { color: #ff9a9a; }
+
+/* ---- DM / grupos ---- */
+.pf-dm { display: grid; grid-template-columns: 150px minmax(0,1fr); gap: 12px; }
 .pf-dml { display: flex; flex-direction: column; gap: 6px; }
-.pf-dmf { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; color: #cfcfd6; font: 700 12px "Montserrat", sans-serif; padding: 10px; cursor: pointer; text-align: left; overflow: hidden; text-overflow: ellipsis; }
-.pf-dmf.on { color: #fff; border-color: rgba(255,255,255,.5); }
+.pf-dmf { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.14); border-radius: 10px; color: #cfcfd6; font: 700 12px "Montserrat", sans-serif; padding: 10px; cursor: pointer; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-dmf.on { color: #fff; border-color: var(--pf-acc); }
 .pf-dmh { font-size: 12px; color: #9a9aa2; margin-bottom: 8px; }
-.pf-dmlog { height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; }
-.pf-m { max-width: 80%; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 7px 11px; font-size: 13px; align-self: flex-start; overflow-wrap: anywhere; }
-.pf-m.mio { align-self: flex-end; background: rgba(255,255,255,.16); }
-.pf-mn { display: block; font-size: 10px; color: #9a9aa2; margin-bottom: 2px; }
-.pf-dml .pf-h { margin: 8px 0 4px; }
 .pf-dmh a { color: #cfcfd6; border-bottom: 1px solid rgba(255,255,255,.25); font-size: 11px; }
+.pf-dmlog { height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.1); border-radius: 12px; }
+.pf-m { max-width: 82%; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 7px 11px; font-size: 13px; align-self: flex-start; overflow-wrap: anywhere; }
+.pf-m.mio { align-self: flex-end; background: var(--pf-acc); color: #06070d; border-color: transparent; }
+.pf-mn { display: block; font-size: 10px; color: #9a9aa2; margin-bottom: 2px; }
+.pf-m.mio .pf-mn { color: rgba(6,7,13,.7); }
 
-@media (max-width: 560px) { .pf-dm { grid-template-columns: 1fr; } .pf-dml { flex-direction: row; flex-wrap: wrap; } }
+/* ---- Columna derecha ---- */
+.pf-right { position: sticky; top: 14px; display: flex; flex-direction: column; gap: 14px; }
+.pf-widget { background: var(--pf-card); border: 1px solid rgba(255,255,255,.12); border-radius: 16px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); overflow: hidden; }
+.pf-wh { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: 15px; font-weight: 800; border-bottom: 1px solid rgba(255,255,255,.08); }
+.pf-live { font-size: 11px; font-weight: 700; color: #46d17f; margin-left: auto; display: flex; align-items: center; gap: 5px; }
+.pf-live i { width: 7px; height: 7px; border-radius: 50%; background: #46d17f; box-shadow: 0 0 8px #46d17f; }
+.pf-gclog { height: 280px; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.pf-gcm { line-height: 1.4; overflow-wrap: anywhere; }
+.pf-gcm b { color: #fff; margin-right: 4px; } .pf-gcm span { color: #c9c9d0; }
+.pf-gcform { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid rgba(255,255,255,.08); }
+.pf-gcform input { flex: 1; min-width: 0; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 9px 13px; color: #fff; font: inherit; outline: none; }
+.pf-wlink { display: block; padding: 11px 16px; text-align: center; font: 700 12px "Montserrat", sans-serif; color: var(--pf-acc); text-decoration: none; border-top: 1px solid rgba(255,255,255,.08); cursor: pointer; }
+.pf-prev { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; }
+.pf-prev:hover { background: rgba(255,255,255,.05); }
+.pf-prev .pf-ava { width: 34px; height: 40px; }
+.pf-prev b { font-size: 13px; } .pf-prev span { font-size: 11px; color: #6c6c72; }
+
+@media (max-width: 1040px) {
+  .pf-app { grid-template-columns: 76px minmax(0,1fr); }
+  .pf-brand { text-align: center; font-size: 0; padding: 8px 0 14px; }
+  .pf-brand::after { content: "AD"; font-size: 16px; letter-spacing: 0; }
+  .pf-nav button span, .pf-nav a span, .pf-me div { display: none; }
+  .pf-nav button, .pf-nav a { justify-content: center; }
+  .pf-postbtn { font-size: 0; padding: 13px 0; }
+  .pf-postbtn::after { content: "+"; font-size: 22px; }
+  .pf-right { display: none; }
+}
+@media (max-width: 680px) {
+  .pf-app { display: block; max-width: 560px; }
+  .pf-left { position: static; flex-direction: row; overflow-x: auto; gap: 2px; margin-bottom: 12px; padding-bottom: 6px; }
+  .pf-brand { display: none; }
+  .pf-nav { display: contents; }
+  .pf-nav button, .pf-nav a { width: auto; padding: 10px; }
+  .pf-postbtn { display: none; }
+  .pf-me { display: none; }
+  .pf-right { display: flex; margin-top: 14px; }
+  .pf-dm { grid-template-columns: 1fr; }
+  .pf-dml { flex-direction: row; flex-wrap: wrap; }
+}

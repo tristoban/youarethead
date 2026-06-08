@@ -3,6 +3,7 @@
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const JH = { "content-type": "application/json", accept: "application/json" };
   let worldAdd = function () {};
+  window.YATH_villager = function (n) { worldAdd(n); };
 
   /* ---------- Fondo: niebla de ruido (igual que la landing) ---------- */
   const canvas = document.getElementById("bg");

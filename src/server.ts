@@ -717,7 +717,13 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
-    const { rows } = await db.query('SELECT id, nick, body, created_at FROM posts ORDER BY id DESC LIMIT 30');
+    const scope = ((req.query ?? {}) as { scope?: unknown }).scope;
+    let rows;
+    if (scope === 'amigos') {
+      rows = (await db.query("SELECT p.id, p.nick, p.body, p.created_at FROM posts p WHERE p.user_id = $1 OR p.user_id IN (SELECT CASE WHEN a = $1 THEN b ELSE a END FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado') ORDER BY p.id DESC LIMIT 30", [u.id])).rows;
+    } else {
+      rows = (await db.query('SELECT id, nick, body, created_at FROM posts ORDER BY id DESC LIMIT 30')).rows;
+    }
     return { ok: true, posts: rows.map((r) => ({ id: Number(r.id), nick: r.nick, body: r.body, t: r.created_at })) };
   });
 
