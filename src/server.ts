@@ -121,6 +121,35 @@ export async function initDb(db: Db): Promise<void> {
   await db.query(`CREATE INDEX IF NOT EXISTS hub_users_session_idx ON hub_users (session);`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS bio TEXT;`);
   await db.query(`
+    CREATE TABLE IF NOT EXISTS amigos (
+      id BIGSERIAL PRIMARY KEY,
+      a BIGINT NOT NULL,
+      b BIGINT NOT NULL,
+      estado TEXT NOT NULL DEFAULT 'pendiente',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS amigos_ab_uidx ON amigos (a, b);`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS dms (
+      id BIGSERIAL PRIMARY KEY,
+      de BIGINT NOT NULL,
+      para BIGINT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS dms_pair_idx ON dms (de, para, id);`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS posts (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      nick TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await db.query(`
     CREATE TABLE IF NOT EXISTS boton_caidos (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL UNIQUE,
@@ -347,6 +376,19 @@ export function buildApp(db: Db): FastifyInstance {
   const chatNames = new Map<string, string>();
   const muralRate = new Map<string, number>();
   const hubMailRate = new Map<string, number>();
+  const dmRate = new Map<number, number>();
+  const postRate = new Map<number, number>();
+  async function userByNick(nickRaw: string): Promise<{ id: number; nick: string } | null> {
+    const n = nickRaw.trim().toLowerCase();
+    if (!n) return null;
+    const { rows } = await db.query('SELECT id, nick FROM hub_users WHERE nick_norm = $1', [n]);
+    const r = rows[0];
+    return r ? { id: Number(r.id), nick: String(r.nick) } : null;
+  }
+  async function sonAmigos(x: number, y: number): Promise<boolean> {
+    const { rows } = await db.query("SELECT 1 AS k FROM amigos WHERE ((a = $1 AND b = $2) OR (a = $2 AND b = $1)) AND estado = 'aceptado'", [x, y]);
+    return rows.length > 0;
+  }
   const GATED = new Set(['/index.html', '/tshirt.png', '/pic1.png', '/pic2.png', '/pic3.png', '/pic3.jpg']);
   app.addHook('onRequest', async (req, reply) => {
     if (LAUNCHED || isAdmin(req)) return;
@@ -538,6 +580,118 @@ export function buildApp(db: Db): FastifyInstance {
     if (offensiveText(bio)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Esa bio no va.' });
     await db.query('UPDATE hub_users SET bio = $2 WHERE id = $1', [u.id, bio]);
     return { ok: true, bio };
+  });
+
+  app.get('/api/social/usuarios', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const q = String(((req.query ?? {}) as { q?: unknown }).q ?? '').trim().toLowerCase().slice(0, 14);
+    if (q.length < 2) return { ok: true, usuarios: [] };
+    const { rows } = await db.query("SELECT nick FROM hub_users WHERE nick_norm LIKE $1 || '%' AND nick IS NOT NULL AND id <> $2 LIMIT 8", [q, u.id]);
+    return { ok: true, usuarios: rows.map((r) => r.nick) };
+  });
+
+  app.post('/api/social/amigos/pedir', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const otro = await userByNick(String(((req.body ?? {}) as { nick?: unknown }).nick ?? ''));
+    if (!otro) return reply.code(404).send({ ok: false, error: 'no_existe', message: 'No existe ese nick.' });
+    if (otro.id === u.id) return reply.code(400).send({ ok: false, error: 'vos', message: 'Sos vos.' });
+    const ex = await db.query('SELECT id, estado, a FROM amigos WHERE (a = $1 AND b = $2) OR (a = $2 AND b = $1)', [u.id, otro.id]);
+    const row = ex.rows[0];
+    if (row) {
+      if (row.estado === 'aceptado') return { ok: true, estado: 'amigos', message: 'Ya son amigos.' };
+      if (Number(row.a) === otro.id) { await db.query("UPDATE amigos SET estado = 'aceptado' WHERE id = $1", [row.id]); return { ok: true, estado: 'amigos', message: 'Te había pedido: ahora son amigos.' }; }
+      return { ok: true, estado: 'pendiente', message: 'Ya estaba pedido.' };
+    }
+    await db.query("INSERT INTO amigos (a, b, estado) VALUES ($1, $2, 'pendiente')", [u.id, otro.id]);
+    return reply.code(201).send({ ok: true, estado: 'pendiente', message: 'Solicitud enviada.' });
+  });
+
+  app.post('/api/social/amigos/responder', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const body = (req.body ?? {}) as { nick?: unknown; aceptar?: unknown };
+    const otro = await userByNick(String(body.nick ?? ''));
+    if (!otro) return reply.code(404).send({ ok: false, error: 'no_existe' });
+    const ex = await db.query("SELECT id FROM amigos WHERE a = $1 AND b = $2 AND estado = 'pendiente'", [otro.id, u.id]);
+    const row = ex.rows[0];
+    if (!row) return reply.code(404).send({ ok: false, error: 'sin_pedido' });
+    if (body.aceptar === true) { await db.query("UPDATE amigos SET estado = 'aceptado' WHERE id = $1", [row.id]); return { ok: true, estado: 'amigos' }; }
+    await db.query('DELETE FROM amigos WHERE id = $1', [row.id]);
+    return { ok: true, estado: 'rechazado' };
+  });
+
+  app.get('/api/social/amigos', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const am = await db.query("SELECT CASE WHEN m.a = $1 THEN ub.nick ELSE ua.nick END AS nick FROM amigos m JOIN hub_users ua ON ua.id = m.a JOIN hub_users ub ON ub.id = m.b WHERE (m.a = $1 OR m.b = $1) AND m.estado = 'aceptado' ORDER BY m.created_at DESC", [u.id]);
+    const rec = await db.query("SELECT ua.nick FROM amigos m JOIN hub_users ua ON ua.id = m.a WHERE m.b = $1 AND m.estado = 'pendiente'", [u.id]);
+    const env = await db.query("SELECT ub.nick FROM amigos m JOIN hub_users ub ON ub.id = m.b WHERE m.a = $1 AND m.estado = 'pendiente'", [u.id]);
+    return { ok: true, amigos: am.rows.map((r) => r.nick), recibidas: rec.rows.map((r) => r.nick), enviadas: env.rows.map((r) => r.nick) };
+  });
+
+  app.get('/api/social/dm', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const q = (req.query ?? {}) as { con?: unknown; since?: unknown };
+    const otro = await userByNick(String(q.con ?? ''));
+    if (!otro) return reply.code(404).send({ ok: false, error: 'no_existe' });
+    if (!(await sonAmigos(u.id, otro.id))) return reply.code(403).send({ ok: false, error: 'no_amigos', message: 'Tienen que ser amigos.' });
+    const since = Math.floor(Number(q.since));
+    if (Number.isFinite(since) && since > 0) {
+      const { rows } = await db.query('SELECT id, de, body, created_at FROM dms WHERE ((de = $1 AND para = $2) OR (de = $2 AND para = $1)) AND id > $3 ORDER BY id ASC LIMIT 100', [u.id, otro.id, since]);
+      return { ok: true, mensajes: rows.map((r) => ({ id: Number(r.id), mio: Number(r.de) === u.id, body: r.body, t: r.created_at })) };
+    }
+    const { rows } = await db.query('SELECT id, de, body, created_at FROM dms WHERE (de = $1 AND para = $2) OR (de = $2 AND para = $1) ORDER BY id DESC LIMIT 50', [u.id, otro.id]);
+    return { ok: true, mensajes: rows.reverse().map((r) => ({ id: Number(r.id), mio: Number(r.de) === u.id, body: r.body, t: r.created_at })) };
+  });
+
+  app.post('/api/social/dm', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const body = (req.body ?? {}) as { nick?: unknown; body?: unknown };
+    const otro = await userByNick(String(body.nick ?? ''));
+    if (!otro) return reply.code(404).send({ ok: false, error: 'no_existe' });
+    if (!(await sonAmigos(u.id, otro.id))) return reply.code(403).send({ ok: false, error: 'no_amigos', message: 'Tienen que ser amigos.' });
+    const text = typeof body.body === 'string' ? body.body.replace(/\s+/g, ' ').trim().slice(0, 300).trim() : '';
+    if (!text) return reply.code(400).send({ ok: false, error: 'empty' });
+    if (offensiveText(text)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Eso no va.' });
+    const now = Date.now();
+    const last = dmRate.get(u.id) ?? 0;
+    if (now - last < 1200) return reply.code(429).send({ ok: false, error: 'slow' });
+    dmRate.set(u.id, now);
+    const ins = await db.query('INSERT INTO dms (de, para, body) VALUES ($1, $2, $3) RETURNING id, created_at', [u.id, otro.id, text]);
+    const row = ins.rows[0];
+    return reply.code(201).send({ ok: true, mensaje: { id: Number(row?.id ?? 0), mio: true, body: text, t: row?.created_at } });
+  });
+
+  app.get('/api/social/feed', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const { rows } = await db.query('SELECT id, nick, body, created_at FROM posts ORDER BY id DESC LIMIT 30');
+    return { ok: true, posts: rows.map((r) => ({ id: Number(r.id), nick: r.nick, body: r.body, t: r.created_at })) };
+  });
+
+  app.post('/api/social/post', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    if (!u.nick) return reply.code(400).send({ ok: false, error: 'sin_nick', message: 'Primero reservá tu nick.' });
+    const raw = ((req.body ?? {}) as { body?: unknown }).body;
+    const text = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().slice(0, 280).trim() : '';
+    if (!text) return reply.code(400).send({ ok: false, error: 'empty', message: 'Escribí algo.' });
+    if (offensiveText(text)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Eso no va.' });
+    const now = Date.now();
+    const last = postRate.get(u.id) ?? 0;
+    if (now - last < 20000) return reply.code(429).send({ ok: false, error: 'slow', message: 'Esperá un poco entre publicaciones.' });
+    postRate.set(u.id, now);
+    const ins = await db.query('INSERT INTO posts (user_id, nick, body) VALUES ($1, $2, $3) RETURNING id, created_at', [u.id, u.nick, text]);
+    const row = ins.rows[0];
+    return reply.code(201).send({ ok: true, post: { id: Number(row?.id ?? 0), nick: u.nick, body: text, t: row?.created_at } });
   });
 
   app.post('/api/hub/logout', async (req, reply) => {

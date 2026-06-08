@@ -11,4 +11,32 @@
 .pf-bio textarea { width: 100%; min-height: 64px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.18); border-radius: 8px; padding: 10px 12px; color: #fff; font: 400 13px "Montserrat", sans-serif; outline: none; resize: vertical; }
 .pf-bio textarea:focus { border-color: rgba(255,255,255,.5); }
 .pf-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.pf-row input { flex: 1; min-width: 0; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.18); border-radius: 8px; padding: 11px 12px; color: #fff; font: inherit; outline: none; }
 .pf-out { margin-left: auto; }
+
+.pf-tabs { display: flex; gap: 6px; border-bottom: 1px solid rgba(255,255,255,.14); margin: 6px 0 16px; flex-wrap: wrap; }
+.pf-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: #9a9aa2; font: 700 12px "Montserrat", sans-serif; text-transform: uppercase; letter-spacing: .08em; padding: 10px 12px; cursor: pointer; }
+.pf-tabs button.on { color: #fff; border-bottom-color: #fff; }
+.pf-h { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: #9a9aa2; margin: 18px 0 8px; }
+
+.pf-comp textarea { width: 100%; min-height: 64px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.18); border-radius: 8px; padding: 10px 12px; color: #fff; font: 400 13px "Montserrat", sans-serif; outline: none; resize: vertical; }
+.pf-feed { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.pf-post { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 12px 14px; }
+.pf-post .pf-ph { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.pf-post .pf-ph b { font-size: 13px; }
+.pf-post .pf-ph span { font-size: 11px; color: #6c6c72; }
+.pf-post p { margin: 0; font-size: 14px; line-height: 1.5; color: #e6e8ee; overflow-wrap: anywhere; }
+
+.pf-fila { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+.pf-mini { padding: 7px 12px; font-size: 11px; }
+
+.pf-dm { display: grid; grid-template-columns: 150px 1fr; gap: 12px; }
+.pf-dml { display: flex; flex-direction: column; gap: 6px; }
+.pf-dmf { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; color: #cfcfd6; font: 700 12px "Montserrat", sans-serif; padding: 10px; cursor: pointer; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.pf-dmf.on { color: #fff; border-color: rgba(255,255,255,.5); }
+.pf-dmh { font-size: 12px; color: #9a9aa2; margin-bottom: 8px; }
+.pf-dmlog { height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; }
+.pf-m { max-width: 80%; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 7px 11px; font-size: 13px; align-self: flex-start; overflow-wrap: anywhere; }
+.pf-m.mio { align-self: flex-end; background: rgba(255,255,255,.16); }
+
+@media (max-width: 560px) { .pf-dm { grid-template-columns: 1fr; } .pf-dml { flex-direction: row; flex-wrap: wrap; } }
