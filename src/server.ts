@@ -522,12 +522,12 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.code(200).send({ ok: true, confirmed: true, message: '¡Confirmado! Sos parte.', ...stats });
   });
 
-  app.get('/api/scores', async (req, reply) => { reply.header('cache-control', 'no-store'); const g = ((req.query ?? {}) as { game?: unknown }).game; return { ok: true, scores: await topScores(db, g === 'parpadeo' ? 'parpadeo' : 'tetristo') }; });
+  app.get('/api/scores', async (req, reply) => { reply.header('cache-control', 'no-store'); const g = ((req.query ?? {}) as { game?: unknown }).game; return { ok: true, scores: await topScores(db, (g === 'parpadeo' || g === 'laberinto') ? g : 'tetristo') }; });
 
   app.get('/api/rank', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     const q = (req.query ?? {}) as { game?: unknown; score?: unknown };
-    const game = q.game === 'parpadeo' ? 'parpadeo' : 'tetristo';
+    const game = (q.game === 'parpadeo' || q.game === 'laberinto') ? q.game : 'tetristo';
     const sc = Math.floor(Number(q.score));
     const score = Number.isInteger(sc) && sc >= 0 ? sc : 0;
     const gt = await db.query('SELECT count(*) AS c FROM scores WHERE game = $1 AND score > $2', [game, score]);
@@ -539,7 +539,7 @@ export function buildApp(db: Db): FastifyInstance {
 
   app.post('/api/score', async (req, reply) => {
     const body = (req.body ?? {}) as { alias?: unknown; score?: unknown; game?: unknown };
-    const game = body.game === 'parpadeo' ? 'parpadeo' : 'tetristo';
+    const game = (body.game === 'parpadeo' || body.game === 'laberinto') ? body.game : 'tetristo';
     let alias = typeof body.alias === 'string' ? body.alias.trim().replace(/[^\p{L}\p{N} _.\-]/gu, '').slice(0, 12).trim() : '';
     if (!alias) alias = 'ANON';
     if (offensiveAlias(alias)) return reply.code(400).send({ ok: false, error: 'bad_alias', message: 'Ese alias no se puede usar.' });
@@ -1421,6 +1421,10 @@ export function buildApp(db: Db): FastifyInstance {
   app.get('/tristo', async (_req, reply) => {
     reply.header('cache-control', 'no-store');
     return reply.sendFile('tristo.html');
+  });
+  app.get('/laberinto', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return reply.sendFile('laberinto.html');
   });
   app.get('/', async (req, reply) => {
     reply.header('cache-control', 'no-store');

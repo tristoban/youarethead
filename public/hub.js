@@ -44,6 +44,7 @@
       card("boton", "El Botón", "NO LO APRIETES.") +
       card("parpadeo", "No Parpadees", "¿Qué viste? Cada vez más rápido.") +
       card("mural", "El Mural", "Un lienzo entre todos. 1 px cada 5s.") +
+      card("laberinto", "El Laberinto", "No tiene fin. Algo te persigue. Aguantá.") +
       '</div>';
     viewEl.querySelectorAll(".th-card").forEach((c) => {
       c.onclick = () => {
@@ -52,6 +53,7 @@
         else if (g === "boton") viewBoton();
         else if (g === "parpadeo") viewParpadeo();
         else if (g === "mural") viewMural();
+        else if (g === "laberinto") location.href = "/laberinto";
       };
     });
   }

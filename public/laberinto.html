@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>El Laberinto · youarethead</title>
+  <meta name="description" content="No tiene fin. Algo te busca." />
+  <meta name="theme-color" content="#000000" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/maze3d.css?v=1" />
+</head>
+<body>
+  <div id="game">
+    <canvas id="c"></canvas>
+    <canvas id="mini" width="220" height="220" aria-hidden="true"></canvas>
+    <div id="hud"><span id="time">0.0</span><span class="hud-u">s</span></div>
+    <div id="warn" class="warn hidden">te encontró</div>
+
+    <div id="intro" class="ov">
+      <div class="ovbox">
+        <h1>EL LABERINTO</h1>
+        <p>No tiene fin. Algo te busca — es lento, pero no se cansa ni duerme.</p>
+        <p class="dim">WASD para moverte · mouse para mirar · aguantá lo más posible.</p>
+        <button id="play" class="mbtn" type="button">Entrar</button>
+        <a class="mback" href="/tristos">&#8592; volver a Tristo's</a>
+      </div>
+    </div>
+
+    <div id="dead" class="ov hidden">
+      <div class="ovbox">
+        <h1>TE ALCANZÓ</h1>
+        <p>Sobreviviste <b id="dscore">0</b> segundos.</p>
+        <p class="dim" id="drank"></p>
+        <button id="retry" class="mbtn" type="button">Otra vez</button>
+        <a class="mback" href="/tristos">&#8592; volver a Tristo's</a>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/maze3d.js?v=1"></script>
+</body>
+</html>
