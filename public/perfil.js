@@ -35,6 +35,7 @@
     amigos: '<circle cx="9" cy="9" r="3"/><path d="M3.5 19c0-3.3 3-5 5.5-5s5.5 1.7 5.5 5"/><path d="M16 6.5a3 3 0 010 6"/>',
     chat: '<path d="M5 5h14v10H9l-4 4z"/>',
     perfil: '<circle cx="12" cy="8" r="4"/><path d="M5 20c0-4 3.2-6 7-6s7 2 7 6"/>',
+    admin: '<path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/>',
   };
   function ic(n) { return '<svg class="pf-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + IC[n] + "</svg>"; }
 
@@ -96,7 +97,7 @@
       '<div class="pf-app">' +
         '<aside class="pf-left"><a href="/" class="pf-brand">youarethead.com.ar</a><nav class="pf-nav" id="pf-nav">' +
           '<a href="/">' + ic("inicio") + '<span>Inicio</span></a>' + navItem("feed", "Feed") + navItem("juegos", "Juegos") + navItem("canal", "Insomnio Crónico") +
-          navItem("mensajes", "Mensajes") + navItem("amigos", "Amigos") + navItem("chat", "Chat Global") + navItem("perfil", "Perfil") +
+          navItem("mensajes", "Mensajes") + navItem("amigos", "Amigos") + navItem("chat", "Chat Global") + navItem("perfil", "Perfil") + (me.admin ? navItem("admin", "Admin") : "") +
           '<button class="pf-postbtn" id="pf-postbtn">Postear</button>' +
           '<div class="pf-me" id="pf-me"><span class="pf-ava">' + avatar(myHead) + '</span><div><b>' + esc(me.nick) + '</b><span>@' + esc(me.nick) + '</span></div></div>' +
         '</nav></aside>' +
@@ -123,6 +124,7 @@
     else if (v === "amigos") viewAmigos();
     else if (v === "mensajes") viewMsgs();
     else if (v === "chat") viewChat();
+    else if (v === "admin") viewAdmin();
     else viewCuenta();
   }
 
@@ -143,6 +145,43 @@
     load(); vt.push(setInterval(() => { if (!document.hidden) load(); }, 12000));
     root.querySelector("#pf-chead").querySelectorAll("[data-s]").forEach((b) => { b.onclick = () => { scope = b.getAttribute("data-s"); root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.remove("on")); b.classList.add("on"); load(); }; });
     body().querySelector("#pf-pub").onclick = async () => { const ta = body().querySelector("#pf-post"), pm = body().querySelector("#pf-pmsg"); pm.textContent = "..."; const { r, d } = await api("/api/social/post", { method: "POST", headers: JH, body: JSON.stringify({ body: ta.value }) }); if (r.ok) { ta.value = ""; pm.textContent = ""; scope = "ti"; root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.toggle("on", x.getAttribute("data-s") === "ti")); load(); } else pm.textContent = (d && d.message) || "No se pudo."; };
+  }
+
+  /* ---------- Admin ---------- */
+  function viewAdmin() {
+    chead("Admin");
+    body().innerHTML =
+      '<div class="pf-row"><input class="pf-input" id="ad-q" maxlength="20" placeholder="buscar por nick…" /><button class="pf-btn" id="ad-go">Buscar</button></div>' +
+      '<p class="pf-msg" id="ad-msg" style="min-height:1em"></p>' +
+      '<div id="ad-list"><p class="pf-dimc">Cargando…</p></div>';
+    const qEl = body().querySelector("#ad-q"), am = body().querySelector("#ad-msg");
+    async function load() {
+      const q = qEl.value.trim();
+      const { d } = await api("/api/admin/users" + (q ? "?q=" + encodeURIComponent(q) : ""), AH);
+      const box = body().querySelector("#ad-list"); if (!box) return;
+      if (!d || !d.ok) { box.innerHTML = '<p class="pf-empty">No se pudo cargar (¿sos admin?).</p>'; return; }
+      const us = d.users || [];
+      box.innerHTML = us.length ? us.map((u) => {
+        const tag = u.admin ? ' <span class="pf-dimc">· admin</span>' : (u.banned ? ' <span style="color:#D23B47">· baneado</span>' : "");
+        const rs = u.banned && u.reason ? '<br><span class="pf-dimc">' + esc(u.reason) + "</span>" : "";
+        const btn = u.admin ? "" : (u.banned ? '<button class="pf-btn ghost pf-mini" data-unban="' + esc(u.nick) + '">Desbanear</button>' : '<button class="pf-btn pf-mini" data-ban="' + esc(u.nick) + '">Banear</button>');
+        return '<div class="pf-fila"><span><b>' + esc(u.nick) + "</b>" + tag + rs + "</span>" + btn + "</div>";
+      }).join("") : '<p class="pf-empty">Sin resultados.</p>';
+      box.querySelectorAll("[data-ban]").forEach((b) => b.onclick = async () => {
+        const nick = b.getAttribute("data-ban");
+        const reason = window.prompt("Motivo del baneo a " + nick + " (opcional):", "") || "";
+        am.textContent = "..."; const { r, dd } = await api("/api/admin/ban", { method: "POST", headers: JH, body: JSON.stringify({ nick, reason }) }).then((x) => ({ r: x.r, dd: x.d }));
+        am.textContent = r.ok ? "Baneado: " + nick : ((dd && dd.message) || "No se pudo."); load();
+      });
+      box.querySelectorAll("[data-unban]").forEach((b) => b.onclick = async () => {
+        const nick = b.getAttribute("data-unban");
+        am.textContent = "..."; const { r, dd } = await api("/api/admin/unban", { method: "POST", headers: JH, body: JSON.stringify({ nick }) }).then((x) => ({ r: x.r, dd: x.d }));
+        am.textContent = r.ok ? "Desbaneado: " + nick : ((dd && dd.message) || "No se pudo."); load();
+      });
+    }
+    body().querySelector("#ad-go").onclick = load;
+    qEl.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
+    load();
   }
 
   /* ---------- Amigos ---------- */
