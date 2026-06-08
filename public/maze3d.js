@@ -44,19 +44,41 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   let flareCount = FLARE_MAX;
   function flashCd() { return FLASH_CD_BASE + depth * 2; }
 
-  /* ---------- Laberinto procedural infinito (determinístico) ---------- */
+  /* ---------- Laberinto por niveles (acotado, recursive backtracker determinístico) ---------- */
   const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // 0 N(-z) 1 E(+x) 2 S(+z) 3 W(-x)
+  let MW = 16, MH = 16, grid = new Uint8Array(MW * MH);
   function hash(x, z, s) {
     let h = (x | 0) * 374761393 + (z | 0) * 668265263 + (s | 0) * 2147483647 + mazeSeed * 69069;
     h = (h ^ (h >> 13)) >>> 0; h = (h * 1274126177) >>> 0; h = (h ^ (h >> 16)) >>> 0;
     return h / 4294967296;
   }
-  function carveDir(x, z) { return Math.floor(hash(x, z, 7) * 4) & 3; }
+  function genMaze() {
+    MW = MH = Math.min(25, 13 + depth * 2);              // crece por nivel, acotado
+    grid = new Uint8Array(MW * MH);
+    const vis = new Uint8Array(MW * MH);
+    let s = (mazeSeed >>> 0) || 1; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+    const stack = [[0, 0]]; vis[0] = 1;
+    while (stack.length) {
+      const cur = stack[stack.length - 1], x = cur[0], z = cur[1];
+      const opt = [];
+      for (let i = 0; i < 4; i++) { const nx = x + DIRS[i][0], nz = z + DIRS[i][1]; if (nx >= 0 && nx < MW && nz >= 0 && nz < MH && !vis[nz * MW + nx]) opt.push(i); }
+      if (!opt.length) { stack.pop(); continue; }
+      const i = opt[Math.floor(rnd() * opt.length)], nx = x + DIRS[i][0], nz = z + DIRS[i][1];
+      grid[z * MW + x] |= (1 << i); grid[nz * MW + nx] |= (1 << ((i + 2) & 3));
+      vis[nz * MW + nx] = 1; stack.push([nx, nz]);
+    }
+    // algunos atajos: rompe paredes extra para que haya loops (menos pasillo único)
+    const extra = Math.floor(MW * MH * 0.08);
+    for (let k = 0; k < extra; k++) {
+      const x = Math.floor(rnd() * MW), z = Math.floor(rnd() * MH), i = Math.floor(rnd() * 4), nx = x + DIRS[i][0], nz = z + DIRS[i][1];
+      if (nx >= 0 && nx < MW && nz >= 0 && nz < MH) { grid[z * MW + x] |= (1 << i); grid[nz * MW + nx] |= (1 << ((i + 2) & 3)); }
+    }
+  }
   function wallBetween(x, z, dir) {
-    if (carveDir(x, z) === dir) return false;
-    const d = DIRS[dir], nx = x + d[0], nz = z + d[1], back = (dir + 2) & 3;
-    if (carveDir(nx, nz) === back) return false;
-    return true;
+    if (x < 0 || x >= MW || z < 0 || z >= MH) return true;
+    const nx = x + DIRS[dir][0], nz = z + DIRS[dir][1];
+    if (nx < 0 || nx >= MW || nz < 0 || nz >= MH) return true; // borde exterior del nivel
+    return !(grid[z * MW + x] & (1 << dir));
   }
   function openNeighbors(x, z) { const o = []; for (let i = 0; i < 4; i++) if (!wallBetween(x, z, i)) o.push([x + DIRS[i][0], z + DIRS[i][1]]); return o; }
 
@@ -83,30 +105,30 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     if (lines) { x.strokeStyle = "rgba(0,0,0,.5)"; x.lineWidth = 3; x.strokeRect(0, 0, s, s); }
     const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
   }
-  const wallTex = noiseTex("#56565f", true);
-  const floorTex = noiseTex("#44444c", false); floorTex.repeat.set(40, 40);
+  const wallTex = noiseTex("#303036", true);
+  const floorTex = noiseTex("#24242a", false); floorTex.repeat.set(40, 40);
   const wallMat = new THREE.MeshLambertMaterial({ map: wallTex, color: 0xffffff, side: THREE.DoubleSide });
   const floorMat = new THREE.MeshLambertMaterial({ map: floorTex, color: 0xffffff });
-  new THREE.TextureLoader().load("/maze-wall.png", (t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; wallMat.map = t; wallMat.color.set(0xffffff); wallMat.needsUpdate = true; }, undefined, () => {});
+  new THREE.TextureLoader().load("/maze-wall.png", (t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; wallMat.map = t; wallMat.needsUpdate = true; }, undefined, () => {});
 
   const wallGeoN = new THREE.PlaneGeometry(CELL, WALL_H);
-  const wallGroup = new THREE.Group(); scene.add(wallGroup);
-  const FSIZE = (VIEW * 2 + 4) * CELL;
+  const FSIZE = 120;
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(FSIZE, FSIZE), floorMat); floor.rotation.x = -Math.PI / 2; scene.add(floor);
   const ceil = new THREE.Mesh(new THREE.PlaneGeometry(FSIZE, FSIZE), new THREE.MeshLambertMaterial({ map: floorTex, color: 0x6a6a76, side: THREE.DoubleSide })); ceil.rotation.x = Math.PI / 2; ceil.position.y = WALL_H; scene.add(ceil);
 
-  let builtCx = 9999, builtCz = 9999;
-  function buildWalls(cx, cz) {
-    for (let i = wallGroup.children.length - 1; i >= 0; i--) wallGroup.remove(wallGroup.children[i]);
-    for (let z = cz - VIEW; z <= cz + VIEW; z++) {
-      for (let x = cx - VIEW; x <= cx + VIEW; x++) {
-        if (wallBetween(x, z, 0)) { const m = new THREE.Mesh(wallGeoN, wallMat); m.position.set(x * CELL + CELL / 2, WALL_H / 2, z * CELL); wallGroup.add(m); }
-        if (wallBetween(x, z, 3)) { const m = new THREE.Mesh(wallGeoN, wallMat); m.position.set(x * CELL, WALL_H / 2, z * CELL + CELL / 2); m.rotation.y = Math.PI / 2; wallGroup.add(m); }
-      }
-    }
-    builtCx = cx; builtCz = cz;
-    floor.position.set(cx * CELL + CELL / 2, 0, cz * CELL + CELL / 2);
-    ceil.position.set(cx * CELL + CELL / 2, WALL_H, cz * CELL + CELL / 2);
+  // Paredes del nivel completo en un solo InstancedMesh (1 draw call)
+  let wallInst = null;
+  const _dummy = new THREE.Object3D();
+  function buildWalls() {
+    if (wallInst) { scene.remove(wallInst); wallInst.dispose && wallInst.dispose(); wallInst = null; }
+    const items = [];
+    for (let z = 0; z <= MH; z++) for (let x = 0; x < MW; x++) if (wallBetween(x, z, 0)) items.push([x * CELL + CELL / 2, z * CELL, 0]);
+    for (let x = 0; x <= MW; x++) for (let z = 0; z < MH; z++) if (wallBetween(x, z, 3)) items.push([x * CELL, z * CELL + CELL / 2, Math.PI / 2]);
+    wallInst = new THREE.InstancedMesh(wallGeoN, wallMat, items.length);
+    for (let i = 0; i < items.length; i++) { _dummy.position.set(items[i][0], WALL_H / 2, items[i][1]); _dummy.rotation.set(0, items[i][2], 0); _dummy.updateMatrix(); wallInst.setMatrixAt(i, _dummy.matrix); }
+    wallInst.instanceMatrix.needsUpdate = true; wallInst.frustumCulled = false; scene.add(wallInst);
+    floor.position.set(MW * CELL / 2, 0, MH * CELL / 2);
+    ceil.position.set(MW * CELL / 2, WALL_H, MH * CELL / 2);
   }
 
   /* ---------- Lluvia 3D (cae en el mundo, alrededor del jugador) ---------- */
@@ -158,7 +180,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   function setDoorLocked(locked) { const c = locked ? 0xd23b47 : 0x46d17f; doorMat.color.setHex(c); doorLight.color.setHex(c); }
 
   /* ---------- Lockers (escondites) ---------- */
-  const lockerMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2a });
+  const lockerMat = new THREE.MeshLambertMaterial({ color: 0x7a5632 });
   const lockerGeo = new THREE.BoxGeometry(CELL * 0.5, WALL_H * 0.86, CELL * 0.5);
   const lockers = [];
   function clearLockers() { lockers.forEach((l) => scene.remove(l.mesh)); lockers.length = 0; }
@@ -166,8 +188,8 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     clearLockers();
     const n = 2 + Math.min(2, depth);
     for (let i = 0; i < n; i++) {
-      const a = hash(40 + i, 40 + i, 3) * 6.2832, dd = 3 + Math.floor(hash(41 + i, 41 + i, 3) * 5);
-      const cx = Math.round(Math.cos(a) * dd) || (3 + i), cz = Math.round(Math.sin(a) * dd) || (-2 - i);
+      const cx = 1 + Math.floor(hash(40 + i, 41 + i, 3) * (MW - 2));
+      const cz = 1 + Math.floor(hash(42 + i, 43 + i, 3) * (MH - 2));
       const m = new THREE.Mesh(lockerGeo, lockerMat); m.position.set(cx * CELL + CELL / 2, WALL_H * 0.43, cz * CELL + CELL / 2); scene.add(m);
       lockers.push({ mesh: m, cx, cz });
     }
@@ -266,7 +288,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   function bfsStep(sx, sz, tx, tz) {
     if (sx === tx && sz === tz) return null;
     const q = [[sx, sz]], seen = new Set([sx + "," + sz]), prev = new Map();
-    let lim = 700, found = false;
+    let lim = 900, found = false;
     while (q.length && lim-- > 0) {
       const c = q.shift();
       if (c[0] === tx && c[1] === tz) { found = true; break; }
@@ -287,12 +309,13 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     return null;
   }
 
-  /* ---------- Objetivos: llave + puerta ---------- */
+  /* ---------- Objetivos: llave (interior) + puerta/refugio (esquina opuesta) ---------- */
   function placeObjectives() {
-    const ka = hash(11, 11, 1) * 6.2832, kd = 5 + Math.floor(hash(12, 12, 1) * 4);
-    keyCell = [Math.round(Math.cos(ka) * kd) || 5, Math.round(Math.sin(ka) * kd)];
-    const da = hash(21, 21, 1) * 6.2832, dd = 9 + Math.floor(hash(22, 22, 1) * 5);
-    doorCell = [Math.round(Math.cos(da) * dd) || 9, Math.round(Math.sin(da) * dd)];
+    doorCell = [MW - 1, MH - 1];
+    let kx = Math.floor((0.35 + hash(11, 11, 1) * 0.45) * MW);
+    let kz = Math.floor((0.35 + hash(12, 12, 1) * 0.45) * MH);
+    kx = Math.max(1, Math.min(MW - 2, kx)); kz = Math.max(1, Math.min(MH - 2, kz));
+    keyCell = [kx, kz];
     keyObj.visible = true; keyLight.visible = true;
     keyObj.position.set(keyCell[0] * CELL + CELL / 2, 1.1, keyCell[1] * CELL + CELL / 2);
     keyLight.position.set(keyCell[0] * CELL + CELL / 2, 1.4, keyCell[1] * CELL + CELL / 2);
@@ -314,7 +337,8 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   function spawnEntities() {
     const need = depth >= 2 ? 2 : 1;
     while (ents.length < need) ents.push(makeEntity(0xff8a8a));
-    ents.forEach((e, i) => { e.sprite.visible = i < need; e.step = null; e.timer = 0; e.x = (i ? -7 : 7) * CELL + CELL / 2; e.z = (i ? -6 : 6) * CELL + CELL / 2; });
+    const spots = [[MW - 2, MH - 2], [MW - 2, 1]];
+    ents.forEach((e, i) => { e.sprite.visible = i < need; e.step = null; e.timer = 0; const sp = spots[i] || [MW - 2, MH - 2]; e.x = sp[0] * CELL + CELL / 2; e.z = sp[1] * CELL + CELL / 2; });
   }
   function resetConsumables() { flashCharge = 1; stamina = 1; flareCount = FLARE_MAX; flarePool.forEach((f) => { f.on = false; f.light.intensity = 0; f.mark.visible = false; }); }
   function enterRefuge() {
@@ -333,7 +357,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     px = CELL / 2; pz = CELL / 2; yaw = 0; pitch = 0;
     hasKey = false; hidden = false; hideT = 0; alertT = 0;
     resetConsumables();
-    buildWalls(0, 0); placeObjectives(); placeLockers(); applyLevelLights(); spawnEntities();
+    genMaze(); buildWalls(); placeObjectives(); placeLockers(); applyLevelLights(); spawnEntities();
     if (refuge) refuge.classList.add("hidden");
     if (hideOv) hideOv.style.opacity = "0";
     inRefuge = false;
@@ -360,6 +384,8 @@ import * as THREE from "https://esm.sh/three@0.160.0";
       if (wallBetween(x, z, 1)) { mctx.moveTo(sx + cellPx, sy); mctx.lineTo(sx + cellPx, sy + cellPx); }
       mctx.stroke();
     }
+    // puerta (si fue vista) en verde si tenés la llave
+    if (seenCells.has(doorCell[0] + "," + doorCell[1])) { const dx = doorCell[0], dz = doorCell[1]; if (Math.abs(dx - pcx) <= range && Math.abs(dz - pcz) <= range) { mctx.fillStyle = hasKey ? "#46d17f" : "#d23b47"; const sx = W / 2 + (dx - pcx + 0.5) * cellPx, sy = H / 2 + (dz - pcz + 0.5) * cellPx; mctx.fillRect(sx - 3, sy - 3, 6, 6); } }
     // bengalas activas (naranja)
     for (const f of flarePool) { if (!f.on) continue; const fx = Math.floor(f.x / CELL), fz = Math.floor(f.z / CELL); if (Math.abs(fx - pcx) <= range && Math.abs(fz - pcz) <= range) { mctx.fillStyle = "#ffb866"; const sx = W / 2 + (fx - pcx + 0.5) * cellPx, sy = H / 2 + (fz - pcz + 0.5) * cellPx; mctx.beginPath(); mctx.arc(sx, sy, 2.6, 0, 7); mctx.fill(); } }
     // entidades (rojo)
@@ -475,8 +501,6 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     }
     // cámara
     camera.position.set(px, EYE, pz); camera.rotation.y = yaw; camera.rotation.x = pitch;
-    const cx = Math.floor(px / CELL), cz = Math.floor(pz / CELL);
-    if (cx !== builtCx || cz !== builtCz) buildWalls(cx, cz);
     // render (CRT)
     crtMat.uniforms.time.value = now / 1000;
     if (crtOn) {
@@ -494,7 +518,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     stamina = 1; flareCount = FLARE_MAX; hidden = false; hideT = 0; alertT = 0; inRefuge = false;
     px = CELL / 2; pz = CELL / 2; yaw = 0; pitch = 0;
     resetConsumables();
-    buildWalls(0, 0); placeObjectives(); placeLockers(); applyLevelLights(); spawnEntities();
+    genMaze(); buildWalls(); placeObjectives(); placeLockers(); applyLevelLights(); spawnEntities();
     alive = true; activeTime = 0; moving = false; stepT = 0;
     intro.classList.add("hidden"); dead.classList.add("hidden"); if (refuge) refuge.classList.add("hidden");
     if (hideOv) hideOv.style.opacity = "0"; if (proxEl) proxEl.style.opacity = "0";
@@ -508,6 +532,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   if ($("rg-next")) $("rg-next").onclick = nextLevel;
   if ($("rg-quit")) $("rg-quit").onclick = finishRun;
 
+  // Lluvia ya es 3D (en escena). Arranco el loop.
   resize();
   requestAnimationFrame(frame);
 })();
