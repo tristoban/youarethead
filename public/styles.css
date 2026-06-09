@@ -57,6 +57,9 @@ a { color: inherit; text-decoration: none; }
 .nav-yata:hover img { opacity: 1; transform: scale(1.04); }
 .yata-enter { display: flex; align-items: center; justify-content: center; gap: 6px; background: #6b8cff; color: #06070d; font: 800 14px "Montserrat", sans-serif; border-radius: 12px; padding: 13px 18px; text-decoration: none; margin: 0 0 20px; text-align: center; }
 .yata-enter:hover { filter: brightness(1.06); }
+.brand-yata { display: inline-flex; align-items: center; padding: 0; }
+.brand-yata img { height: 26px; width: auto; display: block; }
+@media (max-width: 600px) { .brand-yata img { height: 24px; } }
 
 /* ---- Hero ---- */
 .hero { min-height: 100svh; display: flex; align-items: center; padding: calc(var(--nav-h) + 24px) 0 64px; }
