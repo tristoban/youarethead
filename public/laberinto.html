@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/maze3d.css?v=5" />
+  <link rel="stylesheet" href="/maze3d.css?v=6" />
 </head>
 <body>
   <div id="game">
@@ -27,6 +27,17 @@
     <div id="prox" class="prox"><img src="/weirdman.png" alt="" /><span id="proxtxt"></span></div>
 
     <div id="hidev" aria-hidden="true"><div class="hidemeter"><i id="hidebar"></i></div><span>conteniendo la respiración… (E para salir)</span></div>
+
+    <div id="touch" aria-hidden="true">
+      <div id="lookzone"></div>
+      <div id="stick"><i id="sticknub"></i></div>
+      <div id="tbtns">
+        <button id="tb-flash" type="button">FLASH</button>
+        <button id="tb-flare" type="button">BENGALA</button>
+        <button id="tb-hide" type="button">ESCONDER</button>
+      </div>
+    </div>
+    <div id="rotate"><div class="rot-box"><div class="rot-ic">⟲</div><b>Girá el teléfono</b><span>El laberinto se juega en horizontal</span></div></div>
 
     <div id="intro" class="ov">
       <div class="ovbox">
@@ -61,6 +72,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="/maze3d.js?v=9"></script>
+  <script type="module" src="/maze3d.js?v=10"></script>
 </body>
 </html>

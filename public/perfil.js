@@ -574,7 +574,7 @@
       '<div class="pf-uname" style="margin-top:8px">' + esc(d.nick) + " " + badges(d) + '</div>' +
       '<div class="pf-dimc" style="padding:0">@' + esc(d.nick) + (desde ? " · desde " + desde : "") + '</div>' +
       '<input type="file" id="c-file" accept="image/*" style="display:none" /><input type="file" id="c-bnfile" accept="image/*" style="display:none" />' +
-      '<div class="pf-h">Estado</div><input class="pf-input" id="c-estado" maxlength="80" placeholder="¿qué estás tramando?" value="' + esc(d.estado || "") + '" />' +
+      '<div class="pf-h">Estado</div><input class="pf-input" id="c-estado" maxlength="80" placeholder="¿En qué andas?" value="' + esc(d.estado || "") + '" />' +
       '<div class="pf-h">Bio</div><textarea class="pf-input" id="c-bio" maxlength="200" placeholder="Contá quién sos (200)" style="border-radius:12px;min-height:64px;width:100%">' + esc(d.bio || "") + '</textarea>' +
       '<div class="pf-h">Ubicación</div><input class="pf-input" id="c-loc" maxlength="60" placeholder="Ciudad, país" value="' + esc(d.location || "") + '" />' +
       '<div class="pf-h">Color de acento</div><div class="pf-row"><input type="color" id="c-accent" value="' + acc + '" style="width:48px;height:38px;border:0;background:none;cursor:pointer;padding:0" /><span class="pf-dimc">Personalizá tu perfil</span></div>' +
@@ -644,16 +644,8 @@
   function rightRail() {
     const r = root.querySelector("#pf-right"); if (!r) return;
     r.innerHTML =
-      '<div class="pf-widget"><div class="pf-wh">Chat Global<span class="pf-live"><i></i>En vivo</span></div><div class="pf-gclog" id="rg-log"></div><div class="pf-gcform"><input id="rg-txt" maxlength="200" placeholder="escribí un mensaje…" autocomplete="off" /><button class="pf-btn pf-mini" id="rg-send">›</button></div><a class="pf-wlink" id="rg-full">Abrir en pantalla completa →</a></div>' +
       '<div class="pf-widget"><div class="pf-wh">Tus mensajes</div><div id="rg-prev"><p class="pf-dimc">Cargando…</p></div></div>' +
       '<div class="pf-widget"><div class="pf-wh">Tops</div><div id="rg-tops"><p class="pf-dimc" style="padding:14px">Cargando…</p></div></div>';
-    const log = r.querySelector("#rg-log"), txt = r.querySelector("#rg-txt"); let maxId = 0, first = true;
-    function add(m) { if (first) { log.innerHTML = ""; first = false; } const d = document.createElement("div"); d.className = "pf-gcm"; const b = document.createElement("b"); b.textContent = (m.name || "ANÓN") + ":"; const s = document.createElement("span"); s.textContent = " " + m.body; d.appendChild(b); d.appendChild(s); log.appendChild(d); if (m.id > maxId) maxId = m.id; if (window.YATH_villager && m.name) window.YATH_villager(m.name); }
-    async function load() { const { d } = await api("/api/chat" + (maxId ? "?since=" + maxId : ""), AH); if (d && d.messages && d.messages.length) { const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 80; d.messages.forEach(add); first = false; if (stick) log.scrollTop = log.scrollHeight; } else if (first) { log.innerHTML = '<p class="pf-dimc" style="padding:14px">Silencio…</p>'; } }
-    load(); rt.push(setInterval(() => { if (!document.hidden) load(); }, 3500));
-    async function send() { const t = txt.value.trim(); if (!t) return; const { r: rr } = await api("/api/chat", { method: "POST", headers: JH, body: JSON.stringify({ body: t }) }); if (rr.ok) { txt.value = ""; load(); } }
-    r.querySelector("#rg-send").onclick = send; txt.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
-    r.querySelector("#rg-full").onclick = () => setView("chat");
     async function prev() { const { d } = await api("/api/social/amigos", AH); const box = r.querySelector("#rg-prev"); if (!box) return; const am = (d && d.amigos) || []; box.innerHTML = am.length ? am.slice(0, 6).map((n) => '<div class="pf-prev" data-n="' + esc(n) + '"><span class="pf-ava">' + avatar(headFor(n)) + '</span><div>' + uname(n) + '<span>tocá para escribir</span></div></div>').join("") : '<p class="pf-dimc" style="padding:14px">Agregá amigos para chatear.</p>'; box.querySelectorAll("[data-n]").forEach((b) => b.onclick = () => { window.__dmOpen = b.getAttribute("data-n"); setView("mensajes"); }); }
     prev(); rt.push(setInterval(() => { if (!document.hidden) prev(); }, 20000));
     (function mountTops() {

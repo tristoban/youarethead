@@ -43,6 +43,9 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   let hidden = false, hideT = 0, lastSeen = [0, 0], alertT = 0;
   let flareCount = FLARE_MAX;
   function flashCd() { return FLASH_CD_BASE + depth * 2; }
+  const isTouch = matchMedia("(pointer: coarse)").matches || ("ontouchstart" in window);
+  let touchF = 0, touchS = 0, moveId = null, lookId = null, mLastX = 0, mLastY = 0, stickCX = 0, stickCY = 0;
+  const tbHide = $("tb-hide");
 
   /* ---------- Laberinto por niveles (acotado, recursive backtracker determinístico) ---------- */
   const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // 0 N(-z) 1 E(+x) 2 S(+z) 3 W(-x)
@@ -312,13 +315,44 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     if (e.code === "KeyE") { if (hidden) exitHide(false); else if (nearLocker()) enterHide(); }
   });
   addEventListener("keyup", (e) => { keys[e.code] = false; });
-  canvas.addEventListener("click", () => { if (alive && !running && !inRefuge) canvas.requestPointerLock(); });
+  canvas.addEventListener("click", () => { if (!isTouch && alive && !running && !inRefuge) canvas.requestPointerLock(); });
   document.addEventListener("pointerlockchange", () => { running = document.pointerLockElement === canvas; });
   document.addEventListener("mousemove", (e) => {
     if (!running) return;
-    yaw -= e.movementX * 0.0024; pitch -= e.movementY * 0.0024;
+    const mx = Math.max(-120, Math.min(120, e.movementX || 0)), my = Math.max(-120, Math.min(120, e.movementY || 0)); // clamp: evita giros bruscos por deltas espurios del pointer-lock
+    yaw -= mx * 0.0024; pitch -= my * 0.0024;
     pitch = Math.max(-1.2, Math.min(1.2, pitch));
   });
+
+  if (isTouch) {
+    const gameEl = document.getElementById("game"); if (gameEl) gameEl.classList.add("touch");
+    const stick = $("stick"), nub = $("sticknub"), look = $("lookzone");
+    function stickReset() { touchF = 0; touchS = 0; if (nub) nub.style.transform = "translate(-50%,-50%)"; moveId = null; }
+    if (stick) stick.addEventListener("touchstart", (e) => { e.preventDefault(); const t = e.changedTouches[0]; moveId = t.identifier; const r = stick.getBoundingClientRect(); stickCX = r.left + r.width / 2; stickCY = r.top + r.height / 2; }, { passive: false });
+    if (look) look.addEventListener("touchstart", (e) => { if (lookId !== null) return; const t = e.changedTouches[0]; lookId = t.identifier; mLastX = t.clientX; mLastY = t.clientY; }, { passive: false });
+    window.addEventListener("touchmove", (e) => {
+      let handled = false;
+      for (const t of e.changedTouches) {
+        if (t.identifier === moveId) {
+          handled = true; const R = 52, dx = t.clientX - stickCX, dy = t.clientY - stickCY;
+          let nx = dx / R, ny = dy / R; const m = Math.hypot(nx, ny); if (m > 1) { nx /= m; ny /= m; }
+          touchS = Math.abs(nx) < 0.16 ? 0 : nx; touchF = Math.abs(ny) < 0.16 ? 0 : -ny;
+          if (nub) nub.style.transform = "translate(calc(-50% + " + (nx * 34).toFixed(1) + "px), calc(-50% + " + (ny * 34).toFixed(1) + "px))";
+        } else if (t.identifier === lookId) {
+          handled = true; const dx = Math.max(-90, Math.min(90, t.clientX - mLastX)), dy = Math.max(-90, Math.min(90, t.clientY - mLastY));
+          yaw -= dx * 0.005; pitch = Math.max(-1.2, Math.min(1.2, pitch - dy * 0.005));
+          mLastX = t.clientX; mLastY = t.clientY;
+        }
+      }
+      if (handled) e.preventDefault();
+    }, { passive: false });
+    function endTouch(e) { for (const t of e.changedTouches) { if (t.identifier === moveId) stickReset(); else if (t.identifier === lookId) lookId = null; } }
+    window.addEventListener("touchend", endTouch); window.addEventListener("touchcancel", endTouch);
+    function tbtn(id, fn) { const b = $(id); if (b) b.addEventListener("touchstart", (e) => { e.preventDefault(); e.stopPropagation(); if (alive && running && !inRefuge) fn(); }, { passive: false }); }
+    tbtn("tb-flash", () => { if (flashCharge >= 1 && !hidden) { freezeT = FLASH_FREEZE; flashLt = 1.6; flashCharge = 0; } });
+    tbtn("tb-flare", () => { if (!hidden) dropFlare(); });
+    tbtn("tb-hide", () => { if (hidden) exitHide(false); else if (nearLocker()) enterHide(); });
+  }
 
   function collide() {
     const cx = Math.floor(px / CELL), cz = Math.floor(pz / CELL);
@@ -406,7 +440,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     if (refuge) refuge.classList.add("hidden");
     if (hideOv) hideOv.style.opacity = "0";
     inRefuge = false;
-    canvas.requestPointerLock();
+    if (!isTouch) canvas.requestPointerLock();
   }
   function finishRun() { if (refuge) refuge.classList.add("hidden"); inRefuge = false; submitScore("SALISTE CON VIDA"); }
 
@@ -472,8 +506,11 @@ import * as THREE from "https://esm.sh/three@0.160.0";
       // mover jugador (bloqueado si está escondido)
       let mv = false;
       if (!hidden) {
-        const f = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), s = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
-        sprinting = !!((keys.ShiftLeft || keys.ShiftRight) && stamina > 0.04 && (f || s));
+        let f = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0) + touchF;
+        let s = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) + touchS;
+        f = Math.max(-1, Math.min(1, f)); s = Math.max(-1, Math.min(1, s));
+        const tMag = Math.hypot(touchF, touchS);
+        sprinting = !!(((keys.ShiftLeft || keys.ShiftRight) || tMag > 0.92) && stamina > 0.04 && (f || s));
         if (f || s) {
           const sin = Math.sin(yaw), cos = Math.cos(yaw), spd = MOVE * (sprinting ? SPRINT_MULT : 1) * dt;
           px += (-sin * f + cos * s) * spd; pz += (-cos * f - sin * s) * spd; collide();
@@ -534,6 +571,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
       if (!hidden && freezeT <= 0 && pd < CELL * 7 && hbT <= 0) { const ff = 1 - pd / (CELL * 7); heartbeat(0.05 + ff * 0.5); hbT = 1.1 - ff * 0.8; }
       // prompt esconderse
       if (hidePrompt) hidePrompt.style.opacity = (!hidden && nearLocker()) ? "1" : "0";
+      if (tbHide) tbHide.style.opacity = (hidden || nearLocker()) ? "1" : "0.4";
       // minimapa + HUD
       seenCells.add(pcx + "," + pcz);
       for (let i = 0; i < 4; i++) seenCells.add((pcx + DIRS[i][0]) + "," + (pcz + DIRS[i][1]));
@@ -560,7 +598,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   function start() {
     seenCells.clear();
     depth = 0; runSeed = (SEED + Math.floor(Math.random() * 1e9)) >>> 0; mazeSeed = runSeed; hasKey = false; flashCharge = 1; freezeT = 0; flashLt = 0; hbT = 0;
-    stamina = 1; flareCount = FLARE_MAX; hidden = false; hideT = 0; alertT = 0; inRefuge = false;
+    stamina = 1; flareCount = FLARE_MAX; hidden = false; hideT = 0; alertT = 0; inRefuge = false; touchF = 0; touchS = 0; moveId = null; lookId = null;
     px = CELL / 2; pz = CELL / 2; yaw = 0; pitch = 0;
     resetConsumables();
     genMaze(); buildWalls(); placeObjectives(); placeLockers(); applyLevelLights(); spawnEntities();
@@ -570,7 +608,8 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     initAudio();
     try { music.currentTime = 0; music.play().catch(() => {}); } catch (_) {}
     try { rainSnd.currentTime = 0; rainSnd.play().catch(() => {}); } catch (_) {}
-    canvas.requestPointerLock();
+    if (isTouch) { running = true; try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {}); } catch (_) {} }
+    else canvas.requestPointerLock();
   }
   $("play").onclick = start;
   $("retry").onclick = start;
