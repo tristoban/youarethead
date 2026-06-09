@@ -193,6 +193,7 @@ export async function initDb(db: Db): Promise<void> {
   await db.query(`CREATE TABLE IF NOT EXISTS comment_likes (comment_id BIGINT NOT NULL, user_id BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (comment_id, user_id));`);
   await db.query(`CREATE TABLE IF NOT EXISTS notifs (id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, type TEXT NOT NULL, actor TEXT NOT NULL, post_id BIGINT, body TEXT, read BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ NOT NULL DEFAULT now());`);
   await db.query(`CREATE INDEX IF NOT EXISTS notifs_user_idx ON notifs (user_id, id DESC);`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS badges jsonb;`);
   await db.query(`
     CREATE TABLE IF NOT EXISTS grupos (
       id BIGSERIAL PRIMARY KEY,
@@ -766,7 +767,7 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
     if (!u) return { ok: true, logged: false, nick: null };
-    const det = await db.query('SELECT email, bio, created_at, pin_hash, avatar, banner, accent, estado, location, links, pinned, admin FROM hub_users WHERE id = $1', [u.id]);
+    const det = await db.query('SELECT email, bio, created_at, pin_hash, avatar, banner, accent, estado, location, links, pinned, admin, badges FROM hub_users WHERE id = $1', [u.id]);
     const r = det.rows[0] ?? {};
     let caido = 0;
     const c = await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [u.id]);
@@ -774,6 +775,7 @@ export function buildApp(db: Db): FastifyInstance {
     const nl = (u.nick ?? '').toLowerCase();
     const bt = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'tetristo' AND lower(alias) = $1", [nl]);
     const bp = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'parpadeo' AND lower(alias) = $1", [nl]);
+    const bl = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'laberinto' AND lower(alias) = $1", [nl]);
     const ch = await db.query('SELECT head, vida, hambre, sueno FROM pueblo_chars WHERE user_id = $1', [u.id]);
     const cr = ch.rows[0];
     return {
@@ -781,7 +783,8 @@ export function buildApp(db: Db): FastifyInstance {
       email: String(r.email ?? ''), pin: !!r.pin_hash, avatar: (r.avatar as string | null) ?? null,
       banner: (r.banner as string | null) ?? null, accent: (r.accent as string | null) ?? null, estado: (r.estado as string | null) ?? '', location: (r.location as string | null) ?? '', links: (r.links as unknown) ?? [], pinned: r.pinned ? Number(r.pinned) : null, founder: u.id <= FOUNDER_MAX,
       bio: (r.bio as string | null) ?? '', desde: r.created_at ?? null, caido,
-      best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0 },
+      best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0, laberinto: Number(bl.rows[0]?.s ?? 0) || 0 },
+      badges: (r.badges as unknown) ?? null,
       char: cr ? { head: String(cr.head ?? 'o'), vida: Math.round(Number(cr.vida ?? 0)), hambre: Math.round(Number(cr.hambre ?? 0)), sueno: Math.round(Number(cr.sueno ?? 0)) } : null,
     };
   });
@@ -886,6 +889,24 @@ export function buildApp(db: Db): FastifyInstance {
     return { ok: true, nick: rows[0]?.nick ?? nick, admin: false };
   });
 
+  app.post('/api/admin/badges', async (req, reply) => {
+    const a = await adminUser(db, req);
+    if (!a) return reply.code(403).send({ ok: false, error: 'forbidden' });
+    const body = (req.body ?? {}) as { nick?: unknown; badges?: unknown };
+    const nick = typeof body.nick === 'string' ? body.nick.trim() : '';
+    if (!nick) return reply.code(400).send({ ok: false, error: 'bad', message: 'Falta el nick.' });
+    const raw = Array.isArray(body.badges) ? body.badges : [];
+    const clean = raw.slice(0, 6).map((b) => {
+      const o = (b && typeof b === 'object') ? (b as { t?: unknown; c?: unknown }) : {};
+      const t = String(o.t ?? '').replace(/\s+/g, ' ').trim().slice(0, 16);
+      const c = (typeof o.c === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.c)) ? o.c : '#6b8cff';
+      return t ? { t, c } : null;
+    }).filter((x): x is { t: string; c: string } => !!x);
+    const { rows } = await db.query('UPDATE hub_users SET badges = $2 WHERE nick_norm = $1 RETURNING nick', [nick.toLowerCase(), JSON.stringify(clean)]);
+    if (!rows.length) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese nick.' });
+    return { ok: true, nick: rows[0]?.nick ?? nick, badges: clean };
+  });
+
   app.post('/api/admin/config', async (req, reply) => {
     const a = await adminUser(db, req);
     if (!a) return reply.code(403).send({ ok: false, error: 'forbidden' });
@@ -906,7 +927,7 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     const nick = String(((req.query ?? {}) as { nick?: unknown }).nick ?? '').trim();
     if (!nick) return reply.code(400).send({ ok: false, error: 'bad' });
-    const { rows } = await db.query('SELECT id, nick, avatar, banner, accent, bio, estado, location, links, pinned, created_at FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()]);
+    const { rows } = await db.query('SELECT id, nick, avatar, banner, accent, bio, estado, location, links, pinned, created_at, badges FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()]);
     const r = rows[0];
     if (!r) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese perfil.' });
     const uid = Number(r.id);
@@ -914,6 +935,8 @@ export function buildApp(db: Db): FastifyInstance {
     const nl = String(r.nick ?? '').toLowerCase();
     const bt = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'tetristo' AND lower(alias) = $1", [nl]);
     const bp = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'parpadeo' AND lower(alias) = $1", [nl]);
+    const bl = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'laberinto' AND lower(alias) = $1", [nl]);
+    const np = await db.query('SELECT count(*) AS c FROM posts WHERE user_id = $1', [uid]);
     const fc = await db.query("SELECT count(*) AS c FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado'", [uid]);
     const ca = await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [uid]);
     const posts = (await db.query("SELECT id, nick, title, body, created_at, (SELECT count(*) FROM comments c WHERE c.post_id = posts.id) AS ncom FROM posts WHERE user_id = $1 ORDER BY id DESC LIMIT 20", [uid])).rows.map((p) => ({ id: Number(p.id), nick: p.nick, title: (p.title as string | null) ?? '', body: p.body, t: p.created_at, avatar: (r.avatar as string | null) ?? null, ncom: Number(p.ncom ?? 0) }));
@@ -925,8 +948,9 @@ export function buildApp(db: Db): FastifyInstance {
       nick: r.nick, avatar: (r.avatar as string | null) ?? null, banner: (r.banner as string | null) ?? null, accent: (r.accent as string | null) ?? null,
       bio: (r.bio as string | null) ?? '', estado: (r.estado as string | null) ?? '', location: (r.location as string | null) ?? '', links: (r.links as unknown) ?? [],
       desde: r.created_at ?? null, founder: uid <= FOUNDER_MAX, admin: isAdminNick(r.nick as string),
-      best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0 },
-      amigos: Number(fc.rows[0]?.c ?? 0) || 0, caido: ca.rows[0] ? Number(ca.rows[0].n ?? 0) : 0,
+      best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0, laberinto: Number(bl.rows[0]?.s ?? 0) || 0 },
+      amigos: Number(fc.rows[0]?.c ?? 0) || 0, caido: ca.rows[0] ? Number(ca.rows[0].n ?? 0) : 0, nposts: Number(np.rows[0]?.c ?? 0) || 0,
+      badges: (r.badges as unknown) ?? null,
       posts, pinned, rel,
     } };
   });

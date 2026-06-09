@@ -270,6 +270,8 @@
     else if (v === "chat") viewChat();
     else if (v === "notifs") viewNotifs();
     else if (v === "admin") viewAdmin();
+    else if (v === "editar") viewCuenta();
+    else if (v === "perfil") viewUser(me.nick);
     else viewCuenta();
   }
 
@@ -432,12 +434,9 @@
   }
 
   /* ---------- Perfil público ---------- */
-  function badges(p) {
-    let h = "";
-    if (p.admin) h += '<span class="pf-tag" style="background:#6b8cff;color:#06070d">verificado</span>';
-    if (p.founder) h += '<span class="pf-tag" style="background:#e2b23c;color:#06070d">fundador</span>';
-    return h;
-  }
+  function vhex(c) { return (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)) ? c : "#6b8cff"; }
+  function badgeList(p) { let arr = Array.isArray(p.badges) ? p.badges : null; if (!arr) { arr = []; if (p.admin) arr.push({ t: "verificado", c: "#6b8cff" }); if (p.founder) arr.push({ t: "fundador", c: "#e2b23c" }); } return arr; }
+  function badges(p) { return badgeList(p).slice(0, 6).map((b) => '<span class="pf-tag" style="background:' + vhex(b.c) + ';color:#06070d">' + esc(b.t) + "</span>").join(""); }
   async function viewUser(nick) {
     clearView(); cur = "user";
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
@@ -455,30 +454,55 @@
     else if (p.rel === "pendiente") action = '<button class="pf-btn ghost" disabled>Pendiente</button>';
     else action = '<button class="pf-btn" id="pu-add">Agregar amigo</button>';
     const isAdm = me && me.admin && p.rel !== "me";
-    const modTools = isAdm ? '<button class="pf-btn ghost pf-mini" id="pu-mute">Mutear</button><button class="pf-btn ghost pf-mini" id="pu-ban">Banear</button>' : "";
+    const modTools = isAdm ? '<button class="pf-btn ghost pf-mini" id="pu-badges-btn">Badges</button><button class="pf-btn ghost pf-mini" id="pu-mute">Mutear</button><button class="pf-btn ghost pf-mini" id="pu-ban">Banear</button>' : "";
+    const chip = (label, val) => '<div class="pf-chip"><span>' + label + "</span><b>" + val + "</b></div>";
+    const chips =
+      chip("Laberinto", fmt.format(p.best.laberinto || 0)) + chip("TeTristo", fmt.format(p.best.tetristo || 0)) +
+      chip("No Parpadees", fmt.format(p.best.parpadeo || 0)) + (p.caido ? chip("El Botón", "N° " + fmt.format(p.caido)) : "") +
+      chip("Posteos", fmt.format(p.nposts || 0)) + chip("Amigos", fmt.format(p.amigos || 0));
     body().innerHTML =
       banner +
-      '<div class="pf-uhead"><span class="pf-ava pf-uava">' + avaPic(p.avatar, headFor(p.nick)) + '</span>' +
-      '<div class="pf-uact">' + action + modTools + '</div></div>' +
+      '<div class="pf-uhead"><span class="pf-ava pf-uava" style="border-color:' + acc + '">' + avaPic(p.avatar, headFor(p.nick)) + '</span>' +
+      '<div class="pf-uact">' + action + '<button class="pf-btn ghost pf-mini" id="pu-share">Compartir</button>' + modTools + '</div></div>' +
       '<div class="pf-uname">' + esc(p.nick) + " " + badges(p) + '</div>' +
-      '<div class="pf-dimc" style="padding:2px 0">@' + esc(p.nick) + (p.estado ? " · " + esc(p.estado) : "") + '</div>' +
-      (p.bio ? '<p style="margin:8px 0 0;white-space:pre-wrap">' + esc(p.bio) + "</p>" : "") +
-      '<div class="pf-umeta">' + (p.location ? esc(p.location) + " · " : "") + (desde ? "desde " + desde : "") + " · " + fmt.format(p.amigos) + " amigos</div>" +
+      '<div class="pf-dimc" style="padding:2px 0">@' + esc(p.nick) + (desde ? " · desde " + desde : "") + '</div>' +
+      (p.estado ? '<div class="pf-estado" style="border-color:' + acc + '66">' + esc(p.estado) + "</div>" : "") +
+      (p.bio ? '<p class="pf-ubio">' + esc(p.bio) + "</p>" : "") +
+      (p.location ? '<div class="pf-umeta">' + esc(p.location) + "</div>" : "") +
       (links ? '<div class="pf-links">' + links + "</div>" : "") +
-      '<div class="pf-h">Números</div>' +
-      '<div class="pf-fila"><b>TeTristo</b><span>' + fmt.format(p.best.tetristo) + '</span></div>' +
-      '<div class="pf-fila"><b>No Parpadees</b><span>' + fmt.format(p.best.parpadeo) + '</span></div>' +
-      (p.caido ? '<div class="pf-fila"><b>El Botón</b><span>Caído N° ' + fmt.format(p.caido) + '</span></div>' : "") +
+      (isAdm ? '<div id="pu-badges"></div>' : "") +
+      '<div class="pf-chips">' + chips + "</div>" +
       '<div class="pf-h">Posteos</div><div id="pu-posts"></div>';
     const box = body().querySelector("#pu-posts");
     const list = (p.pinned ? [Object.assign({ pin: true }, p.pinned)] : []).concat(p.posts || []);
     box.innerHTML = list.length ? list.map((x) => (x.pin ? '<div class="pf-pinlbl">Fijado</div>' : "") + postHTML(x) + (p.rel === "me" ? '<div class="pf-pinrow"><a data-pin="' + (x.pin ? "0" : x.id) + '">' + (x.pin ? "Quitar fijado" : "Fijar arriba") + "</a></div>" : "")).join("") : '<p class="pf-empty">Todavía no posteó nada.</p>';
     box.querySelectorAll("[data-pin]").forEach((a) => a.onclick = async () => { const id = Number(a.getAttribute("data-pin")); const { r } = await api("/api/hub/pin-post", { method: "POST", headers: JH, body: JSON.stringify({ id: id || null }) }); if (r.ok) { me.pinned = id || null; viewUser(p.nick); } });
-    const edit = body().querySelector("#pu-edit"); if (edit) edit.onclick = () => setView("perfil");
+    const edit = body().querySelector("#pu-edit"); if (edit) edit.onclick = () => setView("editar");
+    const sh = body().querySelector("#pu-share"); if (sh) sh.onclick = async () => { const url = location.origin + "/u/" + encodeURIComponent(p.nick); try { await navigator.clipboard.writeText(url); sh.textContent = "¡Copiado!"; } catch (_) { sh.textContent = url; } };
+    const bdb = body().querySelector("#pu-badges-btn"); if (bdb) bdb.onclick = () => openBadgeEditor(p.nick, badgeList(p));
     const msgb = body().querySelector("#pu-msg"); if (msgb) msgb.onclick = () => { window.__dmOpen = p.nick; setView("mensajes"); };
     const add = body().querySelector("#pu-add"); if (add) add.onclick = async () => { add.disabled = true; add.textContent = "..."; const res = await api("/api/social/amigos/pedir", { method: "POST", headers: JH, body: JSON.stringify({ nick: p.nick }) }); add.textContent = res.r.ok ? "Solicitud enviada" : ((res.d && res.d.message) || "No se pudo."); };
     const mute = body().querySelector("#pu-mute"); if (mute) mute.onclick = async () => { const res = await api("/api/admin/mute", { method: "POST", headers: JH, body: JSON.stringify({ nick: p.nick }) }); mute.textContent = res.r.ok ? "Muteado" : "Error"; };
     const ban = body().querySelector("#pu-ban"); if (ban) ban.onclick = async () => { if (!window.confirm("¿Banear a " + p.nick + "?")) return; const res = await api("/api/admin/ban", { method: "POST", headers: JH, body: JSON.stringify({ nick: p.nick, reason: "" }) }); ban.textContent = res.r.ok ? "Baneado" : "Error"; };
+  }
+
+  function openBadgeEditor(nick, current) {
+    const box = body().querySelector("#pu-badges"); if (!box) return;
+    let list = (Array.isArray(current) ? current : []).map((b) => ({ t: String(b.t || ""), c: vhex(b.c) })).filter((b) => b.t);
+    const presets = [["verificado", "#6b8cff"], ["fundador", "#e2b23c"], ["staff", "#22c55e"], ["mvp", "#f97316"], ["beta", "#a78bfa"], ["vip", "#ec4899"]];
+    function render() {
+      box.innerHTML =
+        '<div class="pf-h">Badges de ' + esc(nick) + "</div>" +
+        '<div class="pf-bdedit">' + (list.length ? list.map((b, i) => '<span class="pf-tag" style="background:' + vhex(b.c) + ';color:#06070d">' + esc(b.t) + ' <a data-bx="' + i + '">&times;</a></span>').join("") : '<span class="pf-dimc">Sin badges.</span>') + "</div>" +
+        '<div class="pf-bdpre">' + presets.map((pr) => '<button class="pf-btn ghost pf-mini" data-bp="' + pr[0] + "|" + pr[1] + '">+ ' + pr[0] + "</button>").join("") + "</div>" +
+        '<div class="pf-row" style="margin-top:8px"><input class="pf-input" id="bd-t" maxlength="16" placeholder="badge custom" /><input type="color" id="bd-c" value="#6b8cff" style="width:44px;height:38px;border:0;background:none;padding:0;cursor:pointer" /><button class="pf-btn pf-mini" id="bd-add">Sumar</button></div>' +
+        '<div class="pf-row" style="margin-top:10px"><button class="pf-btn" id="bd-save">Guardar badges</button><span class="pf-msg" id="bd-msg" style="margin:0"></span></div>';
+      box.querySelectorAll("[data-bx]").forEach((a) => a.onclick = () => { list.splice(Number(a.getAttribute("data-bx")), 1); render(); });
+      box.querySelectorAll("[data-bp]").forEach((b) => b.onclick = () => { const parts = b.getAttribute("data-bp").split("|"); if (list.length < 6 && !list.some((x) => x.t === parts[0])) list.push({ t: parts[0], c: parts[1] }); render(); });
+      box.querySelector("#bd-add").onclick = () => { const t = box.querySelector("#bd-t").value.trim().slice(0, 16); const c = box.querySelector("#bd-c").value; if (t && list.length < 6) { list.push({ t, c }); render(); } };
+      box.querySelector("#bd-save").onclick = async () => { const m = box.querySelector("#bd-msg"); m.textContent = "..."; const { r } = await api("/api/admin/badges", { method: "POST", headers: JH, body: JSON.stringify({ nick, badges: list }) }); if (r.ok) { m.textContent = "Guardado."; viewUser(nick); } else m.textContent = "No se pudo."; };
+    }
+    render();
   }
 
   /* ---------- Amigos ---------- */
@@ -584,6 +608,8 @@
       '<div class="pf-fila"><b>El Botón</b><span>' + (d.caido ? "Caído N° " + fmt.format(d.caido) : "No caíste") + '</span></div>' +
       '<div class="pf-fila"><b>Récord TeTristo</b><span>' + fmt.format((d.best && d.best.tetristo) || 0) + '</span></div>' +
       '<div class="pf-fila"><b>Récord No Parpadees</b><span>' + fmt.format((d.best && d.best.parpadeo) || 0) + '</span></div>';
+    body().insertAdjacentHTML("afterbegin", '<a class="pf-back2" id="c-back">&#8592; Mi perfil</a>');
+    body().querySelector("#c-back").onclick = () => setView("perfil");
     const linksBox = body().querySelector("#c-links");
     let links = (Array.isArray(d.links) ? d.links : []).map((l) => ({ title: l.title || "", url: l.url || "" }));
     function renderLinks() {
@@ -598,7 +624,7 @@
       const sm = body().querySelector("#c-smsg"); sm.textContent = "...";
       const payload = { bio: body().querySelector("#c-bio").value, estado: body().querySelector("#c-estado").value, location: body().querySelector("#c-loc").value, accent: body().querySelector("#c-accent").value, links: links.filter((l) => l.title.trim() && /^https?:\/\//.test(l.url.trim())) };
       const { r, d: dd } = await api("/api/hub/profile", { method: "POST", headers: JH, body: JSON.stringify(payload) });
-      if (r.ok && dd) { me.bio = dd.bio; me.estado = dd.estado; me.location = dd.location; me.accent = dd.accent; me.links = dd.links; sm.textContent = "¡Guardado!"; } else sm.textContent = (dd && dd.message) || "No se pudo.";
+      if (r.ok && dd) { me.bio = dd.bio; me.estado = dd.estado; me.location = dd.location; me.accent = dd.accent; me.links = dd.links; sm.textContent = "¡Guardado!"; setTimeout(() => setView("perfil"), 500); } else sm.textContent = (dd && dd.message) || "No se pudo.";
     };
     body().querySelector("#c-out").onclick = async () => { await api("/api/hub/logout", { method: "POST", headers: JH, body: "{}" }); boot(); };
     const fileEl = body().querySelector("#c-file"), pmsg = body().querySelector("#c-pmsg");

@@ -347,3 +347,16 @@
   .pf-sheet-i .pf-ic { width: 22px; height: 22px; color: #aeb4c0; }
   .pf-sheet-cancel { margin-top: 4px; background: none; border: 0; color: #8a8f98; font: 700 14px "Montserrat", sans-serif; padding: 12px; cursor: pointer; }
 }
+
+/* ===== Perfil compartible: estado, bio, chips, badges ===== */
+.pf-uava { transition: border-color .12s; }
+.pf-estado { display: inline-block; margin: 8px 0 0; padding: 6px 12px; border: 1px solid rgba(107,140,255,.4); border-radius: 999px; color: #e9ebf0; font-size: 13px; font-weight: 700; }
+.pf-ubio { margin: 10px 0 0; white-space: pre-wrap; color: #d7dae1; line-height: 1.55; }
+.pf-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0 4px; }
+.pf-chip { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); border-radius: 12px; padding: 10px 12px; text-align: center; }
+.pf-chip span { display: block; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #8a8f98; margin-bottom: 3px; }
+.pf-chip b { font-size: 16px; color: #f1f2f5; }
+.pf-bdedit { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.pf-bdedit .pf-tag a { cursor: pointer; margin-left: 4px; opacity: .85; }
+.pf-bdpre { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 680px) { .pf-chips { grid-template-columns: repeat(2, 1fr); } }
