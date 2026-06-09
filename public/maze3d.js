@@ -32,7 +32,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   const FLARE_MAX = 3, FLARE_LIFE = 12, FLARE_R = 4.4;
   const HIDE_MAX = 7;
   const SEED = 90210;
-  let mazeSeed = SEED;
+  let mazeSeed = SEED, runSeed = SEED;
 
   /* ---------- Estado ---------- */
   let px = CELL / 2, pz = CELL / 2, yaw = 0, pitch = 0;
@@ -398,7 +398,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     sfx(stepStop);
   }
   function nextLevel() {
-    depth++; mazeSeed = SEED + depth * 7919;
+    depth++; mazeSeed = runSeed + depth * 7919;
     px = CELL / 2; pz = CELL / 2; yaw = 0; pitch = 0;
     hasKey = false; hidden = false; hideT = 0; alertT = 0;
     resetConsumables();
@@ -559,7 +559,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
 
   function start() {
     seenCells.clear();
-    depth = 0; mazeSeed = SEED; hasKey = false; flashCharge = 1; freezeT = 0; flashLt = 0; hbT = 0;
+    depth = 0; runSeed = (SEED + Math.floor(Math.random() * 1e9)) >>> 0; mazeSeed = runSeed; hasKey = false; flashCharge = 1; freezeT = 0; flashLt = 0; hbT = 0;
     stamina = 1; flareCount = FLARE_MAX; hidden = false; hideT = 0; alertT = 0; inRefuge = false;
     px = CELL / 2; pz = CELL / 2; yaw = 0; pitch = 0;
     resetConsumables();
@@ -576,6 +576,20 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   $("retry").onclick = start;
   if ($("rg-next")) $("rg-next").onclick = nextLevel;
   if ($("rg-quit")) $("rg-quit").onclick = finishRun;
+
+  // Top 5 del laberinto en la intro (antes de jugar)
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+  async function loadIntroTops() {
+    const box = $("introtops"); if (!box) return;
+    try {
+      const d = await (await fetch("/api/scores?game=laberinto", { headers: { accept: "application/json" } })).json();
+      const sc = (d && d.scores) || [];
+      box.innerHTML = '<div class="mtops-h">TOP LABERINTO</div>' + (sc.length
+        ? '<ol class="mtops-l">' + sc.slice(0, 5).map((s, i) => "<li><span>" + (i + 1) + ". " + esc(s.alias) + "</span><b>" + Number(s.score | 0).toLocaleString("es-AR") + "</b></li>").join("") + "</ol>"
+        : '<p class="mtops-e">Nadie llegó lejos todavía. Sé el primero.</p>');
+    } catch (_) {}
+  }
+  loadIntroTops();
 
   // Lluvia ya es 3D (en escena). Arranco el loop.
   resize();

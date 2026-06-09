@@ -49,6 +49,16 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-f
 .mbtn.ghost:hover { background: rgba(255,255,255,.08); color: #fff; }
 .mback { display: block; margin-top: 12px; color: #8a8f98; font-size: 13px; text-decoration: none; }
 .mback:hover { color: #fff; }
+
+/* Top 5 en la intro */
+.mtops { margin: 18px auto 4px; max-width: 320px; text-align: left; border: 1px solid rgba(255,255,255,.14); border-radius: 12px; padding: 12px 16px; background: rgba(255,255,255,.03); }
+.mtops-h { font: 800 11px "Montserrat", sans-serif; letter-spacing: .18em; color: #9a9aa2; margin-bottom: 8px; }
+.mtops-l { list-style: none; margin: 0; padding: 0; }
+.mtops-l li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.07); font-size: 13px; }
+.mtops-l li:last-child { border-bottom: 0; }
+.mtops-l li span { color: #dcdce2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mtops-l li b { color: #ffd24a; flex: none; font-weight: 800; }
+.mtops-e { color: #8a8f98; font-size: 12px; margin: 0; }
 .hidden { display: none !important; }
 
 @media (max-width: 560px) {

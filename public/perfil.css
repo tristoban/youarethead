@@ -178,7 +178,7 @@
 .pf-app { gap: 22px; }
 .pf-center { min-height: 70vh; border: 0; background: rgba(16,16,18,.96); }
 .pf-ctitle { padding: 18px 24px 12px; font-size: 19px; }
-.pf-body { padding: 22px 30px 36px; }
+.pf-body, #pf-body { padding: 20px 28px 34px; }   /* #pf-body (id) es el body real del feed/perfil */
 .pf-h { margin: 24px 0 10px; font-size: 11px; letter-spacing: .16em; color: #8a8f98; }
 
 /* Botones: legibles, sólidos, poco redondeados (sin glow) */
@@ -288,10 +288,13 @@
 .pf-toplist li { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.06); font-size: 13px; }
 .pf-toplist li span { color: #cfd2d8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pf-toplist li b { color: #9aa0a8; flex: none; }
+#rg-tops { padding: 10px 16px 14px; }   /* aire entre el widget Tops y su contenido */
+#rg-tops .pf-cdots { margin-top: 10px; }
 
 /* Perfil de invitado (/u/nick sin login) */
 .pf-guest { max-width: 480px; margin: 0 auto; padding: 22px 18px 44px; }
 
 @media (max-width: 680px) {
   .pf-dm { grid-template-columns: 1fr; }
+  .pf-body, #pf-body { padding: 16px 16px 28px; }
 }
