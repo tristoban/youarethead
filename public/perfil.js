@@ -215,7 +215,7 @@
       '<nav class="pf-tabbar">' +
         '<button class="pf-tab" data-v="feed" type="button">' + ic("inicio") + '<span>Inicio</span></button>' +
         '<button class="pf-tab" data-v="amigos" type="button">' + ic("amigos") + '<span>Amigos</span></button>' +
-        '<button class="pf-tab pf-tab-mas" id="pf-tabmas" type="button" aria-label="Más">' + ic("mas") + '</button>' +
+        '<button class="pf-tab pf-tab-mas" id="pf-tabmas" type="button" aria-label="Más"><img src="/simbolomas.png" alt="Más" /></button>' +
         '<button class="pf-tab" data-v="mensajes" type="button">' + ic("mensajes") + '<span>Mensajes</span></button>' +
         '<button class="pf-tab" data-v="perfil" type="button">' + ic("perfil") + '<span>Perfil</span></button>' +
       '</nav>' +

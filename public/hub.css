@@ -1,5 +1,10 @@
 /* ====== Tristo's Game Hub ====== */
 
+/* Header minimal de los juegos: sólo el logo de YATA centrado (vuelve al menú) */
+.hd-nav-min { justify-content: center !important; }
+.hd-nav-min .hd-logo { display: inline-flex; align-items: center; }
+.hd-nav-min .hd-logo img { height: 30px; width: auto; display: block; }
+
 .th-main { min-height: 100svh; display: flex; justify-content: center; align-items: flex-start; padding: 88px 14px 48px; }
 .th-col { flex-direction: column; align-items: center; gap: 14px; }
 .th-col .hd-chat { width: 100%; max-width: 680px; }
