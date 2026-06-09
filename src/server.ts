@@ -191,6 +191,8 @@ export async function initDb(db: Db): Promise<void> {
   await db.query(`CREATE INDEX IF NOT EXISTS comments_post_idx ON comments (post_id, id);`);
   await db.query(`CREATE TABLE IF NOT EXISTS post_likes (post_id BIGINT NOT NULL, user_id BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (post_id, user_id));`);
   await db.query(`CREATE TABLE IF NOT EXISTS comment_likes (comment_id BIGINT NOT NULL, user_id BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (comment_id, user_id));`);
+  await db.query(`CREATE TABLE IF NOT EXISTS notifs (id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, type TEXT NOT NULL, actor TEXT NOT NULL, post_id BIGINT, body TEXT, read BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ NOT NULL DEFAULT now());`);
+  await db.query(`CREATE INDEX IF NOT EXISTS notifs_user_idx ON notifs (user_id, id DESC);`);
   await db.query(`
     CREATE TABLE IF NOT EXISTS grupos (
       id BIGSERIAL PRIMARY KEY,
@@ -987,6 +989,22 @@ export function buildApp(db: Db): FastifyInstance {
     return { ok: true, usuarios: rows.map((r) => r.nick) };
   });
 
+  async function notify(userId: number, type: string, actor: string, postId: number | null, body: string, dedupe = false) {
+    if (!userId || !Number.isInteger(userId)) return;
+    if (dedupe) {
+      const ex = await db.query("SELECT 1 FROM notifs WHERE user_id = $1 AND type = $2 AND actor = $3 AND coalesce(post_id, 0) = coalesce($4, 0) AND read = false AND created_at > now() - interval '1 day' LIMIT 1", [userId, type, actor, postId]);
+      if (ex.rows.length) return;
+    }
+    await db.query('INSERT INTO notifs (user_id, type, actor, post_id, body) VALUES ($1, $2, $3, $4, $5)', [userId, type, actor || 'alguien', postId, String(body || '').slice(0, 140)]);
+  }
+  async function notifyMentions(text: string, actorId: number, actorNick: string, postId: number) {
+    const seen = new Set<number>([actorId]);
+    const mm = (String(text || '').match(/@([a-zA-Z0-9_]{2,14})/g) || []).slice(0, 8);
+    for (const m of mm) { const other = await userByNick(m.slice(1)); if (other && !seen.has(other.id)) { seen.add(other.id); await notify(other.id, 'mention', actorNick, postId, text); } }
+    const cc = (String(text || '').match(/\$([0-9]{1,9})/g) || []).slice(0, 8);
+    for (const c of cc) { const pid = Math.floor(Number(c.slice(1))); if (!pid) continue; const pr = (await db.query('SELECT user_id FROM posts WHERE id = $1', [pid])).rows[0]; if (pr && !seen.has(Number(pr.user_id))) { seen.add(Number(pr.user_id)); await notify(Number(pr.user_id), 'cite', actorNick, pid, text); } }
+  }
+
   app.post('/api/social/amigos/pedir', async (req, reply) => {
     const u = await hubUserBySession(db, req);
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
@@ -997,10 +1015,11 @@ export function buildApp(db: Db): FastifyInstance {
     const row = ex.rows[0];
     if (row) {
       if (row.estado === 'aceptado') return { ok: true, estado: 'amigos', message: 'Ya son amigos.' };
-      if (Number(row.a) === otro.id) { await db.query("UPDATE amigos SET estado = 'aceptado' WHERE id = $1", [row.id]); return { ok: true, estado: 'amigos', message: 'Te había pedido: ahora son amigos.' }; }
+      if (Number(row.a) === otro.id) { await db.query("UPDATE amigos SET estado = 'aceptado' WHERE id = $1", [row.id]); await notify(otro.id, 'friend_acc', u.nick || 'alguien', null, ''); return { ok: true, estado: 'amigos', message: 'Te había pedido: ahora son amigos.' }; }
       return { ok: true, estado: 'pendiente', message: 'Ya estaba pedido.' };
     }
     await db.query("INSERT INTO amigos (a, b, estado) VALUES ($1, $2, 'pendiente')", [u.id, otro.id]);
+    await notify(otro.id, 'friend_req', u.nick || 'alguien', null, '');
     return reply.code(201).send({ ok: true, estado: 'pendiente', message: 'Solicitud enviada.' });
   });
 
@@ -1013,7 +1032,7 @@ export function buildApp(db: Db): FastifyInstance {
     const ex = await db.query("SELECT id FROM amigos WHERE a = $1 AND b = $2 AND estado = 'pendiente'", [otro.id, u.id]);
     const row = ex.rows[0];
     if (!row) return reply.code(404).send({ ok: false, error: 'sin_pedido' });
-    if (body.aceptar === true) { await db.query("UPDATE amigos SET estado = 'aceptado' WHERE id = $1", [row.id]); return { ok: true, estado: 'amigos' }; }
+    if (body.aceptar === true) { await db.query("UPDATE amigos SET estado = 'aceptado' WHERE id = $1", [row.id]); await notify(otro.id, 'friend_acc', u.nick || 'alguien', null, ''); return { ok: true, estado: 'amigos' }; }
     await db.query('DELETE FROM amigos WHERE id = $1', [row.id]);
     return { ok: true, estado: 'rechazado' };
   });
@@ -1112,7 +1131,9 @@ export function buildApp(db: Db): FastifyInstance {
     postRate.set(u.id, now);
     const ins = await db.query('INSERT INTO posts (user_id, nick, title, body) VALUES ($1, $2, $3, $4) RETURNING id, created_at', [u.id, u.nick, title, text]);
     const row = ins.rows[0];
-    return reply.code(201).send({ ok: true, post: { id: Number(row?.id ?? 0), nick: u.nick, title, body: text, t: row?.created_at, avatar: null, ncom: 0 } });
+    const pid = Number(row?.id ?? 0);
+    await notifyMentions(title + ' ' + text, u.id, u.nick, pid);
+    return reply.code(201).send({ ok: true, post: { id: pid, nick: u.nick, title, body: text, t: row?.created_at, avatar: null, ncom: 0 } });
   });
 
   app.post('/api/social/comment', async (req, reply) => {
@@ -1135,6 +1156,11 @@ export function buildApp(db: Db): FastifyInstance {
     postRate.set(-u.id, now);
     const ins = await db.query('INSERT INTO comments (post_id, parent_id, user_id, nick, body) VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at', [postId, parent, u.id, u.nick, text]);
     const row = ins.rows[0];
+    const pAuthor = (await db.query('SELECT user_id FROM posts WHERE id = $1', [postId])).rows[0];
+    const pAid = pAuthor ? Number(pAuthor.user_id) : 0;
+    if (pAid && pAid !== u.id) await notify(pAid, 'comment', u.nick, postId, text);
+    if (parent) { const cA = (await db.query('SELECT user_id FROM comments WHERE id = $1', [parent])).rows[0]; const cAid = cA ? Number(cA.user_id) : 0; if (cAid && cAid !== u.id && cAid !== pAid) await notify(cAid, 'reply', u.nick, postId, text); }
+    await notifyMentions(text, u.id, u.nick, postId);
     return reply.code(201).send({ ok: true, comment: { id: Number(row?.id ?? 0), parent, nick: u.nick, body: text, t: row?.created_at, avatar: null } });
   });
 
@@ -1149,6 +1175,7 @@ export function buildApp(db: Db): FastifyInstance {
     let liked: boolean;
     if (had.rows.length) { await db.query('DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2', [postId, u.id]); liked = false; }
     else { await db.query('INSERT INTO post_likes (post_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [postId, u.id]); liked = true; }
+    if (liked) { const pa = (await db.query('SELECT user_id, title FROM posts WHERE id = $1', [postId])).rows[0]; if (pa && Number(pa.user_id) !== u.id) await notify(Number(pa.user_id), 'like_post', u.nick || 'alguien', postId, (pa.title as string) || '', true); }
     const cnt = await db.query('SELECT count(*) AS c FROM post_likes WHERE post_id = $1', [postId]);
     return { ok: true, liked, count: Number(cnt.rows[0]?.c ?? 0) };
   });
@@ -1164,8 +1191,33 @@ export function buildApp(db: Db): FastifyInstance {
     let liked: boolean;
     if (had.rows.length) { await db.query('DELETE FROM comment_likes WHERE comment_id = $1 AND user_id = $2', [cid, u.id]); liked = false; }
     else { await db.query('INSERT INTO comment_likes (comment_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [cid, u.id]); liked = true; }
+    if (liked) { const ca = (await db.query('SELECT user_id, post_id, body FROM comments WHERE id = $1', [cid])).rows[0]; if (ca && Number(ca.user_id) !== u.id) await notify(Number(ca.user_id), 'like_comment', u.nick || 'alguien', Number(ca.post_id), (ca.body as string) || '', true); }
     const cnt = await db.query('SELECT count(*) AS c FROM comment_likes WHERE comment_id = $1', [cid]);
     return { ok: true, liked, count: Number(cnt.rows[0]?.c ?? 0) };
+  });
+
+  app.get('/api/notifs', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const rows = (await db.query('SELECT id, type, actor, post_id, body, read, created_at FROM notifs WHERE user_id = $1 ORDER BY id DESC LIMIT 30', [u.id])).rows;
+    const unread = Number((await db.query('SELECT count(*) AS c FROM notifs WHERE user_id = $1 AND read = false', [u.id])).rows[0]?.c ?? 0);
+    return { ok: true, unread, items: rows.map((r) => ({ id: Number(r.id), type: r.type, actor: r.actor, postId: r.post_id ? Number(r.post_id) : null, body: (r.body as string | null) ?? '', read: r.read === true, t: r.created_at })) };
+  });
+
+  app.get('/api/notifs/count', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return { ok: true, unread: 0 };
+    const unread = Number((await db.query('SELECT count(*) AS c FROM notifs WHERE user_id = $1 AND read = false', [u.id])).rows[0]?.c ?? 0);
+    return { ok: true, unread };
+  });
+
+  app.post('/api/notifs/read', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    await db.query('UPDATE notifs SET read = true WHERE user_id = $1 AND read = false', [u.id]);
+    return { ok: true };
   });
 
   app.post('/api/social/grupos/crear', async (req, reply) => {

@@ -298,3 +298,49 @@
   .pf-dm { grid-template-columns: 1fr; }
   .pf-body, #pf-body { padding: 16px 16px 28px; }
 }
+
+/* ============ Notificaciones + nav mobile (abajo) ============ */
+.pf-topbar, .pf-tabbar, .pf-sheet { display: none; }
+
+#pf-navnotif { position: relative; }
+.pf-ndot { display: none; position: absolute; top: 7px; left: 26px; min-width: 16px; height: 16px; background: #d23b47; color: #fff; font: 800 10px "Montserrat", sans-serif; border-radius: 999px; align-items: center; justify-content: center; padding: 0 4px; }
+.pf-ndot.on { display: flex; }
+
+.pf-nrow { display: flex; gap: 12px; align-items: flex-start; padding: 13px 8px; border-bottom: 1px solid rgba(255,255,255,.07); cursor: pointer; border-radius: 10px; }
+.pf-nrow:hover { background: rgba(255,255,255,.04); }
+.pf-nrow.unread { background: rgba(107,140,255,.08); }
+.pf-nic { width: 34px; height: 34px; flex: none; display: flex; align-items: center; justify-content: center; color: #c2c6d0; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; }
+.pf-nic .pf-ic, .pf-nic svg { width: 18px; height: 18px; }
+.pf-ntext { font-size: 14px; color: #dfe1e7; line-height: 1.45; }
+.pf-ntext .pf-u { color: #fff; }
+.pf-ndim { color: #8a8f98; }
+.pf-nt { display: block; font-size: 11px; color: #6c6c72; margin-top: 2px; }
+
+@media (max-width: 680px) {
+  .pf-left { display: none; }
+  #pf-root { padding: 64px 12px 88px; }
+  .pf-right { margin-top: 14px; }
+  #snd { bottom: 94px !important; }
+
+  .pf-topbar { display: flex; align-items: center; justify-content: space-between; position: fixed; top: 0; left: 0; right: 0; height: 52px; padding: 0 16px; background: rgba(10,10,13,.96); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(255,255,255,.1); z-index: 50; }
+  .pf-tb-brand { font: 800 12px "Montserrat", sans-serif; letter-spacing: .16em; text-transform: uppercase; color: #fff; text-decoration: none; }
+  .pf-tbell { position: relative; background: none; border: 0; color: #cfcfd6; cursor: pointer; padding: 6px; }
+  .pf-tbell .pf-ic { width: 24px; height: 24px; }
+  .pf-tb-badge { position: absolute; top: 0; right: 2px; background: #d23b47; color: #fff; font: 800 10px "Montserrat", sans-serif; min-width: 16px; height: 16px; border-radius: 999px; align-items: center; justify-content: center; padding: 0 4px; }
+
+  .pf-tabbar { display: grid; grid-template-columns: repeat(5,1fr); align-items: end; position: fixed; left: 0; right: 0; bottom: 0; padding: 9px 4px calc(11px + env(safe-area-inset-bottom)); background: rgba(16,16,19,.98); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-top: 1px solid rgba(255,255,255,.12); z-index: 50; }
+  .pf-tab { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; color: #8a8f98; cursor: pointer; font: 700 10px "Montserrat", sans-serif; padding: 2px 0; }
+  .pf-tab .pf-ic { width: 24px; height: 24px; }
+  .pf-tab.on { color: #6b8cff; }
+  .pf-tab-mas { color: #06070d; }
+  .pf-tab-mas .pf-ic { width: 24px; height: 24px; background: #6b8cff; border-radius: 50%; padding: 11px; box-sizing: content-box; margin-top: -26px; border: 4px solid #101013; }
+
+  .pf-sheet { display: block; position: fixed; inset: 0; z-index: 60; }
+  .pf-sheet[hidden] { display: none; }
+  .pf-sheet-bg { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
+  .pf-sheet-card { position: absolute; left: 0; right: 0; bottom: 0; background: #141418; border-top-left-radius: 18px; border-top-right-radius: 18px; border-top: 1px solid rgba(255,255,255,.12); padding: 14px 14px calc(16px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; }
+  .pf-sheet-h { font: 800 12px "Montserrat", sans-serif; letter-spacing: .04em; color: #8a8f98; text-align: center; padding: 4px 0 8px; }
+  .pf-sheet-i { display: flex; align-items: center; gap: 14px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); border-radius: 13px; padding: 14px 16px; color: #f5f5f7; font: 700 15px "Montserrat", sans-serif; text-decoration: none; cursor: pointer; }
+  .pf-sheet-i .pf-ic { width: 22px; height: 22px; color: #aeb4c0; }
+  .pf-sheet-cancel { margin-top: 4px; background: none; border: 0; color: #8a8f98; font: 700 14px "Montserrat", sans-serif; padding: 12px; cursor: pointer; }
+}

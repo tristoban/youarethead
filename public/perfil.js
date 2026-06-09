@@ -86,6 +86,8 @@
   const IC = {
     inicio: '<path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/>',
     feed: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+    notifs: '<path d="M6 9a6 6 0 1112 0c0 4 1.6 5.4 2 6H4c.4-.6 2-2 2-6"/><path d="M10 19a2 2 0 004 0"/>',
+    mas: '<path d="M12 5v14M5 12h14"/>',
     juegos: '<rect x="3" y="8" width="18" height="9" rx="4"/><path d="M8 12.5h3M9.5 11v3"/><circle cx="16" cy="12.5" r=".6" fill="currentColor"/>',
     canal: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5z" fill="currentColor" stroke="none"/>',
     mensajes: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/>',
@@ -192,6 +194,7 @@
       '<div class="pf-app">' +
         '<aside class="pf-left"><a href="/" class="pf-brand">youarethead.com.ar</a><nav class="pf-nav" id="pf-nav">' +
           '<a href="/">' + ic("inicio") + '<span>Inicio</span></a>' + navItem("feed", "Feed") +
+          '<button data-v="notifs" id="pf-navnotif">' + ic("notifs") + '<span>Notificaciones</span><i class="pf-ndot" id="pf-nb"></i></button>' +
           navItem("mensajes", "Mensajes") + navItem("amigos", "Amigos") + navItem("chat", "Chat Global") +
           navItem("juegos", "Juegos") + navItem("tienda", "Tienda") + navItem("canal", "Insomnio Crónico") +
           navItem("perfil", "Perfil") + (me.admin ? navItem("admin", "Admin") : "") +
@@ -201,7 +204,23 @@
         '</nav></aside>' +
         '<main class="pf-center"><div class="pf-chead" id="pf-chead"></div><div id="pf-body"></div></main>' +
         '<aside class="pf-right" id="pf-right"></aside>' +
-      '</div>';
+      '</div>' +
+      '<header class="pf-topbar"><a href="/" class="pf-tb-brand">youarethead</a><button class="pf-tbell" id="pf-tbell" type="button" aria-label="Notificaciones">' + ic("notifs") + '<span class="pf-tb-badge" id="pf-tbell-b" style="display:none">0</span></button></header>' +
+      '<nav class="pf-tabbar">' +
+        '<button class="pf-tab" data-v="feed" type="button">' + ic("inicio") + '<span>Inicio</span></button>' +
+        '<button class="pf-tab" data-v="amigos" type="button">' + ic("amigos") + '<span>Amigos</span></button>' +
+        '<button class="pf-tab pf-tab-mas" id="pf-tabmas" type="button" aria-label="Más">' + ic("mas") + '</button>' +
+        '<button class="pf-tab" data-v="mensajes" type="button">' + ic("mensajes") + '<span>Mensajes</span></button>' +
+        '<button class="pf-tab" data-v="perfil" type="button">' + ic("perfil") + '<span>Perfil</span></button>' +
+      '</nav>' +
+      '<div class="pf-sheet" id="pf-sheet" hidden><div class="pf-sheet-bg" id="pf-sheetbg"></div><div class="pf-sheet-card">' +
+        '<div class="pf-sheet-h">¿Qué querés hacer?</div>' +
+        '<button class="pf-sheet-i" data-act="postear" type="button">' + ic("feed") + '<span>Postear</span></button>' +
+        '<a class="pf-sheet-i" href="/tristos">' + ic("juegos") + '<span>Juegos</span></a>' +
+        '<button class="pf-sheet-i" data-act="chat" type="button">' + ic("chat") + '<span>Chat global</span></button>' +
+        '<button class="pf-sheet-i" data-act="amigos" type="button">' + ic("amigos") + '<span>Buscar amigos</span></button>' +
+        '<button class="pf-sheet-cancel" id="pf-sheetx" type="button">Cerrar</button>' +
+      '</div></div>';
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => { b.onclick = () => setView(b.getAttribute("data-v")); });
     root.querySelector("#pf-postbtn").onclick = () => { setView("feed"); const t = root.querySelector("#pf-post"); if (t) t.focus(); };
     root.querySelector("#pf-me").onclick = () => setView("perfil");
@@ -214,6 +233,14 @@
       const cl = t.closest("[data-clike]"); if (cl) { e.preventDefault(); e.stopPropagation(); toggleClike(cl); return; }
       const ps = t.closest("[data-post]"); if (ps) { e.preventDefault(); viewPost(Number(ps.getAttribute("data-post"))); return; }
     }); }
+    function closeSheet() { const s = root.querySelector("#pf-sheet"); if (s) s.hidden = true; }
+    root.querySelectorAll(".pf-tabbar [data-v]").forEach((b) => b.onclick = () => { closeSheet(); setView(b.getAttribute("data-v")); });
+    root.querySelector("#pf-tbell").onclick = () => { closeSheet(); setView("notifs"); };
+    root.querySelector("#pf-tabmas").onclick = () => { const s = root.querySelector("#pf-sheet"); if (s) s.hidden = false; };
+    root.querySelector("#pf-sheetbg").onclick = closeSheet;
+    root.querySelector("#pf-sheetx").onclick = closeSheet;
+    root.querySelectorAll(".pf-sheet-i[data-act]").forEach((b) => b.onclick = () => { const a = b.getAttribute("data-act"); closeSheet(); if (a === "postear") { setView("feed"); const t = root.querySelector("#pf-post"); if (t) t.focus(); } else if (a === "chat") setView("chat"); else if (a === "amigos") setView("amigos"); });
+    pollNotifs(); rt.push(setInterval(pollNotifs, 25000));
     rightRail();
     setView("feed");
   }
@@ -228,10 +255,12 @@
   function setView(v) {
     clearView(); cur = v;
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === v));
+    root.querySelectorAll(".pf-tabbar [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === v));
     if (v === "feed") viewFeed();
     else if (v === "amigos") viewAmigos();
     else if (v === "mensajes") viewMsgs();
     else if (v === "chat") viewChat();
+    else if (v === "notifs") viewNotifs();
     else if (v === "admin") viewAdmin();
     else viewCuenta();
   }
@@ -574,6 +603,34 @@
     bnFile.onchange = () => { const f = bnFile.files && bnFile.files[0]; if (!f) return; const sm = body().querySelector("#c-smsg"); sm.textContent = "Subiendo portada…"; resizeBanner(f, async (dataUrl) => { if (!dataUrl) { sm.textContent = "No se pudo."; return; } const { r, d: dd } = await api("/api/hub/banner", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl }) }); if (r.ok) { me.banner = dd.banner; sm.textContent = "Portada lista."; viewCuenta(); } else sm.textContent = (dd && dd.message) || "No se pudo."; }); };
     const bnDel = body().querySelector("#c-bndel"); if (bnDel) bnDel.onclick = async () => { const { r } = await api("/api/hub/banner", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl: null }) }); if (r.ok) { me.banner = null; viewCuenta(); } };
   }
+
+  /* ---------- Notificaciones ---------- */
+  function notifIcon(t) { if (t === "like_post" || t === "like_comment") return skull(); if (t === "comment" || t === "reply") return ic("chat"); if (t === "friend_req" || t === "friend_acc") return ic("amigos"); return ic("notifs"); }
+  const NVERB = { like_post: "te calaveó un posteo", like_comment: "te calaveó un comentario", comment: "comentó tu posteo", reply: "respondió tu comentario", mention: "te nombró", cite: "citó tu posteo", friend_req: "te mandó solicitud de amistad", friend_acc: "ahora es tu amigo" };
+  function notifLine(n) {
+    const verb = NVERB[n.type] || "novedad";
+    const tgt = n.postId ? ' data-post="' + n.postId + '"' : ' data-u="' + esc(n.actor) + '"';
+    return '<div class="pf-nrow' + (n.read ? "" : " unread") + '"' + tgt + '>' +
+      '<span class="pf-nic">' + notifIcon(n.type) + "</span>" +
+      '<div class="pf-ntext"><b class="pf-u" data-u="' + esc(n.actor) + '">' + esc(n.actor) + "</b> " + verb +
+      (n.body ? ' <span class="pf-ndim">· ' + esc(String(n.body).slice(0, 60)) + "</span>" : "") +
+      '<span class="pf-nt">' + cuando(n.t) + "</span></div></div>";
+  }
+  async function viewNotifs() {
+    chead("Notificaciones");
+    body().innerHTML = '<div id="pf-notifs"><p class="pf-dimc">Cargando…</p></div>';
+    const { d } = await api("/api/notifs", AH);
+    const box = body().querySelector("#pf-notifs"); if (!box) return;
+    const items = (d && d.items) || [];
+    box.innerHTML = items.length ? items.map(notifLine).join("") : '<p class="pf-empty">Nada por acá todavía. Cuando te calaveen, comenten o te nombren, aparece acá.</p>';
+    if (items.some((n) => !n.read)) await api("/api/notifs/read", { method: "POST", headers: JH, body: "{}" });
+    setNotifBadge(0);
+  }
+  function setNotifBadge(n) {
+    const dot = root.querySelector("#pf-nb"); if (dot) { dot.classList.toggle("on", n > 0); dot.textContent = n > 9 ? "9+" : String(n); }
+    const mb = root.querySelector("#pf-tbell-b"); if (mb) { mb.style.display = n > 0 ? "flex" : "none"; mb.textContent = n > 9 ? "9+" : String(n); }
+  }
+  async function pollNotifs() { try { const { d } = await api("/api/notifs/count", AH); if (d && d.ok && cur !== "notifs") setNotifBadge(d.unread || 0); } catch (_) {} }
 
   /* ---------- Columna derecha (persistente): Chat Global + Mensajes ---------- */
   function rightRail() {
