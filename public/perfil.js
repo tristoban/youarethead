@@ -51,6 +51,11 @@
   }
   function skull() { return '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2C7.3 2 4 5.4 4 9.8c0 2.2.9 3.9 2.4 5.2.3.3.6.7.6 1.2V18c0 1 .8 1.8 1.8 1.8h.4v-1.6h1.6v1.6h1.6v-1.6h1.6v1.6h.4c1 0 1.8-.8 1.8-1.8v-1.8c0-.5.3-.9.6-1.2C19.1 13.7 20 12 20 9.8 20 5.4 16.7 2 12 2zM8.6 11.3a1.7 1.7 0 110-3.4 1.7 1.7 0 010 3.4zm6.8 0a1.7 1.7 0 110-3.4 1.7 1.7 0 010 3.4zM12 12.4l1 2h-2l1-2z"/></svg>'; }
   function likeBtn(p) { return '<button class="pf-like' + (p.liked ? " on" : "") + '" data-like="' + p.id + '" type="button" title="Me cala">' + skull() + "<span>" + (p.nlik || 0) + "</span></button>"; }
+  function canDel(nick) { return !!me && (me.admin === true || (!!me.nick && me.nick === nick)); }
+  function delBtnPost(p) { return canDel(p.nick) ? '<button class="pf-del" data-delpost="' + p.id + '" type="button" title="Borrar posteo">' + ic("trash") + "</button>" : ""; }
+  function delBtnCmt(c) { return canDel(c.nick) ? '<button class="pf-del" data-delcomment="' + c.id + '" type="button" title="Borrar comentario">' + ic("trash") + "</button>" : ""; }
+  async function delPost(id) { if (!window.confirm("¿Borrar este posteo? No se puede deshacer.")) return; const { r } = await api("/api/social/post/delete", { method: "POST", headers: JH, body: JSON.stringify({ id: Number(id) }) }); if (r.ok) setView("feed"); }
+  async function delComment(id) { if (!window.confirm("¿Borrar este comentario?")) return; const { r } = await api("/api/social/comment/delete", { method: "POST", headers: JH, body: JSON.stringify({ id: Number(id) }) }); if (r.ok) { if (window.__curPost) viewPost(window.__curPost); else setView("feed"); } }
   async function toggleLike(btn) {
     const id = btn.getAttribute("data-like");
     const { r, d } = await api("/api/social/like", { method: "POST", headers: JH, body: JSON.stringify({ postId: Number(id) }) });
@@ -88,6 +93,7 @@
     feed: '<path d="M4 7h16M4 12h16M4 17h10"/>',
     notifs: '<path d="M6 9a6 6 0 1112 0c0 4 1.6 5.4 2 6H4c.4-.6 2-2 2-6"/><path d="M10 19a2 2 0 004 0"/>',
     mas: '<path d="M12 5v14M5 12h14"/>',
+    trash: '<path d="M4 7h16M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2M7 7l1 13h8l1-13"/>',
     juegos: '<rect x="3" y="8" width="18" height="9" rx="4"/><path d="M8 12.5h3M9.5 11v3"/><circle cx="16" cy="12.5" r=".6" fill="currentColor"/>',
     canal: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5z" fill="currentColor" stroke="none"/>',
     mensajes: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/>',
@@ -231,6 +237,8 @@
       const tg = t.closest("[data-tag]"); if (tg) { e.preventDefault(); viewFeedTag(tg.getAttribute("data-tag")); return; }
       const lk = t.closest("[data-like]"); if (lk) { e.preventDefault(); e.stopPropagation(); toggleLike(lk); return; }
       const cl = t.closest("[data-clike]"); if (cl) { e.preventDefault(); e.stopPropagation(); toggleClike(cl); return; }
+      const dpst = t.closest("[data-delpost]"); if (dpst) { e.preventDefault(); e.stopPropagation(); delPost(dpst.getAttribute("data-delpost")); return; }
+      const dcmt = t.closest("[data-delcomment]"); if (dcmt) { e.preventDefault(); e.stopPropagation(); delComment(dcmt.getAttribute("data-delcomment")); return; }
       const ps = t.closest("[data-post]"); if (ps) { e.preventDefault(); viewPost(Number(ps.getAttribute("data-post"))); return; }
     }); }
     function closeSheet() { const s = root.querySelector("#pf-sheet"); if (s) s.hidden = true; }
@@ -275,7 +283,7 @@
       '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><span class="pf-code" title="código del posteo">$' + p.id + "</span></div>" +
       (p.title ? '<h3 class="pf-post-t">' + esc(p.title) + "</h3>" : "") +
       (snip ? '<p class="pf-post-b">' + snip + "</p>" : "") +
-      '<div class="pf-post-f">' + likeBtn(p) + '<span class="pf-cnt">' + nc + (nc === 1 ? " comentario" : " comentarios") + "</span></div>" +
+      '<div class="pf-post-f">' + likeBtn(p) + '<span class="pf-cnt">' + nc + (nc === 1 ? " comentario" : " comentarios") + "</span>" + delBtnPost(p) + "</div>" +
       "</article>";
   }
   function viewFeed() {
@@ -320,7 +328,7 @@
         '<div class="pf-cmt" style="margin-left:' + Math.min(depth, 5) * 18 + 'px">' +
           '<div class="pf-cmt-h"><span class="pf-ava pf-ava-sm">' + avaPic(c.avatar, headFor(c.nick)) + '</span><div class="pf-cmt-meta">' + uname(c.nick) + "<span>" + cuando(c.t) + "</span></div></div>" +
           '<div class="pf-cmt-b">' + rich(c.body) + "</div>" +
-          '<div class="pf-cmt-f"><button class="pf-like pf-like-sm' + (c.liked ? " on" : "") + '" data-clike="' + c.id + '" type="button" title="Me cala">' + skull() + "<span>" + (c.nlik || 0) + '</span></button><a class="pf-reply" data-reply="' + c.id + '">Responder</a></div>' +
+          '<div class="pf-cmt-f"><button class="pf-like pf-like-sm' + (c.liked ? " on" : "") + '" data-clike="' + c.id + '" type="button" title="Me cala">' + skull() + "<span>" + (c.nlik || 0) + '</span></button><a class="pf-reply" data-reply="' + c.id + '">Responder</a>' + delBtnCmt(c) + "</div>" +
           render(c.id, depth + 1) +
         "</div>"
       ).join("");
@@ -329,7 +337,7 @@
   }
 
   async function viewPost(id) {
-    clearView(); cur = "post";
+    clearView(); cur = "post"; window.__curPost = Number(id);
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
     chead("Posteo");
     body().innerHTML = '<p class="pf-dimc">Cargando…</p>';
@@ -343,7 +351,7 @@
         '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><span class="pf-code">$' + p.id + "</span></div>" +
         (p.title ? '<h2 class="pf-postfull-t">' + esc(p.title) + "</h2>" : "") +
         (p.body ? '<div class="pf-postfull-b">' + rich(p.body) + "</div>" : "") +
-        '<div class="pf-post-f" style="margin-top:14px">' + likeBtn(p) + "</div>" +
+        '<div class="pf-post-f" style="margin-top:14px">' + likeBtn(p) + delBtnPost(p) + "</div>" +
       "</article>" +
       '<div class="pf-h">Comentarios</div>' +
       '<div class="pf-comp pf-comp-c"><textarea id="pp-ctext" maxlength="1000" placeholder="Sumate al hilo… (@ # $)"></textarea><div class="pf-crow"><span class="pf-msg" id="pp-cmsg"></span><button class="pf-btn pf-spin" id="pp-csend">Comentar</button></div></div>' +

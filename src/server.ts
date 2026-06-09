@@ -1220,6 +1220,37 @@ export function buildApp(db: Db): FastifyInstance {
     return { ok: true };
   });
 
+  app.post('/api/social/post/delete', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const id = Math.floor(Number(((req.body ?? {}) as { id?: unknown }).id));
+    if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
+    const p = (await db.query('SELECT user_id FROM posts WHERE id = $1', [id])).rows[0];
+    if (!p) return reply.code(404).send({ ok: false, error: 'no_post' });
+    const a = await adminUser(db, req);
+    if (Number(p.user_id) !== u.id && !a) return reply.code(403).send({ ok: false, error: 'forbidden', message: 'No es tuyo.' });
+    await db.query('DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id = $1)', [id]);
+    await db.query('DELETE FROM comments WHERE post_id = $1', [id]);
+    await db.query('DELETE FROM post_likes WHERE post_id = $1', [id]);
+    await db.query('DELETE FROM notifs WHERE post_id = $1', [id]);
+    await db.query('DELETE FROM posts WHERE id = $1', [id]);
+    return { ok: true };
+  });
+
+  app.post('/api/social/comment/delete', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const id = Math.floor(Number(((req.body ?? {}) as { id?: unknown }).id));
+    if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
+    const c = (await db.query('SELECT user_id FROM comments WHERE id = $1', [id])).rows[0];
+    if (!c) return reply.code(404).send({ ok: false, error: 'no_comment' });
+    const a = await adminUser(db, req);
+    if (Number(c.user_id) !== u.id && !a) return reply.code(403).send({ ok: false, error: 'forbidden', message: 'No es tuyo.' });
+    await db.query('DELETE FROM comment_likes WHERE comment_id = $1 OR comment_id IN (SELECT id FROM comments WHERE parent_id = $1)', [id]);
+    await db.query('DELETE FROM comments WHERE id = $1 OR parent_id = $1', [id]);
+    return { ok: true };
+  });
+
   app.post('/api/social/grupos/crear', async (req, reply) => {
     const u = await hubUserBySession(db, req);
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });

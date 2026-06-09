@@ -232,6 +232,9 @@
 .pf-like.on { color: #fff; }
 .pf-like:active { transform: scale(1.18); }
 .pf-like svg { width: 16px; height: 16px; flex: none; }
+.pf-del { margin-left: auto; background: none; border: 0; color: #6c6c72; cursor: pointer; padding: 4px 6px; display: inline-flex; align-items: center; border-radius: 8px; transition: color .12s, background .12s; }
+.pf-del svg { width: 16px; height: 16px; }
+.pf-del:hover { color: #ff6b6b; background: rgba(255,80,80,.12); }
 
 /* Post detail + comentarios */
 .pf-back2 { display: inline-flex; align-items: center; gap: 6px; color: #e7e9ef; font-size: 13px; font-weight: 700; margin: 0 0 16px; cursor: pointer; border: 1px solid rgba(255,255,255,.22); border-radius: 9px; padding: 8px 14px; background: rgba(255,255,255,.04); transition: background .12s; }
