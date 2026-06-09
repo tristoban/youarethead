@@ -750,21 +750,6 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.code(200).send({ ok: true, logged: true, nick: (row.nick as string | null) ?? null });
   });
 
-  app.post('/api/hub/nick', async (req, reply) => {
-    const u = await hubUserBySession(db, req);
-    if (!u) return reply.code(401).send({ ok: false, error: 'login', message: 'Entrá primero.' });
-    const body = (req.body ?? {}) as { nick?: unknown };
-    const nick = typeof body.nick === 'string' ? body.nick.replace(/\s+/g, ' ').trim().slice(0, 14).trim() : '';
-    if (nick.length < 2) return reply.code(400).send({ ok: false, error: 'bad_nick', message: 'Muy corto.' });
-    if (offensiveAlias(nick) || offensiveText(nick)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Ese nick no va.' });
-    try {
-      await db.query('UPDATE hub_users SET nick = $2, nick_norm = $3 WHERE id = $1', [u.id, nick, nick.toLowerCase()]);
-    } catch {
-      return reply.code(409).send({ ok: false, error: 'taken', message: 'Ese nick ya está tomado.' });
-    }
-    return reply.code(200).send({ ok: true, nick });
-  });
-
   app.get('/api/hub/me', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
