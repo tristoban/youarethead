@@ -20,7 +20,6 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? '';
 const GOOGLE_REDIRECT = process.env.GOOGLE_REDIRECT ?? `${PUBLIC_URL}/api/auth/google/callback`;
 const GOOGLE_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
 const ADMIN_EMAILS = new Set((process.env.ADMIN_EMAILS ?? 'matiasivanponcedeleon@gmail.com').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
-const FOUNDER_MAX = Number(process.env.FOUNDER_MAX ?? 100);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -194,6 +193,9 @@ export async function initDb(db: Db): Promise<void> {
   await db.query(`CREATE TABLE IF NOT EXISTS notifs (id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, type TEXT NOT NULL, actor TEXT NOT NULL, post_id BIGINT, body TEXT, read BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ NOT NULL DEFAULT now());`);
   await db.query(`CREATE INDEX IF NOT EXISTS notifs_user_idx ON notifs (user_id, id DESC);`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS badges jsonb;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS streak INT NOT NULL DEFAULT 0;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS streak_day DATE;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS nick_changed TIMESTAMPTZ;`);
   await db.query(`
     CREATE TABLE IF NOT EXISTS grupos (
       id BIGSERIAL PRIMARY KEY,
@@ -767,8 +769,14 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
     if (!u) return { ok: true, logged: false, nick: null };
-    const det = await db.query('SELECT email, bio, created_at, pin_hash, avatar, banner, accent, estado, location, links, pinned, admin, badges FROM hub_users WHERE id = $1', [u.id]);
+    const det = await db.query('SELECT email, bio, created_at, pin_hash, avatar, banner, accent, estado, location, links, pinned, admin, badges, nick_changed FROM hub_users WHERE id = $1', [u.id]);
     const r = det.rows[0] ?? {};
+    const sres = await db.query("UPDATE hub_users SET streak = CASE WHEN streak_day = CURRENT_DATE THEN streak WHEN streak_day = CURRENT_DATE - 1 THEN streak + 1 ELSE 1 END, streak_day = CURRENT_DATE WHERE id = $1 RETURNING streak", [u.id]);
+    const streak = Number(sres.rows[0]?.streak ?? 1) || 1;
+    const kp = await db.query('SELECT count(*) AS c FROM post_likes pl JOIN posts p ON p.id = pl.post_id WHERE p.user_id = $1', [u.id]);
+    const kc = await db.query('SELECT count(*) AS c FROM comment_likes cl JOIN comments c ON c.id = cl.comment_id WHERE c.user_id = $1', [u.id]);
+    const karma = Number(kp.rows[0]?.c ?? 0) + Number(kc.rows[0]?.c ?? 0);
+    const nickDays = r.nick_changed ? Math.max(0, 14 - Math.floor((Date.now() - new Date(r.nick_changed as string).getTime()) / 86400000)) : 0;
     let caido = 0;
     const c = await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [u.id]);
     if (c.rows[0]) caido = Number(c.rows[0].n ?? 0);
@@ -781,12 +789,30 @@ export function buildApp(db: Db): FastifyInstance {
     return {
       ok: true, logged: true, nick: u.nick, admin: isAdminNick(u.nick) || isAdminEmail(r.email) || r.admin === true,
       email: String(r.email ?? ''), pin: !!r.pin_hash, avatar: (r.avatar as string | null) ?? null,
-      banner: (r.banner as string | null) ?? null, accent: (r.accent as string | null) ?? null, estado: (r.estado as string | null) ?? '', location: (r.location as string | null) ?? '', links: (r.links as unknown) ?? [], pinned: r.pinned ? Number(r.pinned) : null, founder: u.id <= FOUNDER_MAX,
+      banner: (r.banner as string | null) ?? null, accent: (r.accent as string | null) ?? null, estado: (r.estado as string | null) ?? '', location: (r.location as string | null) ?? '', links: (r.links as unknown) ?? [], pinned: r.pinned ? Number(r.pinned) : null, founder: (u.nick || '').toLowerCase() === 'tristoban',
       bio: (r.bio as string | null) ?? '', desde: r.created_at ?? null, caido,
       best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0, laberinto: Number(bl.rows[0]?.s ?? 0) || 0 },
-      badges: (r.badges as unknown) ?? null,
+      badges: (r.badges as unknown) ?? null, streak, karma, nickDays,
       char: cr ? { head: String(cr.head ?? 'o'), vida: Math.round(Number(cr.vida ?? 0)), hambre: Math.round(Number(cr.hambre ?? 0)), sueno: Math.round(Number(cr.sueno ?? 0)) } : null,
     };
+  });
+
+  app.post('/api/hub/nick', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const nick = typeof ((req.body ?? {}) as { nick?: unknown }).nick === 'string' ? ((req.body) as { nick: string }).nick.replace(/\s+/g, ' ').trim().slice(0, 14).trim() : '';
+    if (nick.length < 2) return reply.code(400).send({ ok: false, error: 'bad_nick', message: 'Nick muy corto (2-14).' });
+    if (offensiveAlias(nick) || offensiveText(nick)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Ese nick no va.' });
+    const nickNorm = nick.toLowerCase();
+    if (nickNorm === (u.nick || '').toLowerCase()) return reply.code(400).send({ ok: false, error: 'same', message: 'Ese ya es tu nick.' });
+    const cd = await db.query("SELECT (nick_changed IS NOT NULL AND nick_changed > now() - interval '14 days') AS locked, GREATEST(0, 14 - floor(EXTRACT(EPOCH FROM (now() - nick_changed)) / 86400)::int) AS dias FROM hub_users WHERE id = $1", [u.id]);
+    if (cd.rows[0]?.locked) return reply.code(429).send({ ok: false, error: 'cooldown', message: 'Podés cambiar el nick de nuevo en ' + Number(cd.rows[0]?.dias ?? 14) + ' días.' });
+    const ex = await db.query('SELECT 1 AS k FROM hub_users WHERE nick_norm = $1 AND id <> $2', [nickNorm, u.id]);
+    if (ex.rows.length) return reply.code(409).send({ ok: false, error: 'taken', message: 'Ese nick ya está tomado.' });
+    await db.query('UPDATE hub_users SET nick = $2, nick_norm = $3, nick_changed = now() WHERE id = $1', [u.id, nick, nickNorm]);
+    await db.query('UPDATE posts SET nick = $2 WHERE user_id = $1', [u.id, nick]);
+    await db.query('UPDATE comments SET nick = $2 WHERE user_id = $1', [u.id, nick]);
+    return { ok: true, nick };
   });
 
   app.post('/api/hub/bio', async (req, reply) => {
@@ -927,7 +953,7 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     const nick = String(((req.query ?? {}) as { nick?: unknown }).nick ?? '').trim();
     if (!nick) return reply.code(400).send({ ok: false, error: 'bad' });
-    const { rows } = await db.query('SELECT id, nick, avatar, banner, accent, bio, estado, location, links, pinned, created_at, badges FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()]);
+    const { rows } = await db.query('SELECT id, nick, avatar, banner, accent, bio, estado, location, links, pinned, created_at, badges, streak FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()]);
     const r = rows[0];
     if (!r) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese perfil.' });
     const uid = Number(r.id);
@@ -937,6 +963,9 @@ export function buildApp(db: Db): FastifyInstance {
     const bp = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'parpadeo' AND lower(alias) = $1", [nl]);
     const bl = await db.query("SELECT max(score) AS s FROM scores WHERE game = 'laberinto' AND lower(alias) = $1", [nl]);
     const np = await db.query('SELECT count(*) AS c FROM posts WHERE user_id = $1', [uid]);
+    const kp = await db.query('SELECT count(*) AS c FROM post_likes pl JOIN posts p ON p.id = pl.post_id WHERE p.user_id = $1', [uid]);
+    const kc = await db.query('SELECT count(*) AS c FROM comment_likes cl JOIN comments c ON c.id = cl.comment_id WHERE c.user_id = $1', [uid]);
+    const karma = Number(kp.rows[0]?.c ?? 0) + Number(kc.rows[0]?.c ?? 0);
     const fc = await db.query("SELECT count(*) AS c FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado'", [uid]);
     const ca = await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [uid]);
     const posts = (await db.query("SELECT id, nick, title, body, created_at, (SELECT count(*) FROM comments c WHERE c.post_id = posts.id) AS ncom FROM posts WHERE user_id = $1 ORDER BY id DESC LIMIT 20", [uid])).rows.map((p) => ({ id: Number(p.id), nick: p.nick, title: (p.title as string | null) ?? '', body: p.body, t: p.created_at, avatar: (r.avatar as string | null) ?? null, ncom: Number(p.ncom ?? 0) }));
@@ -947,12 +976,23 @@ export function buildApp(db: Db): FastifyInstance {
     return { ok: true, perfil: {
       nick: r.nick, avatar: (r.avatar as string | null) ?? null, banner: (r.banner as string | null) ?? null, accent: (r.accent as string | null) ?? null,
       bio: (r.bio as string | null) ?? '', estado: (r.estado as string | null) ?? '', location: (r.location as string | null) ?? '', links: (r.links as unknown) ?? [],
-      desde: r.created_at ?? null, founder: uid <= FOUNDER_MAX, admin: isAdminNick(r.nick as string),
+      desde: r.created_at ?? null, founder: nl === 'tristoban', admin: isAdminNick(r.nick as string),
       best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0, laberinto: Number(bl.rows[0]?.s ?? 0) || 0 },
       amigos: Number(fc.rows[0]?.c ?? 0) || 0, caido: ca.rows[0] ? Number(ca.rows[0].n ?? 0) : 0, nposts: Number(np.rows[0]?.c ?? 0) || 0,
-      badges: (r.badges as unknown) ?? null,
+      badges: (r.badges as unknown) ?? null, streak: Number(r.streak ?? 0) || 0, karma,
       posts, pinned, rel,
     } };
+  });
+
+  app.get('/api/social/top-users', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const { rows } = await db.query(`
+      SELECT u.nick, sum(k)::int AS karma FROM (
+        SELECT p.user_id AS uid, count(*) AS k FROM post_likes pl JOIN posts p ON p.id = pl.post_id GROUP BY p.user_id
+        UNION ALL
+        SELECT c.user_id AS uid, count(*) AS k FROM comment_likes cl JOIN comments c ON c.id = cl.comment_id GROUP BY c.user_id
+      ) t JOIN hub_users u ON u.id = t.uid WHERE u.nick IS NOT NULL GROUP BY u.id, u.nick ORDER BY karma DESC LIMIT 10`);
+    return { ok: true, users: rows.map((r) => ({ nick: r.nick, karma: Number(r.karma ?? 0) })) };
   });
 
   app.post('/api/hub/profile', async (req, reply) => {
@@ -1120,6 +1160,8 @@ export function buildApp(db: Db): FastifyInstance {
       rows = (await db.query(sel + " WHERE lower(coalesce(p.title,'') || ' ' || p.body) LIKE $2 ORDER BY p.id DESC LIMIT 40", [u.id, '%#' + tag + '%'])).rows;
     } else if (qy.scope === 'amigos') {
       rows = (await db.query(sel + " WHERE p.user_id = $1 OR p.user_id IN (SELECT CASE WHEN a = $1 THEN b ELSE a END FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado') ORDER BY p.id DESC LIMIT 40", [u.id])).rows;
+    } else if (qy.scope === 'hot') {
+      rows = (await db.query(sel + " ORDER BY ((SELECT count(*) FROM post_likes pl3 WHERE pl3.post_id = p.id) + (SELECT count(*) FROM comments c3 WHERE c3.post_id = p.id) * 2 + 1) / power(EXTRACT(EPOCH FROM (now() - p.created_at)) / 3600.0 + 2, 1.3) DESC LIMIT 40", [u.id])).rows;
     } else {
       rows = (await db.query(sel + ' ORDER BY p.id DESC LIMIT 40', [u.id])).rows;
     }

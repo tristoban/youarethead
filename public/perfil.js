@@ -289,8 +289,8 @@
       "</article>";
   }
   function viewFeed() {
-    let scope = "ti";
-    chead("Feed", '<div class="pf-tabs2"><button data-s="ti" class="on">Para ti</button><button data-s="amigos">Amigos</button></div>');
+    let scope = "ti", topId = 0;
+    chead("Feed", '<div class="pf-tabs2"><button data-s="ti" class="on">Para ti</button><button data-s="hot">En llamas</button><button data-s="amigos">Amigos</button></div>');
     body().innerHTML =
       '<div id="pf-carousel" class="pf-carousel"></div>' +
       '<div class="pf-comp">' +
@@ -298,14 +298,26 @@
         '<textarea id="pf-post" maxlength="2000" placeholder="Texto (opcional). @ para nombrar, # para temas, $ para citar otro posteo."></textarea>' +
         '<div class="pf-crow"><span class="pf-msg" id="pf-pmsg"></span><button class="pf-btn pf-spin" id="pf-pub">Publicar</button></div>' +
       "</div>" +
+      '<button id="pf-new" class="pf-newpill" type="button" style="display:none"></button>' +
       '<div id="pf-feed"><p class="pf-dimc">Cargando…</p></div>';
+    const qfor = () => (scope === "amigos" ? "?scope=amigos" : scope === "hot" ? "?scope=hot" : "");
     async function load() {
-      const { d } = await api("/api/social/feed" + (scope === "amigos" ? "?scope=amigos" : ""), AH);
+      const { d } = await api("/api/social/feed" + qfor(), AH);
       const box = body().querySelector("#pf-feed"); if (!box) return;
       const posts = (d && d.posts) || [];
+      topId = posts.reduce((m, p) => Math.max(m, p.id), 0);
+      const np = body().querySelector("#pf-new"); if (np) np.style.display = "none";
       box.innerHTML = posts.length ? posts.map(postHTML).join("") : '<p class="pf-empty">' + (scope === "amigos" ? "Tus amigos no postearon nada todavía." : "Nadie publicó nada. Sé la primera voz del encierro.") + "</p>";
     }
-    load(); mountCarousel(); vt.push(setInterval(() => { if (!document.hidden) load(); }, 15000));
+    async function checkNew() {
+      if (scope === "hot") return;
+      const { d } = await api("/api/social/feed" + qfor(), AH);
+      const newer = ((d && d.posts) || []).filter((p) => p.id > topId).length;
+      const np = body().querySelector("#pf-new"); if (!np) return;
+      if (newer > 0) { np.textContent = "↑ " + newer + (newer === 1 ? " posteo nuevo" : " posteos nuevos"); np.style.display = "block"; }
+    }
+    load(); mountCarousel(); vt.push(setInterval(() => { if (!document.hidden) checkNew(); }, 12000));
+    body().querySelector("#pf-new").onclick = () => load();
     root.querySelector("#pf-chead").querySelectorAll("[data-s]").forEach((b) => { b.onclick = () => { scope = b.getAttribute("data-s"); root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.remove("on")); b.classList.add("on"); load(); }; });
     body().querySelector("#pf-pub").onclick = async () => { const ti = body().querySelector("#pf-ttl"), ta = body().querySelector("#pf-post"), pm = body().querySelector("#pf-pmsg"); pm.textContent = "..."; const { r, d } = await api("/api/social/post", { method: "POST", headers: JH, body: JSON.stringify({ title: ti.value, body: ta.value }) }); if (r.ok) { ti.value = ""; ta.value = ""; pm.textContent = ""; scope = "ti"; root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.toggle("on", x.getAttribute("data-s") === "ti")); load(); } else pm.textContent = (d && d.message) || "No se pudo."; };
   }
@@ -457,6 +469,7 @@
     const modTools = isAdm ? '<button class="pf-btn ghost pf-mini" id="pu-badges-btn">Badges</button><button class="pf-btn ghost pf-mini" id="pu-mute">Mutear</button><button class="pf-btn ghost pf-mini" id="pu-ban">Banear</button>' : "";
     const chip = (label, val) => '<div class="pf-chip"><span>' + label + "</span><b>" + val + "</b></div>";
     const chips =
+      chip("Karma", fmt.format(p.karma || 0)) + chip("Racha", (p.streak || 0) + ((p.streak || 0) === 1 ? " día" : " días")) +
       chip("Laberinto", fmt.format(p.best.laberinto || 0)) + chip("TeTristo", fmt.format(p.best.tetristo || 0)) +
       chip("No Parpadees", fmt.format(p.best.parpadeo || 0)) + (p.caido ? chip("El Botón", "N° " + fmt.format(p.caido)) : "") +
       chip("Posteos", fmt.format(p.nposts || 0)) + chip("Amigos", fmt.format(p.amigos || 0));
@@ -598,6 +611,11 @@
       '<div class="pf-uname" style="margin-top:8px">' + esc(d.nick) + " " + badges(d) + '</div>' +
       '<div class="pf-dimc" style="padding:0">@' + esc(d.nick) + (desde ? " · desde " + desde : "") + '</div>' +
       '<input type="file" id="c-file" accept="image/*" style="display:none" /><input type="file" id="c-bnfile" accept="image/*" style="display:none" />' +
+      '<div class="pf-h">Tu nick</div>' +
+      (((d.nickDays || 0) > 0)
+        ? '<p class="pf-dimc" style="padding:0">Lo cambiaste hace poco. Podés cambiarlo de nuevo en <b>' + (d.nickDays || 0) + '</b> días.</p>'
+        : '<div class="pf-row"><input class="pf-input" id="c-nick" maxlength="14" placeholder="nuevo nick (2-14)" value="' + esc(d.nick) + '" /><button class="pf-btn" id="c-nicksave">Cambiar</button></div><p class="pf-dimc" style="padding:2px 0">Se puede una vez cada 14 días.</p>') +
+      '<p class="pf-msg" id="c-nmsg"></p>' +
       '<div class="pf-h">Estado</div><input class="pf-input" id="c-estado" maxlength="80" placeholder="¿En qué andas?" value="' + esc(d.estado || "") + '" />' +
       '<div class="pf-h">Bio</div><textarea class="pf-input" id="c-bio" maxlength="200" placeholder="Contá quién sos (200)" style="border-radius:12px;min-height:64px;width:100%">' + esc(d.bio || "") + '</textarea>' +
       '<div class="pf-h">Ubicación</div><input class="pf-input" id="c-loc" maxlength="60" placeholder="Ciudad, país" value="' + esc(d.location || "") + '" />' +
@@ -626,6 +644,7 @@
       const { r, d: dd } = await api("/api/hub/profile", { method: "POST", headers: JH, body: JSON.stringify(payload) });
       if (r.ok && dd) { me.bio = dd.bio; me.estado = dd.estado; me.location = dd.location; me.accent = dd.accent; me.links = dd.links; sm.textContent = "¡Guardado!"; setTimeout(() => setView("perfil"), 500); } else sm.textContent = (dd && dd.message) || "No se pudo.";
     };
+    const nb = body().querySelector("#c-nicksave"); if (nb) nb.onclick = async () => { const nm = body().querySelector("#c-nmsg"), nv = body().querySelector("#c-nick"); nm.textContent = "..."; const { r, d: dd } = await api("/api/hub/nick", { method: "POST", headers: JH, body: JSON.stringify({ nick: nv.value }) }); if (r.ok && dd) { nm.textContent = "¡Listo! Ahora sos " + esc(dd.nick); setTimeout(boot, 800); } else nm.textContent = (dd && dd.message) || "No se pudo."; };
     body().querySelector("#c-out").onclick = async () => { await api("/api/hub/logout", { method: "POST", headers: JH, body: "{}" }); boot(); };
     const fileEl = body().querySelector("#c-file"), pmsg = body().querySelector("#c-pmsg");
     const setChip = () => { const chip = root.querySelector("#pf-me .pf-ava"); if (chip) chip.innerHTML = avaPic(me.avatar, me.char ? me.char.head : "o"); };
@@ -676,14 +695,16 @@
     prev(); rt.push(setInterval(() => { if (!document.hidden) prev(); }, 20000));
     (function mountTops() {
       const box = r.querySelector("#rg-tops"); if (!box) return;
-      const games = [{ k: "tetristo", t: "TeTristo", href: "/tristos" }, { k: "parpadeo", t: "No Parpadees", href: "/tristos" }, { k: "laberinto", t: "El Laberinto", href: "/laberinto" }];
+      const games = [{ k: "tetristo", t: "TeTristo", href: "/tristos" }, { k: "parpadeo", t: "No Parpadees", href: "/tristos" }, { k: "laberinto", t: "El Laberinto", href: "/laberinto" }, { k: "__users", t: "Top karma", href: "" }];
       const data = {};
-      Promise.all(games.map((g) => fetch("/api/scores?game=" + g.k, AH).then((x) => x.json()).then((d) => { data[g.k] = (d && d.scores) || []; }).catch(() => { data[g.k] = []; }))).then(() => {
+      const fetches = games.filter((g) => g.k !== "__users").map((g) => fetch("/api/scores?game=" + g.k, AH).then((x) => x.json()).then((d) => { data[g.k] = (d && d.scores) || []; }).catch(() => { data[g.k] = []; }));
+      fetches.push(fetch("/api/social/top-users", AH).then((x) => x.json()).then((d) => { data["__users"] = ((d && d.users) || []).map((u) => ({ alias: u.nick, score: u.karma, user: true })); }).catch(() => { data["__users"] = []; }));
+      Promise.all(fetches).then(() => {
         let i = 0;
         const render = () => {
           const g = games[i], sc = (data[g.k] || []).slice(0, 5);
-          box.innerHTML = '<div class="pf-tops-h"><b>' + g.t + '</b><a class="pf-wlink2" href="' + g.href + '">Jugar →</a></div>' +
-            (sc.length ? '<ol class="pf-toplist">' + sc.map((s, k) => '<li><span>' + (k + 1) + ". " + esc(s.alias) + "</span><b>" + fmt.format(s.score) + "</b></li>").join("") + "</ol>" : '<p class="pf-dimc" style="padding:8px 0">Sin puntajes todavía.</p>') +
+          box.innerHTML = '<div class="pf-tops-h"><b>' + g.t + "</b>" + (g.href ? '<a class="pf-wlink2" href="' + g.href + '">Jugar →</a>' : "") + "</div>" +
+            (sc.length ? '<ol class="pf-toplist">' + sc.map((s, k) => '<li><span>' + (k + 1) + ". " + (s.user ? '<b class="pf-u" data-u="' + esc(s.alias) + '">' + esc(s.alias) + "</b>" : esc(s.alias)) + "</span><b>" + fmt.format(s.score) + "</b></li>").join("") + "</ol>" : '<p class="pf-dimc" style="padding:8px 0">Sin datos todavía.</p>') +
             '<div class="pf-cdots" style="margin-top:8px">' + games.map((_, k) => '<span class="' + (k === i ? "on" : "") + '" data-tk="' + k + '"></span>').join("") + "</div>";
           box.querySelectorAll("[data-tk]").forEach((dt) => dt.onclick = () => { i = Number(dt.getAttribute("data-tk")); render(); });
         };
