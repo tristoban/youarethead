@@ -856,13 +856,29 @@
       w.style.left = Math.min(40 + S.querySelectorAll(".dk-win").length * 26, S.clientWidth - 280) + "px";
       w.style.top = (30 + S.querySelectorAll(".dk-win").length * 24) + "px";
       w.style.zIndex = ++zTop;
-      w.innerHTML = '<div class="dk-tit"><span>' + title + '</span><button class="dk-x" type="button">&times;</button></div><div class="dk-body">' + html + "</div>";
+      w.innerHTML = '<div class="dk-tit"><span>' + title + '</span><span class="dk-tbtns"><button class="dk-wb" data-wmin type="button" title="Minimizar">─</button><button class="dk-wb" data-wmax type="button" title="Maximizar">□</button><button class="dk-x" type="button" title="Cerrar">&times;</button></span></div><div class="dk-body">' + html + "</div>";
       S.appendChild(w);
       w.addEventListener("pointerdown", () => { w.style.zIndex = ++zTop; });
       w.querySelector(".dk-x").onclick = () => { if (w.__onclose) { try { w.__onclose(); } catch (_) {} } w.remove(); };
+      const bMin = w.querySelector("[data-wmin]"), bMax = w.querySelector("[data-wmax]");
+      function toggleMax() {
+        w.classList.remove("dk-min");
+        if (w.classList.contains("dk-max")) {
+          w.classList.remove("dk-max");
+          w.style.left = w.__pl || "40px"; w.style.top = w.__pt || "30px";
+          w.style.width = w.__pw || ""; w.style.height = w.__ph || "";
+        } else {
+          w.__pl = w.style.left; w.__pt = w.style.top; w.__pw = w.style.width; w.__ph = w.style.height;
+          w.classList.add("dk-max"); w.style.zIndex = ++zTop;
+        }
+      }
+      bMin.onclick = (e) => { e.stopPropagation(); if (w.classList.contains("dk-max")) toggleMax(); w.classList.toggle("dk-min"); };
+      bMax.onclick = (e) => { e.stopPropagation(); toggleMax(); };
       const tit = w.querySelector(".dk-tit");
+      tit.addEventListener("dblclick", (e) => { if (!e.target.closest("button")) toggleMax(); });
       tit.addEventListener("pointerdown", (e) => {
-        if (e.target.closest(".dk-x")) return;
+        if (e.target.closest("button")) return;
+        if (w.classList.contains("dk-max")) return;
         const sx = e.clientX - w.offsetLeft, sy = e.clientY - w.offsetTop;
         const mv = (ev) => { w.style.left = Math.max(0, Math.min(S.clientWidth - 60, ev.clientX - sx)) + "px"; w.style.top = Math.max(0, Math.min(S.clientHeight - 40, ev.clientY - sy)) + "px"; };
         const up = () => { document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up); };

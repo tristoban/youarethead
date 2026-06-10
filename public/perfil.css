@@ -556,3 +556,15 @@
 .dk-appwin .dk-body { max-height: none; height: calc(100% - 38px); display: flex; flex-direction: column; box-sizing: border-box; }
 .dk-appwin .dk-appf { flex: 1; height: auto; min-height: 0; }
 @media (max-width: 680px) { .dk-appwin { left: 1vw; right: 1vw; top: 2vh; bottom: 2vh; } }
+
+/* ---- ventanas con minimizar / maximizar / estirar ---- */
+.dk-win { display: flex; flex-direction: column; resize: both; overflow: hidden; min-width: 210px; min-height: 38px; max-width: 96vw; max-height: 92vh; }
+.dk-win .dk-body { flex: 1; min-height: 0; }
+.dk-win[style*="height"] .dk-body, .dk-win.dk-max .dk-body, .dk-appwin .dk-body { max-height: none; }
+.dk-tbtns { display: flex; gap: 5px; align-items: center; }
+.dk-wb { background: none; border: 1px solid rgba(255,255,255,.25); border-radius: 6px; color: #eceef2; width: 22px; height: 22px; line-height: 1; cursor: pointer; font-size: 11px; padding: 0; }
+.dk-wb:hover { background: rgba(255,255,255,.18); }
+.dk-win.dk-min { resize: none; height: auto !important; min-height: 0; }
+.dk-win.dk-min .dk-body { display: none; }
+.dk-win.dk-max { position: fixed !important; left: 3vw !important; top: 4vh !important; right: 3vw; bottom: 4vh; width: auto !important; height: auto !important; z-index: 650; resize: none; }
+.dk-appwin { resize: none; }
