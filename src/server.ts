@@ -856,7 +856,7 @@ export function buildApp(db: Db): FastifyInstance {
       data.kind = tro.kind; data.label = tro.label;
     }
     if (type === 'tv') {
-      const ya = (await db.query("SELECT 1 FROM desktop_items WHERE user_id = $1 AND type = 'tv' LIMIT 1", [u.id])).rows.length > 0;
+      const ya = (await db.query("SELECT 1 FROM desktop_items WHERE user_id = $1 AND type = 'tv' AND deleted_at IS NULL LIMIT 1", [u.id])).rows.length > 0;
       if (ya) return reply.code(409).send({ ok: false, error: 'ya_tele', message: 'Ya tenés una tele. ¿Para qué querés dos?' });
     }
     if (type === 'photo') {
@@ -945,8 +945,13 @@ export function buildApp(db: Db): FastifyInstance {
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
     const id = Math.floor(Number(((req.body ?? {}) as { id?: unknown }).id));
     if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
-    const upd = await db.query('UPDATE desktop_items SET deleted_at = NULL WHERE id = $1 AND user_id = $2 AND deleted_at IS NOT NULL RETURNING id', [id, u.id]);
-    if (!upd.rows.length) return reply.code(404).send({ ok: false, error: 'not_found', message: 'Eso no está en la papelera.' });
+    const fila = (await db.query('SELECT type FROM desktop_items WHERE id = $1 AND user_id = $2 AND deleted_at IS NOT NULL', [id, u.id])).rows[0];
+    if (!fila) return reply.code(404).send({ ok: false, error: 'not_found', message: 'Eso no está en la papelera.' });
+    if (String(fila.type) === 'tv') {
+      const viva = (await db.query("SELECT 1 FROM desktop_items WHERE user_id = $1 AND type = 'tv' AND deleted_at IS NULL LIMIT 1", [u.id])).rows.length > 0;
+      if (viva) return reply.code(409).send({ ok: false, error: 'ya_tele', message: 'Una tele a la vez: tirá la otra primero.' });
+    }
+    await db.query('UPDATE desktop_items SET deleted_at = NULL WHERE id = $1 AND user_id = $2', [id, u.id]);
     return { ok: true };
   });
 
@@ -1033,7 +1038,7 @@ export function buildApp(db: Db): FastifyInstance {
     const ur = (await db.query('SELECT id FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()])).rows[0];
     if (!ur) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese nick.' });
     const uid = Number(ur.id);
-    const ya = (await db.query("SELECT 1 FROM desktop_items WHERE user_id = $1 AND type = 'trophy' AND data->>'kind' = 'sello' LIMIT 1", [uid])).rows.length > 0;
+    const ya = (await db.query("SELECT 1 FROM desktop_items WHERE user_id = $1 AND type = 'trophy' AND data->>'kind' = 'sello' AND deleted_at IS NULL LIMIT 1", [uid])).rows.length > 0;
     if (ya) return reply.code(409).send({ ok: false, error: 'ya_tiene', message: 'Ya tiene tu sello.' });
     await db.query("INSERT INTO desktop_items (user_id, type, data, x, y, hidden) VALUES ($1, 'trophy', $2::jsonb, 0, 0, true)", [uid, JSON.stringify({ kind: 'sello', label: 'Sello de Tristo' })]);
     await notify(uid, 'sello', a.nick || 'Tristoban', null, '');
@@ -2303,7 +2308,7 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.sendFile('perfil.html');
   });
   app.get('/perfil', async (req, reply) => { const u = (req.raw && req.raw.url) || ''; const q = u.indexOf('?'); return redir(reply, '/yata' + (q >= 0 ? u.slice(q) : '')); });
-  app.get('/u/:nick', async (req, reply) => {
+  app.get('/demon/:nick', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     const nickRaw = String(((req.params ?? {}) as { nick?: unknown }).nick ?? '');
     let nick = nickRaw;
@@ -2312,16 +2317,20 @@ export function buildApp(db: Db): FastifyInstance {
     const r = rows[0];
     if (!r) return reply.sendFile('perfil.html');
     const n = String(r.nick ?? '');
-    const desc = String((r.estado as string | null) ?? '').trim() || String((r.bio as string | null) ?? '').trim() || 'El perfil de ' + n + ' en YATA, la red social de Tristo.';
+    const desc = String((r.estado as string | null) ?? '').trim() || String((r.bio as string | null) ?? '').trim() || 'El demonio ' + n + ' vive en YATA, la red social de Tristo.';
     const html = withOg({
       title: n + ' — YATA',
       desc: desc.slice(0, 160),
-      url: PUBLIC_URL + '/u/' + encodeURIComponent(n),
+      url: PUBLIC_URL + '/demon/' + encodeURIComponent(n),
       image: r.hasava === true ? PUBLIC_URL + '/og/u/' + encodeURIComponent(n) : PUBLIC_URL + '/logoyatasocial.png',
     });
     if (!html) return reply.sendFile('perfil.html');
     reply.header('content-type', 'text/html; charset=utf-8');
     return reply.send(html);
+  });
+  app.get('/u/:nick', async (req, reply) => {
+    const nickRaw = String(((req.params ?? {}) as { nick?: unknown }).nick ?? '');
+    return redir(reply, '/demon/' + nickRaw);
   });
   app.get('/p/:id', async (req, reply) => {
     reply.header('cache-control', 'no-store');

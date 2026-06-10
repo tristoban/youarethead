@@ -648,7 +648,7 @@
     D.papelera = d.papelera || []; D.firmas = d.firmas || []; D.mascota = d.mascota || null;
     body().innerHTML =
       '<a class="pf-back2" id="dk-back">&#8592; Perfil de ' + esc(nick) + "</a>" +
-      (own ? '<div class="dk-bar"><button class="pf-btn ghost pf-mini" id="dk-ncar">+ Carpeta</button><button class="pf-btn ghost pf-mini" id="dk-nnota">+ Nota</button><button class="pf-btn ghost pf-mini" id="dk-nacc">+ Acceso</button><button class="pf-btn ghost pf-mini" id="dk-nwid">+ Widget</button><button class="pf-btn ghost pf-mini" id="dk-ntv">+ Tele</button><button class="pf-btn ghost pf-mini" id="dk-nstk">+ Sticker</button><input type="file" id="dk-stkf" accept="image/*" style="display:none" /><button class="pf-btn ghost pf-mini" id="dk-nmar">+ Marquesina</button><button class="pf-btn ghost pf-mini" id="dk-conf">Personalizar</button><button class="pf-btn ghost pf-mini" id="dk-pape">Papelera <b id="dk-papen"></b></button><button class="pf-btn ghost pf-mini" id="dk-caja">Caja <b id="dk-cajan"></b></button><span class="pf-dimc" id="dk-msg" style="margin-left:auto"></span></div>' : "") +
+      (own ? '<div class="dk-bar"><button class="pf-btn pf-mini" id="dk-crear">+ Crear</button><button class="pf-btn ghost pf-mini" id="dk-caja">Caja <b id="dk-cajan"></b></button><input type="file" id="dk-stkf" accept="image/*" style="display:none" /><span class="pf-dimc" id="dk-msg" style="margin-left:auto">clic derecho en el escritorio = menú</span></div>' : "") +
       '<div class="dk-surface" id="dk-s"><div class="dk-scan" id="dk-scan"></div><button class="dk-fsbtn" id="dk-fs" type="button" title="Pantalla completa">⛶</button><button class="dk-fsbtn dk-chatbtn" id="dk-dchat" type="button" title="Chat del escritorio">💬</button><button class="dk-fsbtn dk-firbtn" id="dk-fir" type="button" title="Libro de firmas">✒</button><span class="dk-pres" id="dk-pres" style="display:none"></span><div class="dk-reactbar" id="dk-rbar"></div></div>';
     body().querySelector("#dk-back").onclick = () => viewUser(nick);
     function applyCfg() {
@@ -950,7 +950,7 @@
         el.style.transform = "rotate(" + Number(it.data.r || 0) + "deg)";
         el.setAttribute("data-id", String(it.id));
         if (own) {
-          el.addEventListener("contextmenu", (e) => { e.preventDefault(); const r2 = S.getBoundingClientRect(); ctxMenu(it, e.clientX - r2.left, e.clientY - r2.top); });
+          el.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); const r2 = S.getBoundingClientRect(); ctxMenu(it, e.clientX - r2.left, e.clientY - r2.top); });
           el.addEventListener("pointerdown", (e) => {
             const sx = e.clientX, sy = e.clientY, ox = el.offsetLeft, oy = el.offsetTop;
             let mv2 = false;
@@ -976,7 +976,7 @@
         el.className = "dk-marq"; el.style.top = (it.y / 10) + "%";
         el.innerHTML = '<span>' + esc(String(it.data.text || "")) + "</span>";
         el.setAttribute("data-id", String(it.id));
-        if (own) el.addEventListener("contextmenu", (e) => { e.preventDefault(); const r2 = S.getBoundingClientRect(); ctxMenu(it, e.clientX - r2.left, e.clientY - r2.top); });
+        if (own) el.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); const r2 = S.getBoundingClientRect(); ctxMenu(it, e.clientX - r2.left, e.clientY - r2.top); });
         S.appendChild(el);
       });
       const vieja = S.querySelector(".dk-masco"); if (vieja) vieja.remove();
@@ -1001,7 +1001,7 @@
         S.appendChild(el);
         let moved = false;
         if (own && !it.sys) {
-          el.addEventListener("contextmenu", (e) => { e.preventDefault(); const r2 = S.getBoundingClientRect(); ctxMenu(it, e.clientX - r2.left, e.clientY - r2.top); });
+          el.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); const r2 = S.getBoundingClientRect(); ctxMenu(it, e.clientX - r2.left, e.clientY - r2.top); });
           el.addEventListener("pointerdown", (e) => {
             if (e.button !== 0 && e.pointerType === "mouse") return;
             const sx = e.clientX, sy = e.clientY, ox = el.offsetLeft, oy = el.offsetTop;
@@ -1205,18 +1205,18 @@
       window.addEventListener("focus", wake);
     }
     if (own) {
-      body().querySelector("#dk-ncar").onclick = async () => {
+      const crearCarpeta = async () => {
         const name = window.prompt("Nombre de la carpeta:"); if (!name) return;
         const fc = freeCell();
         const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "folder", data: { name: name }, x: fc.x, y: fc.y }) });
         if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); } else toast((dd && dd.message) || "No se pudo.");
       };
-      body().querySelector("#dk-nnota").onclick = async () => {
+      const crearNota = async () => {
         const fc = freeCell();
         const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "note", data: { text: "Escribime…" }, x: fc.x, y: fc.y }) });
         if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); abrir(dd.item); } else toast((dd && dd.message) || "No se pudo.");
       };
-      body().querySelector("#dk-nacc").onclick = () => {
+      const winAccesos = () => {
         const w = openWin("nacc", "Accesos directos", '<div class="dk-apps">' + Object.keys(DK_APPS).map((k) => '<button class="dk-app" data-app="' + k + '" type="button"><span class="dk-g">' + dkSvg(k, acc) + "</span><i>" + esc(DK_APPS[k].l) + "</i></button>").join("") + "</div>");
         w.querySelectorAll("[data-app]").forEach((b) => b.onclick = async () => {
           const fc = freeCell();
@@ -1224,7 +1224,7 @@
           if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); winKill("nacc"); } else toast((dd && dd.message) || "No se pudo.");
         });
       };
-      body().querySelector("#dk-nwid").onclick = () => {
+      const winWidgets = () => {
         const opts = [["reloj", "Reloj"], ["karma", "Karma"], ["racha", "Racha"], ["visitas", "Visitas"], ["top|tetristo", "Top TeTristo"], ["top|parpadeo", "Top No Parpadees"], ["top|laberinto", "Top Laberinto"], ["count", "Cuenta regresiva"], ["post", "Mi posteo fijado"]];
         const w = openWin("nwid", "Widgets", '<div class="dk-apps">' + opts.map((o) => { const ps = o[0].split("|"); return '<button class="dk-app" data-wid="' + o[0] + '" type="button"><span class="dk-wv2">' + esc(wVal(ps[0], ps[1] || "tetristo")) + "</span><i>" + o[1] + "</i></button>"; }).join("") + "</div>");
         w.querySelectorAll("[data-wid]").forEach((b) => b.onclick = async () => {
@@ -1240,7 +1240,7 @@
           if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); winKill("nwid"); } else toast((dd && dd.message) || "No se pudo.");
         });
       };
-      body().querySelector("#dk-nstk").onclick = () => body().querySelector("#dk-stkf").click();
+      const crearSticker = () => { const el = body().querySelector("#dk-stkf"); if (el) el.click(); };
       body().querySelector("#dk-stkf").onchange = () => {
         const fi = body().querySelector("#dk-stkf");
         const f = fi.files && fi.files[0]; if (!f) return;
@@ -1254,14 +1254,12 @@
           if (rr.ok && dd && dd.item) { D.items.push(dd.item); renderDecos(); toast("Sticker puesto. Arrastralo a gusto."); } else toast((dd && dd.message) || "No se pudo.");
         });
       };
-      body().querySelector("#dk-nmar").onclick = async () => {
+      const crearMarquesina = async () => {
         const text = window.prompt("Texto de la marquesina (corre por el escritorio):"); if (!text) return;
         const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "marquee", data: { text: text }, x: 0, y: 80 }) });
         if (rr.ok && dd && dd.item) { D.items.push(dd.item); renderDecos(); } else toast((dd && dd.message) || "No se pudo.");
       };
-      body().querySelector("#dk-conf").onclick = () => winPersonalizar();
-      body().querySelector("#dk-pape").onclick = () => winPapelera();
-      body().querySelector("#dk-ntv").onclick = async () => {
+      const crearTele = async () => {
         const ya = D.items.find((i) => i.type === "tv");
         if (ya) {
           if (ya.hidden) { const { r: rr } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: ya.id, hidden: false }) }); if (rr.ok) { ya.hidden = false; refresh(); } }
@@ -1271,7 +1269,7 @@
         const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "tv", data: {}, x: fc.x, y: fc.y }) });
         if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); openTv(dd.item); } else toast((dd && dd.message) || "No se pudo.");
       };
-      body().querySelector("#dk-caja").onclick = () => {
+      const winCaja = () => {
         const ocultos = cajaItems(), nuevos = trofeosSinPoner();
         let h = "";
         if (nuevos.length) h += '<div class="pf-h" style="padding:0 0 6px">Trofeos ganados</div>' + nuevos.map((t) => '<div class="dk-fila"><span>' + dkSvg("trophy", "#e2b23c") + " " + esc(t.label) + '</span><button class="pf-btn pf-mini" data-tk="' + esc(t.kind) + '">Al escritorio</button></div>').join("");
@@ -1288,6 +1286,29 @@
           if (rr.ok) { const it = D.items.find((i) => i.id === id); if (it) { it.hidden = false; it.x = fc.x; it.y = fc.y; await api("/api/desktop/mover", { method: "POST", headers: JH, body: JSON.stringify({ id: id, x: fc.x, y: fc.y }) }); } refresh(); winKill("caja"); }
         });
       };
+      function menuCrear(px, py) {
+        const fila = (id2, em, t, extra) => '<button class="dk-mit" id="' + id2 + '" type="button"><span>' + em + "</span>" + t + (extra ? "<b>" + extra + "</b>" : "") + "</button>";
+        const w = openWin("crear", "Escritorio",
+          '<div class="dk-menu">' +
+          fila("mc-car", "📁", "Nueva carpeta") + fila("mc-nota", "📝", "Nueva nota") + fila("mc-acc", "▶", "Acceso directo") +
+          fila("mc-wid", "📊", "Widget") + fila("mc-tv", "📺", "Tele") + fila("mc-stk", "🖼", "Sticker") + fila("mc-mar", "📜", "Marquesina") +
+          '<div class="dk-msep"></div>' +
+          fila("mc-conf", "🎨", "Personalizar") + fila("mc-pape", "🗑", "Papelera", D.papelera.length || "") + fila("mc-caja", "📦", "La Caja", (cajaItems().length + trofeosSinPoner().length) || "") +
+          "</div>");
+        if (px != null) { w.style.left = Math.max(0, Math.min(px, S.clientWidth - 220)) + "px"; w.style.top = Math.max(0, Math.min(py, S.clientHeight - 340)) + "px"; }
+        const go = (id2, fn) => { const b = w.querySelector("#" + id2); if (b) b.onclick = () => { winKill("crear"); fn(); }; };
+        go("mc-car", crearCarpeta); go("mc-nota", crearNota); go("mc-acc", winAccesos); go("mc-wid", winWidgets);
+        go("mc-tv", crearTele); go("mc-stk", crearSticker); go("mc-mar", crearMarquesina);
+        go("mc-conf", winPersonalizar); go("mc-pape", winPapelera); go("mc-caja", winCaja);
+      }
+      body().querySelector("#dk-crear").onclick = () => menuCrear();
+      body().querySelector("#dk-caja").onclick = () => winCaja();
+      S.addEventListener("contextmenu", (e) => {
+        if (e.target !== S) return;
+        e.preventDefault();
+        const r2 = S.getBoundingClientRect();
+        menuCrear(e.clientX - r2.left, e.clientY - r2.top);
+      });
     }
   }
 

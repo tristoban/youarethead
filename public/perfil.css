@@ -537,3 +537,13 @@
 .dk-surface.dk-skin-vapor .dk-win { border-color: #ec489988; box-shadow: 0 0 24px #7c5cff33; }
 .dk-surface.dk-skin-vapor .dk-tit { background: linear-gradient(90deg, #7c5cff44, #ec489944); }
 @media (max-width: 680px) { .dk-firbtn { right: 82px; } .dk-reactbar { bottom: 10px; } }
+
+/* menú Crear (clic derecho / + Crear) */
+[data-win="crear"] { width: 216px; }
+[data-win="crear"] .dk-body { padding: 6px; }
+.dk-menu { display: flex; flex-direction: column; }
+.dk-mit { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; border-radius: 8px; padding: 8px 10px; color: #e9ebf0; font: 600 13px "Montserrat", sans-serif; cursor: pointer; text-align: left; transition: background .1s; }
+.dk-mit:hover { background: rgba(107,140,255,.18); }
+.dk-mit span { width: 20px; text-align: center; }
+.dk-mit b { margin-left: auto; color: #8a8f98; font-size: 11px; }
+.dk-msep { height: 1px; background: rgba(255,255,255,.12); margin: 5px 8px; }
