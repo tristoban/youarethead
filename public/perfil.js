@@ -158,6 +158,7 @@
 
   const IC = {
     inicio: '<path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/>',
+    escritorios: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16v4"/>',
     feed: '<path d="M4 7h16M4 12h16M4 17h10"/>',
     notifs: '<path d="M6 9a6 6 0 1112 0c0 4 1.6 5.4 2 6H4c.4-.6 2-2 2-6"/><path d="M10 19a2 2 0 004 0"/>',
     mas: '<path d="M12 5v14M5 12h14"/>',
@@ -308,7 +309,7 @@
         '<aside class="pf-left"><a href="/" class="pf-brand">youarethead.com.ar</a><nav class="pf-nav" id="pf-nav">' +
           '<a href="/">' + ic("tienda") + '<span>La remera</span></a>' + navItem("feed", "Feed") +
           '<button data-v="notifs" id="pf-navnotif">' + ic("notifs") + '<span>Notificaciones</span><i class="pf-ndot" id="pf-nb"></i></button>' +
-          navItem("mensajes", "Mensajes") + navItem("escritorios", "Escritorios") +
+          navItem("mensajes", "Mensajes") + navItem("amigos", "Amigos") + navItem("escritorios", "Escritorios") +
           navItem("juegos", "Juegos") + navItem("tienda", "Tienda") + navItem("canal", "Insomnio Crónico") +
           navItem("perfil", "My Hell") + (me.admin ? navItem("admin", "Admin") : "") +
           '<div class="pf-me" id="pf-me"><span class="pf-ava">' + avaPic(me.avatar, myHead) + '</span><div><b>' + esc(me.nick) + '</b><span>@' + esc(me.nick) + '</span></div></div>' +
@@ -322,7 +323,7 @@
       '<header class="pf-topbar"><a href="/" class="pf-tb-brand">youarethead</a><button class="pf-tbell" id="pf-tbell" type="button" aria-label="Notificaciones">' + ic("notifs") + '<span class="pf-tb-badge" id="pf-tbell-b" style="display:none">0</span></button></header>' +
       '<nav class="pf-tabbar">' +
         '<button class="pf-tab" data-v="feed" type="button">' + ic("inicio") + '<span>Inicio</span></button>' +
-        '<button class="pf-tab" data-v="escritorios" type="button">' + ic("inicio") + '<span>Escritorios</span></button>' +
+        '<button class="pf-tab" data-v="escritorios" type="button">' + ic("escritorios") + '<span>Escritorios</span></button>' +
         '<button class="pf-tab pf-tab-mas" id="pf-tabmas" type="button" aria-label="Más"><img src="/simbolomas.png" alt="Más" /></button>' +
         '<button class="pf-tab" data-v="mensajes" type="button">' + ic("mensajes") + '<span>Mensajes</span></button>' +
         '<button class="pf-tab" data-v="perfil" type="button">' + ic("perfil") + '<span>Perfil</span></button>' +
@@ -1529,14 +1530,14 @@
     const p = d.perfil, acc = (typeof p.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(p.accent)) ? p.accent : "var(--pf-acc)";
     const desde = p.desde ? new Date(p.desde).toLocaleDateString("es-AR", { month: "long", year: "numeric" }) : "";
     const banner = p.banner ? '<div class="pf-banner" style="background-image:url(\'' + esc(p.banner) + '\')"></div>' : '<div class="pf-banner" style="background:linear-gradient(120deg,' + acc + '33,#0a0a0d)"></div>';
-    const links = (Array.isArray(p.links) ? p.links : []).map((l) => { const pl = platOf(l.url); return '<a class="pf-link" href="' + esc(l.url) + '" target="_blank" rel="noopener" style="border-color:' + acc + '55"><span class="pf-link-i" style="color:' + acc + '">' + linkSvg(pl[2]) + '</span><span class="pf-link-t">' + esc(l.title) + '</span><span class="pf-link-x">&#8599;</span></a>'; }).join("");
+    const links = (Array.isArray(p.links) ? p.links : []).map((l) => { const pl = platOf(l.url); return '<a class="pf-link" href="' + esc(l.url) + '" target="_blank" rel="noopener"><span class="pf-link-i" style="color:' + acc + '">' + linkSvg(pl[2]) + '</span><span class="pf-link-t">' + esc(l.title) + "</span></a>"; }).join("");
     let action = "";
     if (p.rel === "me") action = '<button class="pf-btn" id="pu-edit">Editar perfil</button>';
     else if (p.rel === "amigos") action = '<button class="pf-btn" id="pu-msg">Mensaje</button>';
     else if (p.rel === "pendiente") action = '<button class="pf-btn ghost" disabled>Pendiente</button>';
     else action = '<button class="pf-btn" id="pu-add">Agregar amigo</button>';
     const isAdm = me && me.admin && p.rel !== "me";
-    const modTools = isAdm ? '<button class="pf-btn ghost pf-mini" id="pu-badges-btn">Badges</button><button class="pf-btn ghost pf-mini" id="pu-mute">Mutear</button><button class="pf-btn ghost pf-mini" id="pu-ban">Banear</button>' : "";
+    const modTools = isAdm ? '<button class="pf-btn ghost pf-mini" id="pu-admin" title="Moderación">⋯</button>' : "";
     const chip = (label, val) => '<div class="pf-chip"><span>' + label + "</span><b>" + val + "</b></div>";
     const chips =
       chip("Karma", fmt.format(p.karma || 0)) + chip("Racha", (p.streak || 0) + ((p.streak || 0) === 1 ? " día" : " días")) +
@@ -1562,11 +1563,21 @@
     const edit = body().querySelector("#pu-edit"); if (edit) edit.onclick = () => setView("editar");
     const dsk = body().querySelector("#pu-desk"); if (dsk) dsk.onclick = () => viewDesktop(p.nick);
     const sh = body().querySelector("#pu-share"); if (sh) sh.onclick = async () => { const url = location.origin + "/demon/" + encodeURIComponent(p.nick); try { await navigator.clipboard.writeText(url); sh.textContent = "¡Copiado!"; } catch (_) { sh.textContent = url; } };
-    const bdb = body().querySelector("#pu-badges-btn"); if (bdb) bdb.onclick = () => openBadgeEditor(p.nick, badgeList(p));
+    const adm = body().querySelector("#pu-admin");
+    if (adm) adm.onclick = (e) => {
+      e.stopPropagation(); cerrarMenus();
+      const m = document.createElement("div"); m.className = "pf-menu"; m.id = "pf-menu";
+      m.innerHTML = '<button data-abadge type="button">🏷 Badges</button><button data-amute type="button">🔇 Mutear</button><button data-aban class="rojo" type="button">🚫 Banear</button>';
+      document.body.appendChild(m);
+      const rb = adm.getBoundingClientRect();
+      m.style.left = Math.max(8, Math.min(rb.left, window.innerWidth - 190)) + "px";
+      m.style.top = Math.min(rb.bottom + 6, window.innerHeight - m.offsetHeight - 10) + "px";
+      m.querySelector("[data-abadge]").onclick = () => { cerrarMenus(); openBadgeEditor(p.nick, badgeList(p)); };
+      m.querySelector("[data-amute]").onclick = async () => { cerrarMenus(); const res = await api("/api/admin/mute", { method: "POST", headers: JH, body: JSON.stringify({ nick: p.nick }) }); toast(res.r.ok ? "Muteado." : "No se pudo."); };
+      m.querySelector("[data-aban]").onclick = async () => { cerrarMenus(); if (!window.confirm("¿Banear a " + p.nick + "?")) return; const res = await api("/api/admin/ban", { method: "POST", headers: JH, body: JSON.stringify({ nick: p.nick, reason: "" }) }); toast(res.r.ok ? "Baneado." : "No se pudo."); };
+    };
     const msgb = body().querySelector("#pu-msg"); if (msgb) msgb.onclick = () => { window.__dmOpen = p.nick; setView("mensajes"); };
     const add = body().querySelector("#pu-add"); if (add) add.onclick = async () => { add.disabled = true; add.textContent = "..."; const res = await api("/api/social/amigos/pedir", { method: "POST", headers: JH, body: JSON.stringify({ nick: p.nick }) }); add.textContent = res.r.ok ? "Solicitud enviada" : ((res.d && res.d.message) || "No se pudo."); };
-    const mute = body().querySelector("#pu-mute"); if (mute) mute.onclick = async () => { const res = await api("/api/admin/mute", { method: "POST", headers: JH, body: JSON.stringify({ nick: p.nick }) }); mute.textContent = res.r.ok ? "Muteado" : "Error"; };
-    const ban = body().querySelector("#pu-ban"); if (ban) ban.onclick = async () => { if (!window.confirm("¿Banear a " + p.nick + "?")) return; const res = await api("/api/admin/ban", { method: "POST", headers: JH, body: JSON.stringify({ nick: p.nick, reason: "" }) }); ban.textContent = res.r.ok ? "Baneado" : "Error"; };
   }
 
   function openBadgeEditor(nick, current) {

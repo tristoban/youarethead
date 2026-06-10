@@ -651,3 +651,29 @@
 .pf-sk-chip { width: 86px; height: 30px; border-radius: 999px; }
 .pf-sk-tile { aspect-ratio: 16 / 9; border-radius: 12px; }
 @media (prefers-reduced-motion: reduce) { .pf-sk::after { animation: none; } .pf-compwrap { transition: none; } }
+
+/* ---- UX1.5: pase de diseño — sistema de radios y botones ----
+   Regla: superficies 16px · controles 9-10px · pill SOLO para tags chicos (badges, topic, contador overlay). */
+.pf-btn { border-radius: 10px; text-transform: none; letter-spacing: 0; font: 700 13.5px "Montserrat", sans-serif; padding: 9px 16px; }
+.pf-btn.pf-mini { padding: 7px 12px; font-size: 12.5px; }
+.pf-btn.ghost { color: #d7dae1; border-color: rgba(255,255,255,.18); }
+.pf-btn.ghost:hover { background: rgba(255,255,255,.07); }
+.pf-row input, .pf-input, .pf-srch input, .pf-cti { border-radius: 10px; }
+.pf-comp textarea { border-radius: 10px; }
+.pf-tchip, .pf-ctool { border-radius: 9px; }
+.pf-estado { border-radius: 10px; }
+.pf-newpill { border-radius: 12px; }
+.pf-menu { border-radius: 10px; }
+.pf-postbtn { border-radius: 12px; text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 700; }
+
+/* links de perfil: chips compactos, acento solo en el ícono */
+.pf-links { flex-direction: row; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.pf-link { flex: 0 1 auto; width: auto; max-width: 100%; padding: 8px 13px; border-radius: 10px; border: 1px solid rgba(255,255,255,.13); background: rgba(255,255,255,.035); font-size: 13px; }
+.pf-link:hover { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.25); }
+.pf-link-t { flex: 0 1 auto; }
+.pf-link-x { display: none; }
+.pf-link-i svg { width: 16px; height: 16px; }
+
+/* rail "Tus mensajes": nick arriba, hint abajo */
+.pf-prev > div { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.pf-prev > div > span { font-size: 11px; color: #7c8089; }
