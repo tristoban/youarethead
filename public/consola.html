@@ -75,9 +75,15 @@
         window.EJS_pathtodata = "https://cdn.emulatorjs.org/stable/data/";
         window.EJS_startOnLoaded = true;
         window.EJS_language = "es-ES";
+        window.EJS_threads = !!window.crossOriginIsolated; // turbo: multithread cuando la página está aislada
         var s = document.createElement("script");
         s.src = "https://cdn.emulatorjs.org/stable/data/loader.js";
+        s.crossOrigin = "anonymous";
         document.body.appendChild(s);
+      }
+      if (!window.crossOriginIsolated) {
+        var fila = document.querySelector(".fila span");
+        if (fila) fila.textContent = "⚡ Para juegos pesados (N64), abrí la consola en su propia pestaña (botón Abrir afuera): ahí corre con turbo multithread. · " + fila.textContent;
       }
       inp.addEventListener("change", function () { if (inp.files && inp.files[0]) arrancar(inp.files[0]); });
       drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("over"); });

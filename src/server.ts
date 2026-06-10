@@ -2422,6 +2422,9 @@ export function buildApp(db: Db): FastifyInstance {
   });
   app.get('/consola', async (_req, reply) => {
     reply.header('cache-control', 'no-store');
+    // Aislamiento cross-origin: habilita SharedArrayBuffer => el emulador corre multithread (N64 y pesados)
+    reply.header('cross-origin-opener-policy', 'same-origin');
+    reply.header('cross-origin-embedder-policy', 'require-corp');
     return reply.sendFile('consola.html');
   });
   app.get('/tetristo', async (_req, reply) => {
