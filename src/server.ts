@@ -1,8 +1,9 @@
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { Pool } from 'pg';
-import { createHash, randomBytes, randomInt, pbkdf2Sync } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomInt, pbkdf2Sync } from 'node:crypto';
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = '0.0.0.0';
@@ -20,6 +21,17 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? '';
 const GOOGLE_REDIRECT = process.env.GOOGLE_REDIRECT ?? `${PUBLIC_URL}/api/auth/google/callback`;
 const GOOGLE_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
 const ADMIN_EMAILS = new Set((process.env.ADMIN_EMAILS ?? 'matiasivanponcedeleon@gmail.com').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+
+// Temas fijos de los posteos (Tanda 2)
+const TOPICS: readonly string[] = ['canal', 'juegos', 'arte', 'random', 'debate'];
+
+// Cloudflare R2 (Tanda 3) — si faltan las variables, las fotos quedan apagadas sin romper nada
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID ?? '';
+const R2_ACCESS_KEY = process.env.R2_ACCESS_KEY ?? '';
+const R2_SECRET = process.env.R2_SECRET ?? '';
+const R2_BUCKET = process.env.R2_BUCKET ?? '';
+const R2_PUBLIC_BASE = (process.env.R2_PUBLIC_BASE ?? '').replace(/\/+$/, '');
+const R2_ENABLED = !!(R2_ACCOUNT_ID && R2_ACCESS_KEY && R2_SECRET && R2_BUCKET && R2_PUBLIC_BASE);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -254,6 +266,20 @@ export async function initDb(db: Db): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // Tandas 2/3/4: temas, fotos y encuestas en los posteos
+  await db.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS topic TEXT;`);
+  await db.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS images JSONB;`);
+  await db.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS poll JSONB;`);
+  await db.query(`CREATE INDEX IF NOT EXISTS posts_topic_idx ON posts (topic) WHERE topic IS NOT NULL;`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS poll_votes (
+      post_id BIGINT NOT NULL,
+      user_id BIGINT NOT NULL,
+      opcion SMALLINT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (post_id, user_id)
+    );
+  `);
   const mp = await db.query('SELECT x, y, v FROM mural_px');
   for (const r of mp.rows) {
     const x = Number(r.x), y = Number(r.y), v = Number(r.v);
@@ -444,6 +470,53 @@ function page(title: string, body: string): string {
     `</head><body><div class="w">${body}</div></body></html>`;
 }
 
+// ---- R2: firma SigV4 a mano (cero dependencias) — URL prefirmada para PUT directo desde el navegador ----
+function hmac(key: Buffer | string, data: string): Buffer { return createHmac('sha256', key).update(data).digest(); }
+function sha256hex(s: string): string { return createHash('sha256').update(s).digest('hex'); }
+function r2PresignPut(key: string, expires = 300): string {
+  const host = `${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+  const iso = new Date().toISOString();
+  const ymd = iso.slice(0, 10).replace(/-/g, '');
+  const amzDate = ymd + 'T' + iso.slice(11, 19).replace(/:/g, '') + 'Z';
+  const scope = `${ymd}/auto/s3/aws4_request`;
+  const path = `/${R2_BUCKET}/${key}`;
+  const qs = 'X-Amz-Algorithm=AWS4-HMAC-SHA256' +
+    '&X-Amz-Credential=' + encodeURIComponent(`${R2_ACCESS_KEY}/${scope}`) +
+    '&X-Amz-Date=' + amzDate + '&X-Amz-Expires=' + expires + '&X-Amz-SignedHeaders=host';
+  const canonical = `PUT\n${path}\n${qs}\nhost:${host}\n\nhost\nUNSIGNED-PAYLOAD`;
+  const toSign = `AWS4-HMAC-SHA256\n${amzDate}\n${scope}\n${sha256hex(canonical)}`;
+  const kSigning = hmac(hmac(hmac(hmac('AWS4' + R2_SECRET, ymd), 'auto'), 's3'), 'aws4_request');
+  const sig = createHmac('sha256', kSigning).update(toSign).digest('hex');
+  return `https://${host}${path}?${qs}&X-Amz-Signature=${sig}`;
+}
+
+// ---- OG cards (Tanda 1): inyección de meta tags en el HTML de YATA ----
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+let perfilHtmlCache = '';
+function perfilHtmlRaw(): string {
+  if (!perfilHtmlCache) {
+    try { perfilHtmlCache = readFileSync(join(__dirname, '..', 'public', 'perfil.html'), 'utf8'); } catch { perfilHtmlCache = ''; }
+  }
+  return perfilHtmlCache;
+}
+function withOg(og: { title: string; desc: string; url: string; image: string }): string {
+  const base = perfilHtmlRaw();
+  if (!base) return '';
+  const block =
+    '<meta property="og:type" content="article" /><meta property="og:site_name" content="YATA" />' +
+    `<meta property="og:title" content="${escHtml(og.title)}" />` +
+    `<meta property="og:description" content="${escHtml(og.desc)}" />` +
+    `<meta property="og:url" content="${escHtml(og.url)}" />` +
+    `<meta property="og:image" content="${escHtml(og.image)}" />` +
+    '<meta name="twitter:card" content="summary" />' +
+    `<meta name="twitter:title" content="${escHtml(og.title)}" />` +
+    `<meta name="twitter:description" content="${escHtml(og.desc)}" />` +
+    `<meta name="twitter:image" content="${escHtml(og.image)}" />`;
+  return base.replace(/<title>[^<]*<\/title>/, `<title>${escHtml(og.title)}</title>`).replace('</head>', block + '</head>');
+}
+
 export function buildApp(db: Db): FastifyInstance {
   const app = Fastify({ trustProxy: true, bodyLimit: 16 * 1024 });
 
@@ -470,6 +543,47 @@ export function buildApp(db: Db): FastifyInstance {
     const { rows } = await db.query('SELECT 1 AS k FROM grupo_miembros WHERE grupo_id = $1 AND user_id = $2', [gid, uid]);
     return rows.length > 0;
   }
+
+  // ---- Posteos: SELECT compartido ($1 = id del que mira) + mapeo con temas/fotos/encuestas ----
+  const SEL_POST = "SELECT p.id, p.nick, p.title, p.body, p.topic, p.images, p.poll, p.created_at, u.avatar, (SELECT count(*) FROM comments c WHERE c.post_id = p.id) AS ncom, (SELECT count(*) FROM post_likes pl WHERE pl.post_id = p.id) AS nlik, EXISTS(SELECT 1 FROM post_likes pl2 WHERE pl2.post_id = p.id AND pl2.user_id = $1) AS liked FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id";
+  interface PollAgg { votos: number[]; total: number; mi: number | null }
+  async function attachPolls(rows: Array<Record<string, unknown>>, meId: number): Promise<Map<number, PollAgg>> {
+    const out = new Map<number, PollAgg>();
+    const ids: number[] = [];
+    for (const r of rows) if (Array.isArray(r.poll) && (r.poll as unknown[]).length) ids.push(Number(r.id));
+    if (!ids.length) return out;
+    for (const id of ids) out.set(id, { votos: [], total: 0, mi: null });
+    const cr = await db.query('SELECT post_id, opcion, count(*) AS c FROM poll_votes WHERE post_id = ANY($1::bigint[]) GROUP BY post_id, opcion', [ids]);
+    for (const r of cr.rows) {
+      const e = out.get(Number(r.post_id));
+      if (!e) continue;
+      const i = Number(r.opcion), c = Number(r.c ?? 0);
+      if (i >= 0 && i < 8) { while (e.votos.length <= i) e.votos.push(0); e.votos[i] = c; e.total += c; }
+    }
+    if (meId) {
+      const mr = await db.query('SELECT post_id, opcion FROM poll_votes WHERE user_id = $2 AND post_id = ANY($1::bigint[])', [ids, meId]);
+      for (const r of mr.rows) { const e = out.get(Number(r.post_id)); if (e) e.mi = Number(r.opcion); }
+    }
+    return out;
+  }
+  function pollOut(r: Record<string, unknown>, pm: Map<number, PollAgg>): { opts: string[]; votos: number[]; total: number; mi: number | null } | null {
+    if (!Array.isArray(r.poll)) return null;
+    const opts = (r.poll as unknown[]).map((x) => String(x)).slice(0, 4);
+    if (opts.length < 2) return null;
+    const agg = pm.get(Number(r.id));
+    const votos = opts.map((_, i) => (agg ? (agg.votos[i] ?? 0) : 0));
+    return { opts, votos, total: agg ? agg.total : 0, mi: agg ? agg.mi : null };
+  }
+  function mapPost(r: Record<string, unknown>, pm: Map<number, PollAgg>): Record<string, unknown> {
+    return {
+      id: Number(r.id), nick: r.nick, title: (r.title as string | null) ?? '', body: r.body, t: r.created_at,
+      avatar: (r.avatar as string | null) ?? null, ncom: Number(r.ncom ?? 0), nlik: Number(r.nlik ?? 0), liked: r.liked === true,
+      topic: (r.topic as string | null) ?? null,
+      imgs: Array.isArray(r.images) ? (r.images as unknown[]).map((x) => String(x)).slice(0, 4) : [],
+      poll: pollOut(r, pm),
+    };
+  }
+  const imgRate = new Map<number, number[]>();
   const GATED = new Set(['/index.html', '/tshirt.png', '/pic1.png', '/pic2.png', '/pic3.png', '/pic3.jpg']);
   app.addHook('onRequest', async (req, reply) => {
     if (LAUNCHED || isAdmin(req)) return;
@@ -934,6 +1048,31 @@ export function buildApp(db: Db): FastifyInstance {
     return { ok: true, video: (rows[0]?.value as string | null) ?? '' };
   });
 
+  app.post('/api/admin/pdd', async (req, reply) => {
+    const a = await adminUser(db, req);
+    if (!a) return reply.code(403).send({ ok: false, error: 'forbidden' });
+    const raw = ((req.body ?? {}) as { id?: unknown }).id;
+    if (raw === null || raw === 0 || raw === '') {
+      await db.query("INSERT INTO site_config (key, value) VALUES ('pdd', NULL) ON CONFLICT (key) DO UPDATE SET value = NULL");
+      return { ok: true, pdd: null };
+    }
+    const id = Math.floor(Number(raw));
+    if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad', message: 'ID inválido.' });
+    const ex = await db.query('SELECT 1 FROM posts WHERE id = $1', [id]);
+    if (!ex.rows.length) return reply.code(404).send({ ok: false, error: 'no_post', message: 'No existe ese posteo.' });
+    await db.query("INSERT INTO site_config (key, value) VALUES ('pdd', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [String(id)]);
+    return { ok: true, pdd: id };
+  });
+
+  app.get('/api/admin/pdd', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const a = await adminUser(db, req);
+    if (!a) return reply.code(403).send({ ok: false, error: 'forbidden' });
+    const { rows } = await db.query("SELECT value FROM site_config WHERE key = 'pdd'");
+    const id = Math.floor(Number(rows[0]?.value ?? 0));
+    return { ok: true, pdd: Number.isInteger(id) && id > 0 ? id : null };
+  });
+
   app.get('/api/social/perfil', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     const nick = String(((req.query ?? {}) as { nick?: unknown }).nick ?? '').trim();
@@ -953,9 +1092,15 @@ export function buildApp(db: Db): FastifyInstance {
     const karma = Number(kp.rows[0]?.c ?? 0) + Number(kc.rows[0]?.c ?? 0);
     const fc = await db.query("SELECT count(*) AS c FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado'", [uid]);
     const ca = await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [uid]);
-    const posts = (await db.query("SELECT id, nick, title, body, created_at, (SELECT count(*) FROM comments c WHERE c.post_id = posts.id) AS ncom FROM posts WHERE user_id = $1 ORDER BY id DESC LIMIT 20", [uid])).rows.map((p) => ({ id: Number(p.id), nick: p.nick, title: (p.title as string | null) ?? '', body: p.body, t: p.created_at, avatar: (r.avatar as string | null) ?? null, ncom: Number(p.ncom ?? 0) }));
+    const meId = meU ? meU.id : 0;
+    const prows = (await db.query(SEL_POST + ' WHERE p.user_id = $2 ORDER BY p.id DESC LIMIT 20', [meId, uid])).rows;
+    const ppm = await attachPolls(prows, meId);
+    const posts = prows.map((p) => mapPost(p, ppm));
     let pinned: Record<string, unknown> | null = null;
-    if (r.pinned) { const pp = (await db.query("SELECT id, nick, title, body, created_at, (SELECT count(*) FROM comments c WHERE c.post_id = posts.id) AS ncom FROM posts WHERE id = $1 AND user_id = $2", [Number(r.pinned), uid])).rows[0]; if (pp) pinned = { id: Number(pp.id), nick: pp.nick, title: (pp.title as string | null) ?? '', body: pp.body, t: pp.created_at, avatar: (r.avatar as string | null) ?? null, ncom: Number(pp.ncom ?? 0) }; }
+    if (r.pinned) {
+      const pp = (await db.query(SEL_POST + ' WHERE p.id = $2 AND p.user_id = $3', [meId, Number(r.pinned), uid])).rows[0];
+      if (pp) { const ppm2 = await attachPolls([pp], meId); pinned = mapPost(pp, ppm2); }
+    }
     let rel = 'none';
     if (meU) { if (meU.id === uid) rel = 'me'; else { const am = await db.query('SELECT estado FROM amigos WHERE (a = $1 AND b = $2) OR (a = $2 AND b = $1)', [meU.id, uid]); const ar = am.rows[0]; if (ar) rel = ar.estado === 'aceptado' ? 'amigos' : 'pendiente'; } }
     return { ok: true, perfil: {
@@ -1137,20 +1282,93 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
-    const qy = (req.query ?? {}) as { scope?: unknown; tag?: unknown };
+    const qy = (req.query ?? {}) as { scope?: unknown; tag?: unknown; topic?: unknown; sort?: unknown };
     const tag = typeof qy.tag === 'string' ? qy.tag.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40) : '';
-    const sel = "SELECT p.id, p.nick, p.title, p.body, p.created_at, u.avatar, (SELECT count(*) FROM comments c WHERE c.post_id = p.id) AS ncom, (SELECT count(*) FROM post_likes pl WHERE pl.post_id = p.id) AS nlik, EXISTS(SELECT 1 FROM post_likes pl2 WHERE pl2.post_id = p.id AND pl2.user_id = $1) AS liked FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id";
-    let rows;
-    if (tag) {
-      rows = (await db.query(sel + " WHERE lower(coalesce(p.title,'') || ' ' || p.body) LIKE $2 ORDER BY p.id DESC LIMIT 40", [u.id, '%#' + tag + '%'])).rows;
-    } else if (qy.scope === 'amigos') {
-      rows = (await db.query(sel + " WHERE p.user_id = $1 OR p.user_id IN (SELECT CASE WHEN a = $1 THEN b ELSE a END FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado') ORDER BY p.id DESC LIMIT 40", [u.id])).rows;
-    } else if (qy.scope === 'hot') {
-      rows = (await db.query(sel + " ORDER BY ((SELECT count(*) FROM post_likes pl3 WHERE pl3.post_id = p.id) + (SELECT count(*) FROM comments c3 WHERE c3.post_id = p.id) * 2 + 1) / power(EXTRACT(EPOCH FROM (now() - p.created_at)) / 3600.0 + 2, 1.3) DESC LIMIT 40", [u.id])).rows;
-    } else {
-      rows = (await db.query(sel + ' ORDER BY p.id DESC LIMIT 40', [u.id])).rows;
+    const topic = typeof qy.topic === 'string' && TOPICS.indexOf(qy.topic) >= 0 ? qy.topic : '';
+    const sort = qy.sort === 'top7' ? 'top7' : 'nuevo';
+    const conds: string[] = [];
+    const params: unknown[] = [u.id];
+    if (tag) { params.push('%#' + tag + '%'); conds.push("lower(coalesce(p.title,'') || ' ' || p.body) LIKE $" + params.length); }
+    if (topic) { params.push(topic); conds.push('p.topic = $' + params.length); }
+    if (qy.scope === 'amigos') conds.push("(p.user_id = $1 OR p.user_id IN (SELECT CASE WHEN a = $1 THEN b ELSE a END FROM amigos WHERE (a = $1 OR b = $1) AND estado = 'aceptado'))");
+    const where = conds.length ? ' WHERE ' + conds.join(' AND ') : '';
+    let order = ' ORDER BY p.id DESC';
+    if (qy.scope === 'hot') order = ' ORDER BY ((SELECT count(*) FROM post_likes pl3 WHERE pl3.post_id = p.id) + (SELECT count(*) FROM comments c3 WHERE c3.post_id = p.id) * 2 + 1) / power(EXTRACT(EPOCH FROM (now() - p.created_at)) / 3600.0 + 2, 1.3) DESC';
+    else if (sort === 'top7') order = " ORDER BY (SELECT count(*) FROM post_likes pl4 WHERE pl4.post_id = p.id AND pl4.created_at > now() - interval '7 days') DESC, p.id DESC";
+    const rows = (await db.query(SEL_POST + where + order + ' LIMIT 40', params)).rows;
+    const pm = await attachPolls(rows, u.id);
+    // Pregunta del día: fijada arriba del feed principal (no en filtros ni en Amigos)
+    let pdd: Record<string, unknown> | null = null;
+    if (!tag && !topic && qy.scope !== 'amigos') {
+      const pc = await db.query("SELECT value FROM site_config WHERE key = 'pdd'");
+      const pid = Math.floor(Number(pc.rows[0]?.value ?? 0));
+      if (Number.isInteger(pid) && pid > 0) {
+        const pr = (await db.query(SEL_POST + ' WHERE p.id = $2', [u.id, pid])).rows[0];
+        if (pr) { const pm2 = await attachPolls([pr], u.id); pdd = mapPost(pr, pm2); }
+      }
     }
-    return { ok: true, posts: rows.map((r) => ({ id: Number(r.id), nick: r.nick, title: (r.title as string | null) ?? '', body: r.body, t: r.created_at, avatar: (r.avatar as string | null) ?? null, ncom: Number(r.ncom ?? 0), nlik: Number(r.nlik ?? 0), liked: r.liked === true })) };
+    return { ok: true, posts: rows.map((r) => mapPost(r, pm)), pdd };
+  });
+
+  app.get('/api/social/buscar', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const q = String(((req.query ?? {}) as { q?: unknown }).q ?? '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 60);
+    if (q.length < 2) return { ok: true, usuarios: [], posts: [] };
+    const like = '%' + q.replace(/[%_\\]/g, '') + '%';
+    const us = await db.query('SELECT nick FROM hub_users WHERE nick IS NOT NULL AND nick_norm LIKE $1 ORDER BY nick_norm LIMIT 8', [like]);
+    const rows = (await db.query(SEL_POST + " WHERE lower(coalesce(p.title,'') || ' ' || p.body) LIKE $2 ORDER BY p.id DESC LIMIT 30", [u.id, like])).rows;
+    const pm = await attachPolls(rows, u.id);
+    return { ok: true, usuarios: us.rows.map((r) => r.nick), posts: rows.map((r) => mapPost(r, pm)) };
+  });
+
+  app.get('/api/social/trending', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const { rows } = await db.query("SELECT lower(t.tag) AS tag, count(*) AS c FROM (SELECT (regexp_matches(coalesce(title,'') || ' ' || body, '#([a-zA-Z0-9_]{2,40})', 'g'))[1] AS tag FROM posts WHERE created_at > now() - interval '48 hours') t GROUP BY 1 ORDER BY 2 DESC, 1 ASC LIMIT 8");
+    return { ok: true, tags: rows.map((r) => ({ tag: String(r.tag ?? ''), n: Number(r.c ?? 0) })) };
+  });
+
+  app.post('/api/social/poll/votar', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const b = (req.body ?? {}) as { postId?: unknown; opcion?: unknown };
+    const pid = Math.floor(Number(b.postId));
+    const op = Math.floor(Number(b.opcion));
+    if (!Number.isInteger(pid) || pid <= 0 || !Number.isInteger(op) || op < 0 || op > 3) return reply.code(400).send({ ok: false, error: 'bad' });
+    const pr = (await db.query('SELECT poll FROM posts WHERE id = $1', [pid])).rows[0];
+    if (!pr || !Array.isArray(pr.poll)) return reply.code(404).send({ ok: false, error: 'no_poll', message: 'Ese posteo no tiene encuesta.' });
+    if (op >= (pr.poll as unknown[]).length) return reply.code(400).send({ ok: false, error: 'bad' });
+    await db.query('INSERT INTO poll_votes (post_id, user_id, opcion) VALUES ($1, $2, $3) ON CONFLICT (post_id, user_id) DO UPDATE SET opcion = $3, created_at = now()', [pid, u.id, op]);
+    const cr = await db.query('SELECT opcion, count(*) AS c FROM poll_votes WHERE post_id = $1 GROUP BY opcion', [pid]);
+    const votos = (pr.poll as unknown[]).map(() => 0);
+    let total = 0;
+    for (const r of cr.rows) { const i = Number(r.opcion), c = Number(r.c ?? 0); if (i >= 0 && i < votos.length) { votos[i] = c; total += c; } }
+    return { ok: true, votos, total, mi: op };
+  });
+
+  app.get('/api/img/cfg', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return { ok: true, on: R2_ENABLED, max: 4 };
+  });
+
+  app.post('/api/img/sign', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    if (!R2_ENABLED) return reply.code(503).send({ ok: false, error: 'img_off', message: 'Las fotos todavía no están activas. Ya casi.' });
+    if (u.muted) return reply.code(403).send({ ok: false, error: 'muted', message: 'Estás silenciado.' });
+    const b = (req.body ?? {}) as { type?: unknown; size?: unknown };
+    const type = b.type === 'image/jpeg' || b.type === 'image/png' || b.type === 'image/webp' ? b.type : '';
+    if (!type) return reply.code(400).send({ ok: false, error: 'bad_type', message: 'Formato no soportado. JPG, PNG o WebP.' });
+    const size = Math.floor(Number(b.size));
+    if (!Number.isInteger(size) || size <= 0 || size > 4 * 1024 * 1024) return reply.code(413).send({ ok: false, error: 'too_big', message: 'Máximo 4MB por foto.' });
+    const now = Date.now();
+    const hist = (imgRate.get(u.id) ?? []).filter((t) => now - t < 3600000);
+    if (hist.length >= 30) return reply.code(429).send({ ok: false, error: 'slow', message: 'Demasiadas fotos por hora. Tomate un mate.' });
+    hist.push(now); imgRate.set(u.id, hist);
+    const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg';
+    const key = 'posts/' + u.id + '/' + Date.now().toString(36) + randomBytes(6).toString('hex') + '.' + ext;
+    return { ok: true, put: r2PresignPut(key), url: R2_PUBLIC_BASE + '/' + key, type };
   });
 
   app.get('/api/social/post', async (req, reply) => {
@@ -1159,11 +1377,12 @@ export function buildApp(db: Db): FastifyInstance {
     if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
     const meU = await hubUserBySession(db, req);
     const meId = meU ? meU.id : 0;
-    const pr = (await db.query('SELECT p.id, p.nick, p.title, p.body, p.created_at, u.avatar, (SELECT count(*) FROM post_likes pl WHERE pl.post_id = p.id) AS nlik, EXISTS(SELECT 1 FROM post_likes pl2 WHERE pl2.post_id = p.id AND pl2.user_id = $2) AS liked FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id WHERE p.id = $1', [id, meId])).rows[0];
+    const pr = (await db.query(SEL_POST + ' WHERE p.id = $2', [meId, id])).rows[0];
     if (!pr) return reply.code(404).send({ ok: false, error: 'not_found', message: 'Ese posteo no existe.' });
+    const pm = await attachPolls([pr], meId);
     const cs = (await db.query('SELECT c.id, c.parent_id, c.nick, c.body, c.created_at, u.avatar, (SELECT count(*) FROM comment_likes cl WHERE cl.comment_id = c.id) AS nlik, EXISTS(SELECT 1 FROM comment_likes cl2 WHERE cl2.comment_id = c.id AND cl2.user_id = $2) AS liked FROM comments c LEFT JOIN hub_users u ON u.id = c.user_id WHERE c.post_id = $1 ORDER BY c.id ASC LIMIT 300', [id, meId])).rows;
     return { ok: true,
-      post: { id: Number(pr.id), nick: pr.nick, title: (pr.title as string | null) ?? '', body: pr.body, t: pr.created_at, avatar: (pr.avatar as string | null) ?? null, nlik: Number(pr.nlik ?? 0), liked: pr.liked === true },
+      post: mapPost(pr, pm),
       comments: cs.map((c) => ({ id: Number(c.id), parent: c.parent_id ? Number(c.parent_id) : null, nick: c.nick, body: c.body, t: c.created_at, avatar: (c.avatar as string | null) ?? null, nlik: Number(c.nlik ?? 0), liked: c.liked === true })) };
   });
 
@@ -1172,19 +1391,42 @@ export function buildApp(db: Db): FastifyInstance {
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
     if (!u.nick) return reply.code(400).send({ ok: false, error: 'sin_nick', message: 'Primero reservá tu nick.' });
     if (u.muted) return reply.code(403).send({ ok: false, error: 'muted', message: 'Estás silenciado. No podés postear.' });
-    const b = (req.body ?? {}) as { title?: unknown; body?: unknown };
+    const b = (req.body ?? {}) as { title?: unknown; body?: unknown; topic?: unknown; images?: unknown; poll?: unknown };
     const title = typeof b.title === 'string' ? b.title.replace(/\s+/g, ' ').trim().slice(0, 120).trim() : '';
     const text = typeof b.body === 'string' ? b.body.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 2000).trim() : '';
     if (!title) return reply.code(400).send({ ok: false, error: 'empty', message: 'Ponele un título.' });
     if (offensiveText(title) || offensiveText(text)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Eso no va.' });
+    const topic = typeof b.topic === 'string' && TOPICS.indexOf(b.topic) >= 0 ? b.topic : null;
+    let images: string[] | null = null;
+    if (R2_ENABLED && Array.isArray(b.images)) {
+      const clean = b.images
+        .filter((x): x is string => typeof x === 'string' && x.length < 500 && x.startsWith(R2_PUBLIC_BASE + '/posts/') && /^[\w\-./:%]+$/.test(x))
+        .slice(0, 4);
+      if (clean.length) images = clean;
+    }
+    let poll: string[] | null = null;
+    if (Array.isArray(b.poll)) {
+      const opts = b.poll
+        .filter((x): x is string => typeof x === 'string')
+        .map((s) => s.replace(/\s+/g, ' ').trim().slice(0, 60))
+        .filter(Boolean)
+        .slice(0, 4);
+      if (opts.length >= 2) {
+        if (opts.some((o) => offensiveText(o))) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Una opción de la encuesta no va.' });
+        poll = opts;
+      }
+    }
     const now = Date.now();
     if (now - (postRate.get(u.id) ?? 0) < 15000) return reply.code(429).send({ ok: false, error: 'slow', message: 'Esperá un poco entre publicaciones.' });
     postRate.set(u.id, now);
-    const ins = await db.query('INSERT INTO posts (user_id, nick, title, body) VALUES ($1, $2, $3, $4) RETURNING id, created_at', [u.id, u.nick, title, text]);
+    const ins = await db.query(
+      'INSERT INTO posts (user_id, nick, title, body, topic, images, poll) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb) RETURNING id, created_at',
+      [u.id, u.nick, title, text, topic, images ? JSON.stringify(images) : null, poll ? JSON.stringify(poll) : null],
+    );
     const row = ins.rows[0];
     const pid = Number(row?.id ?? 0);
     await notifyMentions(title + ' ' + text, u.id, u.nick, pid);
-    return reply.code(201).send({ ok: true, post: { id: pid, nick: u.nick, title, body: text, t: row?.created_at, avatar: null, ncom: 0 } });
+    return reply.code(201).send({ ok: true, post: { id: pid, nick: u.nick, title, body: text, t: row?.created_at, avatar: null, ncom: 0, nlik: 0, liked: false, topic, imgs: images ?? [], poll: poll ? { opts: poll, votos: poll.map(() => 0), total: 0, mi: null } : null } });
   });
 
   app.post('/api/social/comment', async (req, reply) => {
@@ -1556,9 +1798,57 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.sendFile('perfil.html');
   });
   app.get('/perfil', async (req, reply) => { const u = (req.raw && req.raw.url) || ''; const q = u.indexOf('?'); return redir(reply, '/yata' + (q >= 0 ? u.slice(q) : '')); });
-  app.get('/u/:nick', async (_req, reply) => {
+  app.get('/u/:nick', async (req, reply) => {
     reply.header('cache-control', 'no-store');
-    return reply.sendFile('perfil.html');
+    const nickRaw = String(((req.params ?? {}) as { nick?: unknown }).nick ?? '');
+    let nick = nickRaw;
+    try { nick = decodeURIComponent(nickRaw); } catch { /* queda como vino */ }
+    const { rows } = await db.query('SELECT nick, bio, estado, (avatar IS NOT NULL) AS hasava FROM hub_users WHERE nick_norm = $1', [nick.trim().toLowerCase()]);
+    const r = rows[0];
+    if (!r) return reply.sendFile('perfil.html');
+    const n = String(r.nick ?? '');
+    const desc = String((r.estado as string | null) ?? '').trim() || String((r.bio as string | null) ?? '').trim() || 'El perfil de ' + n + ' en YATA, la red social de Tristo.';
+    const html = withOg({
+      title: n + ' — YATA',
+      desc: desc.slice(0, 160),
+      url: PUBLIC_URL + '/u/' + encodeURIComponent(n),
+      image: r.hasava === true ? PUBLIC_URL + '/og/u/' + encodeURIComponent(n) : PUBLIC_URL + '/logoyatasocial.png',
+    });
+    if (!html) return reply.sendFile('perfil.html');
+    reply.header('content-type', 'text/html; charset=utf-8');
+    return reply.send(html);
+  });
+  app.get('/p/:id', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const id = Math.floor(Number(((req.params ?? {}) as { id?: unknown }).id));
+    if (!Number.isInteger(id) || id <= 0) return reply.sendFile('perfil.html');
+    const pr = (await db.query("SELECT p.id, p.nick, p.title, p.body, (u.avatar IS NOT NULL) AS hasava FROM posts p LEFT JOIN hub_users u ON u.id = p.user_id WHERE p.id = $1", [id])).rows[0];
+    if (!pr) return reply.sendFile('perfil.html');
+    const nick = String(pr.nick ?? '');
+    const t = String((pr.title as string | null) ?? '').trim();
+    const cuerpo = String((pr.body as string | null) ?? '').replace(/\s+/g, ' ').trim();
+    const html = withOg({
+      title: (t || 'Posteo de ' + nick) + ' — YATA',
+      desc: (cuerpo || 'Por @' + nick + ' en YATA, la red social de Tristo.').slice(0, 160),
+      url: PUBLIC_URL + '/p/' + id,
+      image: pr.hasava === true ? PUBLIC_URL + '/og/u/' + encodeURIComponent(nick) : PUBLIC_URL + '/logoyatasocial.png',
+    });
+    if (!html) return reply.sendFile('perfil.html');
+    reply.header('content-type', 'text/html; charset=utf-8');
+    return reply.send(html);
+  });
+  app.get('/og/u/:nick', async (req, reply) => {
+    const nickRaw = String(((req.params ?? {}) as { nick?: unknown }).nick ?? '').replace(/\.(png|jpe?g|webp)$/i, '');
+    let nick = nickRaw;
+    try { nick = decodeURIComponent(nickRaw); } catch { /* queda como vino */ }
+    const { rows } = await db.query('SELECT avatar FROM hub_users WHERE nick_norm = $1', [nick.trim().toLowerCase()]);
+    const av = (rows[0]?.avatar as string | null) ?? null;
+    if (av && /^https?:\/\//.test(av)) return redir(reply, av);
+    const m = av ? /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(av) : null;
+    if (!m) return redir(reply, '/logoyatasocial.png');
+    reply.header('content-type', 'image/' + (m[1] ?? 'jpeg'));
+    reply.header('cache-control', 'public, max-age=3600');
+    return reply.send(Buffer.from(m[2] ?? '', 'base64'));
   });
   app.get('/pueblo', async (_req, reply) => {
     reply.header('cache-control', 'no-store');
@@ -1599,3 +1889,4 @@ async function main(): Promise<void> {
   console.log(`[youarethead] :${PORT} — OTP doble opt-in — mail=${process.env.RESEND_API_KEY ? 'on' : 'OFF'}`);
 }
 if (require.main === module) { main().catch((err) => { console.error(err); process.exit(1); }); }
+// tandas 1-4: compartir/OG · orden/busqueda · imagenes R2 · encuestas/pregunta del dia

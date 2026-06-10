@@ -66,6 +66,53 @@
     const { r, d } = await api("/api/social/clike", { method: "POST", headers: JH, body: JSON.stringify({ commentId: Number(id) }) });
     if (r.ok && d) { btn.classList.toggle("on", !!d.liked); const sp = btn.querySelector("span"); if (sp) sp.textContent = d.count; }
   }
+  /* ---- Tandas 1/3/4: compartir, fotos y encuestas ---- */
+  const POLLS = {};
+  function toast(msg) {
+    let t = document.getElementById("pf-toast");
+    if (!t) { t = document.createElement("div"); t.id = "pf-toast"; t.className = "pf-toast"; document.body.appendChild(t); }
+    t.textContent = msg; t.classList.add("on");
+    clearTimeout(t.__tt); t.__tt = setTimeout(() => t.classList.remove("on"), 2200);
+  }
+  function topicChip(p) { return p.topic ? '<a class="pf-topic" data-topic="' + esc(p.topic) + '">' + esc(p.topic) + "</a>" : ""; }
+  function imgsHTML(p) {
+    const im = Array.isArray(p.imgs) ? p.imgs.slice(0, 4) : [];
+    if (!im.length) return "";
+    return '<div class="pf-pimgs n' + im.length + '">' + im.map((u) => '<img loading="lazy" src="' + esc(u) + '" alt="" data-lbx="' + esc(u) + '" />').join("") + "</div>";
+  }
+  function lightbox(url) {
+    const w = document.createElement("div"); w.className = "pf-lbx";
+    w.innerHTML = '<img src="' + esc(url) + '" alt="" />';
+    w.onclick = () => w.remove();
+    document.body.appendChild(w);
+  }
+  function pollHTML(p) {
+    if (!p.poll || !Array.isArray(p.poll.opts)) return "";
+    POLLS[p.id] = p.poll;
+    const q = p.poll, voted = q.mi !== null && q.mi !== undefined;
+    return '<div class="pf-poll" data-pollbox="' + p.id + '">' + q.opts.map((o, i) => {
+      if (!voted) return '<button class="pf-pop pf-pop-btn" data-vote="' + i + '" data-vpost="' + p.id + '" type="button"><span>' + esc(o) + "</span></button>";
+      const n = q.votos[i] || 0, pc = q.total ? Math.round(n * 100 / q.total) : 0;
+      return '<div class="pf-pop' + (q.mi === i ? " mia" : "") + '"><i style="width:' + pc + '%"></i><span>' + esc(o) + "</span><b>" + pc + "%</b></div>";
+    }).join("") + '<div class="pf-poll-n">' + (q.total || 0) + ((q.total || 0) === 1 ? " voto" : " votos") + "</div></div>";
+  }
+  async function votePoll(btn) {
+    const id = Number(btn.getAttribute("data-vpost")), op = Number(btn.getAttribute("data-vote"));
+    const { r, d } = await api("/api/social/poll/votar", { method: "POST", headers: JH, body: JSON.stringify({ postId: id, opcion: op }) });
+    if (!r.ok || !d || !d.ok) { toast((d && d.message) || "No se pudo votar."); return; }
+    const q = POLLS[id] || { opts: [] };
+    POLLS[id] = { opts: q.opts, votos: d.votos, total: d.total, mi: d.mi };
+    document.querySelectorAll('[data-pollbox="' + id + '"]').forEach((el) => { const tmp = document.createElement("div"); tmp.innerHTML = pollHTML({ id: id, poll: POLLS[id] }); if (tmp.firstChild) el.replaceWith(tmp.firstChild); });
+  }
+  function shareBtn(p) { return '<button class="pf-shr" data-share="' + p.id + '" data-sht="' + esc(p.title || "") + '" type="button" title="Compartir">' + ic("share") + "<span>Compartir</span></button>"; }
+  async function sharePost(btn) {
+    const id = btn.getAttribute("data-share");
+    const url = location.origin + "/p/" + id;
+    const title = btn.getAttribute("data-sht") || "Posteo en YATA";
+    if (navigator.share) { try { await navigator.share({ title: title, url: url }); return; } catch (err) { if (err && err.name === "AbortError") return; } }
+    try { await navigator.clipboard.writeText(url); toast("Link copiado. Repartilo."); } catch (_) { window.prompt("Copiá el link:", url); }
+  }
+
   function avaPic(photo, head) { return photo ? '<img class="pf-img" src="' + esc(photo) + '" alt="" referrerpolicy="no-referrer" />' : avatar(head); }
   function resizeImg(file, cb) {
     const fr = new FileReader();
@@ -103,6 +150,7 @@
     admin: '<path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/>',
     tienda: '<path d="M5 8h14l-1 11H6z"/><path d="M9 8a3 3 0 016 0"/>',
     salir: '<path d="M14 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2v-2"/><path d="M10 12h10m0 0l-3-3m3 3l-3 3"/>',
+    share: '<path d="M12 4v11"/><path d="M8.5 7.5L12 4l3.5 3.5"/><path d="M5 12v6a2 2 0 002 2h10a2 2 0 002-2v-6"/>',
   };
   function ic(n) { return '<svg class="pf-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + IC[n] + "</svg>"; }
 
@@ -116,13 +164,32 @@
     if (oauth === "setup") { setupScreen(); return; }
     const um = location.pathname.match(/^\/u\/(.+)$/);
     const wantUser = um ? decodeURIComponent(um[1]) : null;
+    const pmm = location.pathname.match(/^\/p\/(\d+)$/);
+    const wantPost = pmm ? Number(pmm[1]) : null;
     const { d } = await api("/api/hub/me", AH);
     if (!d || !d.ok) { root.innerHTML = '<p class="pf-loading">No responde. Probá en un rato.</p>'; return; }
-    if (!d.logged) { if (wantUser) { guestProfile(wantUser); return; } login(oauth); return; }
+    if (!d.logged) { if (wantUser) { guestProfile(wantUser); return; } if (wantPost) { guestPost(wantPost); return; } login(oauth); return; }
     me = d;
     if (oauth === "migrated") { migrationModal(() => app()); return; }
     app();
     if (wantUser) viewUser(wantUser);
+    else if (wantPost) viewPost(wantPost);
+  }
+  async function guestPost(id) {
+    const { r, d } = await api("/api/social/post?id=" + id, AH);
+    if (!r.ok || !d || !d.ok) { root.innerHTML = '<div class="pf-guest"><p class="pf-empty">Ese posteo no existe (o se fue a dormir).</p><a class="pf-btn pf-spin" href="/yata">Entrá a YATA</a></div>'; return; }
+    const p = d.post, comments = d.comments || [];
+    root.innerHTML = '<div class="pf-guest">' +
+      '<article class="pf-postfull">' +
+        '<div class="pf-post-h"><span class="pf-ava">' + avaPic(p.avatar, headFor(p.nick)) + '</span>' +
+        '<div class="pf-post-meta"><b>' + esc(p.nick) + '</b><span>@' + esc(p.nick) + " · " + cuando(p.t) + "</span></div></div>" +
+        (p.title ? '<h2 class="pf-postfull-t">' + esc(p.title) + "</h2>" : "") +
+        (p.body ? '<div class="pf-postfull-b">' + rich(p.body) + "</div>" : "") +
+        imgsHTML(p) +
+        '<div class="pf-dimc" style="padding:8px 0">' + (p.nlik || 0) + " calaveras · " + comments.length + (comments.length === 1 ? " comentario" : " comentarios") + "</div>" +
+      "</article>" +
+      '<a class="pf-btn pf-spin" href="/yata" style="margin-top:14px;display:inline-flex">Entrá a YATA para comentar</a>' +
+      "</div>";
   }
   async function guestProfile(nick) {
     const { r, d } = await api("/api/social/perfil?nick=" + encodeURIComponent(nick), AH);
@@ -239,6 +306,10 @@
       const cl = t.closest("[data-clike]"); if (cl) { e.preventDefault(); e.stopPropagation(); toggleClike(cl); return; }
       const dpst = t.closest("[data-delpost]"); if (dpst) { e.preventDefault(); e.stopPropagation(); delPost(dpst.getAttribute("data-delpost")); return; }
       const dcmt = t.closest("[data-delcomment]"); if (dcmt) { e.preventDefault(); e.stopPropagation(); delComment(dcmt.getAttribute("data-delcomment")); return; }
+      const vbtn = t.closest("[data-vote]"); if (vbtn) { e.preventDefault(); e.stopPropagation(); votePoll(vbtn); return; }
+      const sbtn = t.closest("[data-share]"); if (sbtn) { e.preventDefault(); e.stopPropagation(); sharePost(sbtn); return; }
+      const lbx = t.closest("[data-lbx]"); if (lbx) { e.preventDefault(); e.stopPropagation(); lightbox(lbx.getAttribute("data-lbx")); return; }
+      const tpc = t.closest("[data-topic]"); if (tpc) { e.preventDefault(); e.stopPropagation(); viewFeedTopic(tpc.getAttribute("data-topic")); return; }
       const ps = t.closest("[data-post]"); if (ps) { e.preventDefault(); viewPost(Number(ps.getAttribute("data-post"))); return; }
     }); }
     function closeSheet() { const s = root.querySelector("#pf-sheet"); if (s) s.hidden = true; }
@@ -282,35 +353,52 @@
     const nc = p.ncom || 0;
     return '<article class="pf-post" data-post="' + p.id + '">' +
       '<div class="pf-post-h"><span class="pf-ava">' + avaPic(p.avatar, headFor(p.nick)) + "</span>" +
-      '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><span class="pf-code" title="código del posteo">$' + p.id + "</span></div>" +
+      '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div>' + topicChip(p) + '<span class="pf-code" title="código del posteo">$' + p.id + "</span></div>" +
       (p.title ? '<h3 class="pf-post-t">' + esc(p.title) + "</h3>" : "") +
       (snip ? '<p class="pf-post-b">' + snip + "</p>" : "") +
-      '<div class="pf-post-f">' + likeBtn(p) + '<span class="pf-cnt">' + nc + (nc === 1 ? " comentario" : " comentarios") + "</span>" + delBtnPost(p) + "</div>" +
+      imgsHTML(p) + pollHTML(p) +
+      '<div class="pf-post-f">' + likeBtn(p) + '<span class="pf-cnt">' + nc + (nc === 1 ? " comentario" : " comentarios") + "</span>" + shareBtn(p) + delBtnPost(p) + "</div>" +
       "</article>";
   }
+  const TOPIC_LIST = ["canal", "juegos", "arte", "random", "debate"];
   function viewFeed() {
-    let scope = "ti", topId = 0;
-    chead("Feed", '<div class="pf-tabs2"><button data-s="ti" class="on">Para ti</button><button data-s="hot">En llamas</button><button data-s="amigos">Amigos</button></div>');
+    let scope = "ti", topId = 0, topic = "";
+    chead("Feed", '<div class="pf-tabs2"><button data-s="ti" class="on">Para ti</button><button data-s="hot">En llamas</button><button data-s="top7">Top semana</button><button data-s="amigos">Amigos</button></div>');
     body().innerHTML =
       '<div id="pf-carousel" class="pf-carousel"></div>' +
+      '<div class="pf-srch"><input id="pf-q" maxlength="60" placeholder="Buscar posteos y gente…" autocomplete="off" /><button class="pf-btn pf-mini" id="pf-qgo">Buscar</button></div>' +
       '<div class="pf-comp">' +
         '<input class="pf-cti" id="pf-ttl" maxlength="120" placeholder="Título de tu posteo" />' +
         '<textarea id="pf-post" maxlength="2000" placeholder="Texto (opcional). @ para nombrar, # para temas, $ para citar otro posteo."></textarea>' +
-        '<div class="pf-crow"><span class="pf-msg" id="pf-pmsg"></span><button class="pf-btn pf-spin" id="pf-pub">Publicar</button></div>' +
+        '<div class="pf-tchips" id="pf-tchips">' + TOPIC_LIST.map((t) => '<button type="button" class="pf-tchip" data-tc="' + t + '">' + t + "</button>").join("") + "</div>" +
+        '<div id="pf-poll" class="pf-pollc" style="display:none"></div>' +
+        '<div id="pf-imgs" class="pf-attach" style="display:none"></div>' +
+        '<div class="pf-crow"><button class="pf-ctool" id="pf-addpoll" type="button">+ Encuesta</button><button class="pf-ctool" id="pf-addimg" type="button" style="display:none">+ Fotos</button><input type="file" id="pf-file" accept="image/jpeg,image/png,image/webp" multiple style="display:none" /><span class="pf-msg" id="pf-pmsg"></span><button class="pf-btn pf-spin" id="pf-pub">Publicar</button></div>' +
       "</div>" +
+      '<div class="pf-fchips" id="pf-fchips"><button class="pf-tchip on" data-ft="">todos</button>' + TOPIC_LIST.map((t) => '<button class="pf-tchip" data-ft="' + t + '">' + t + "</button>").join("") + "</div>" +
       '<button id="pf-new" class="pf-newpill" type="button" style="display:none"></button>' +
+      '<div id="pf-pdd"></div>' +
       '<div id="pf-feed"><p class="pf-dimc">Cargando…</p></div>';
-    const qfor = () => (scope === "amigos" ? "?scope=amigos" : scope === "hot" ? "?scope=hot" : "");
+    const qfor = () => {
+      const ps = [];
+      if (scope === "amigos") ps.push("scope=amigos");
+      else if (scope === "hot") ps.push("scope=hot");
+      else if (scope === "top7") ps.push("sort=top7");
+      if (topic) ps.push("topic=" + encodeURIComponent(topic));
+      return ps.length ? "?" + ps.join("&") : "";
+    };
     async function load() {
       const { d } = await api("/api/social/feed" + qfor(), AH);
       const box = body().querySelector("#pf-feed"); if (!box) return;
       const posts = (d && d.posts) || [];
       topId = posts.reduce((m, p) => Math.max(m, p.id), 0);
       const np = body().querySelector("#pf-new"); if (np) np.style.display = "none";
-      box.innerHTML = posts.length ? posts.map(postHTML).join("") : '<p class="pf-empty">' + (scope === "amigos" ? "Tus amigos no postearon nada todavía." : "Nadie publicó nada. Sé la primera voz del encierro.") + "</p>";
+      const pdb = body().querySelector("#pf-pdd");
+      if (pdb) pdb.innerHTML = (d && d.pdd) ? '<div class="pf-pddlbl">★ Pregunta del día</div><div class="pf-pdd">' + postHTML(d.pdd) + "</div>" : "";
+      box.innerHTML = posts.length ? posts.map(postHTML).join("") : '<p class="pf-empty">' + (scope === "amigos" ? "Tus amigos no postearon nada todavía." : topic ? "Nada en " + esc(topic) + " todavía. Estrenalo vos." : "Nadie publicó nada. Sé la primera voz del encierro.") + "</p>";
     }
     async function checkNew() {
-      if (scope === "hot") return;
+      if (scope === "hot" || scope === "top7") return;
       const { d } = await api("/api/social/feed" + qfor(), AH);
       const newer = ((d && d.posts) || []).filter((p) => p.id > topId).length;
       const np = body().querySelector("#pf-new"); if (!np) return;
@@ -319,7 +407,117 @@
     load(); mountCarousel(); vt.push(setInterval(() => { if (!document.hidden) checkNew(); }, 12000));
     body().querySelector("#pf-new").onclick = () => load();
     root.querySelector("#pf-chead").querySelectorAll("[data-s]").forEach((b) => { b.onclick = () => { scope = b.getAttribute("data-s"); root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.remove("on")); b.classList.add("on"); load(); }; });
-    body().querySelector("#pf-pub").onclick = async () => { const ti = body().querySelector("#pf-ttl"), ta = body().querySelector("#pf-post"), pm = body().querySelector("#pf-pmsg"); pm.textContent = "..."; const { r, d } = await api("/api/social/post", { method: "POST", headers: JH, body: JSON.stringify({ title: ti.value, body: ta.value }) }); if (r.ok) { ti.value = ""; ta.value = ""; pm.textContent = ""; scope = "ti"; root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.toggle("on", x.getAttribute("data-s") === "ti")); load(); } else pm.textContent = (d && d.message) || "No se pudo."; };
+    body().querySelectorAll("#pf-fchips [data-ft]").forEach((b) => b.onclick = () => { topic = b.getAttribute("data-ft") || ""; body().querySelectorAll("#pf-fchips [data-ft]").forEach((x) => x.classList.toggle("on", x === b)); load(); });
+    const qEl = body().querySelector("#pf-q");
+    const goQ = () => { const q = qEl.value.trim(); if (q.length >= 2) viewSearch(q); };
+    body().querySelector("#pf-qgo").onclick = goQ;
+    qEl.addEventListener("keydown", (e) => { if (e.key === "Enter") goQ(); });
+    // composer: tema elegido
+    let selTopic = "", pollOpts = null, files = [];
+    const tch = body().querySelector("#pf-tchips");
+    tch.querySelectorAll("[data-tc]").forEach((b) => b.onclick = () => { const v = b.getAttribute("data-tc"); selTopic = selTopic === v ? "" : v; tch.querySelectorAll("[data-tc]").forEach((x) => x.classList.toggle("on", x.getAttribute("data-tc") === selTopic)); });
+    // composer: encuesta
+    const pbox = body().querySelector("#pf-poll");
+    function renderPoll() {
+      if (!pollOpts) { pbox.style.display = "none"; pbox.innerHTML = ""; return; }
+      pbox.style.display = "block";
+      pbox.innerHTML = pollOpts.map((v, i) => '<input class="pf-input pf-popin" data-pi="' + i + '" maxlength="60" placeholder="Opción ' + (i + 1) + '" value="' + esc(v) + '" />').join("") +
+        '<div class="pf-row" style="margin-top:6px">' + (pollOpts.length < 4 ? '<button class="pf-ctool" id="pf-pmas" type="button">+ opción</button>' : "") + '<button class="pf-ctool" id="pf-pno" type="button">Sacar encuesta</button></div>';
+      pbox.querySelectorAll("[data-pi]").forEach((inp) => inp.oninput = () => { pollOpts[Number(inp.getAttribute("data-pi"))] = inp.value; });
+      const pmas = pbox.querySelector("#pf-pmas"); if (pmas) pmas.onclick = () => { pollOpts.push(""); renderPoll(); };
+      pbox.querySelector("#pf-pno").onclick = () => { pollOpts = null; renderPoll(); };
+    }
+    body().querySelector("#pf-addpoll").onclick = () => { pollOpts = pollOpts ? null : ["", ""]; renderPoll(); };
+    // composer: fotos (solo si R2 está configurado)
+    const ibox = body().querySelector("#pf-imgs"), fbtn = body().querySelector("#pf-addimg"), fileEl = body().querySelector("#pf-file");
+    api("/api/img/cfg", AH).then(({ d }) => { if (d && d.on) fbtn.style.display = ""; });
+    fbtn.onclick = () => fileEl.click();
+    function renderImgs() {
+      ibox.style.display = files.length ? "flex" : "none";
+      ibox.innerHTML = files.map((f, i) => '<span class="pf-ath' + (f.url ? "" : " subiendo") + '"><img src="' + esc(f.prev) + '" alt="" /><button type="button" data-ix="' + i + '">&times;</button></span>').join("");
+      ibox.querySelectorAll("[data-ix]").forEach((b) => b.onclick = () => { files.splice(Number(b.getAttribute("data-ix")), 1); renderImgs(); });
+    }
+    function compressImg(file, cb) {
+      const fr = new FileReader();
+      fr.onload = () => { const img = new Image(); img.onload = () => {
+        const MX = 1600, sc = Math.min(1, MX / Math.max(img.width, img.height));
+        const cv = document.createElement("canvas"); cv.width = Math.max(1, Math.round(img.width * sc)); cv.height = Math.max(1, Math.round(img.height * sc));
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        try { cv.toBlob((bl) => cb(bl), "image/webp", 0.82); } catch (_) { cb(null); }
+      }; img.onerror = () => cb(null); img.src = String(fr.result); };
+      fr.onerror = () => cb(null); fr.readAsDataURL(file);
+    }
+    fileEl.onchange = () => {
+      const list = Array.from(fileEl.files || []).slice(0, 4 - files.length);
+      fileEl.value = "";
+      list.forEach((f) => {
+        const ent = { url: "", prev: URL.createObjectURL(f) };
+        files.push(ent); renderImgs();
+        compressImg(f, async (bl) => {
+          if (!bl) { files.splice(files.indexOf(ent), 1); renderImgs(); toast("No se pudo leer una imagen."); return; }
+          const sg = await api("/api/img/sign", { method: "POST", headers: JH, body: JSON.stringify({ type: bl.type, size: bl.size }) });
+          if (!sg.r.ok || !sg.d || !sg.d.ok) { files.splice(files.indexOf(ent), 1); renderImgs(); toast((sg.d && sg.d.message) || "No se pudo subir."); return; }
+          try {
+            const up = await fetch(sg.d.put, { method: "PUT", body: bl, headers: { "content-type": bl.type } });
+            if (!up.ok) throw new Error("put");
+            ent.url = sg.d.url; renderImgs();
+          } catch (_) { files.splice(files.indexOf(ent), 1); renderImgs(); toast("Falló la subida. Probá de nuevo."); }
+        });
+      });
+    };
+    body().querySelector("#pf-pub").onclick = async () => {
+      const ti = body().querySelector("#pf-ttl"), ta = body().querySelector("#pf-post"), pm = body().querySelector("#pf-pmsg");
+      if (files.some((f) => !f.url)) { pm.textContent = "Esperá que terminen de subir las fotos."; return; }
+      let poll = null;
+      if (pollOpts) {
+        const ops = pollOpts.map((s) => s.trim()).filter(Boolean);
+        if (ops.length >= 2) poll = ops.slice(0, 4);
+        else { pm.textContent = "La encuesta necesita al menos 2 opciones."; return; }
+      }
+      pm.textContent = "...";
+      const payload = { title: ti.value, body: ta.value };
+      if (selTopic) payload.topic = selTopic;
+      if (poll) payload.poll = poll;
+      if (files.length) payload.images = files.map((f) => f.url);
+      const { r, d } = await api("/api/social/post", { method: "POST", headers: JH, body: JSON.stringify(payload) });
+      if (r.ok) {
+        ti.value = ""; ta.value = ""; pm.textContent = "";
+        selTopic = ""; tch.querySelectorAll("[data-tc]").forEach((x) => x.classList.remove("on"));
+        pollOpts = null; renderPoll(); files = []; renderImgs();
+        scope = "ti"; root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.toggle("on", x.getAttribute("data-s") === "ti"));
+        load();
+      } else pm.textContent = (d && d.message) || "No se pudo.";
+    };
+  }
+
+  function viewFeedTopic(t) {
+    clearView(); cur = "feed";
+    root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === "feed"));
+    chead("Tema: " + esc(t));
+    body().innerHTML = '<div id="pf-feed"><p class="pf-dimc">Cargando…</p></div>';
+    api("/api/social/feed?topic=" + encodeURIComponent(t), AH).then(({ d }) => {
+      const box = body().querySelector("#pf-feed"); if (!box) return;
+      const posts = (d && d.posts) || [];
+      box.innerHTML = posts.length ? posts.map(postHTML).join("") : '<p class="pf-empty">Nada en ' + esc(t) + " todavía. Estrenalo vos.</p>";
+    });
+  }
+
+  async function viewSearch(q) {
+    clearView(); cur = "buscar";
+    root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
+    chead("Buscar");
+    body().innerHTML = '<div class="pf-srch"><input id="bs-q" maxlength="60" value="' + esc(q) + '" autocomplete="off" /><button class="pf-btn pf-mini" id="bs-go">Buscar</button></div><div id="bs-res"><p class="pf-dimc">Buscando…</p></div>';
+    const inp = body().querySelector("#bs-q");
+    const go = () => { const v = inp.value.trim(); if (v.length >= 2) viewSearch(v); };
+    body().querySelector("#bs-go").onclick = go;
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+    const { d } = await api("/api/social/buscar?q=" + encodeURIComponent(q), AH);
+    const box = body().querySelector("#bs-res"); if (!box) return;
+    const us = (d && d.usuarios) || [], ps = (d && d.posts) || [];
+    let h = "";
+    if (us.length) h += '<div class="pf-h">Gente</div>' + us.map((n) => '<div class="pf-fila">' + uname(n) + '<button class="pf-btn ghost pf-mini" data-u="' + esc(n) + '">Ver perfil</button></div>').join("");
+    if (ps.length) h += '<div class="pf-h">Posteos</div>' + ps.map(postHTML).join("");
+    box.innerHTML = h || '<p class="pf-empty">Ni rastros de eso. Probá con otra palabra.</p>';
   }
 
   function viewFeedTag(tag) {
@@ -365,7 +563,8 @@
         '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><span class="pf-code">$' + p.id + "</span></div>" +
         (p.title ? '<h2 class="pf-postfull-t">' + esc(p.title) + "</h2>" : "") +
         (p.body ? '<div class="pf-postfull-b">' + rich(p.body) + "</div>" : "") +
-        '<div class="pf-post-f" style="margin-top:14px">' + likeBtn(p) + delBtnPost(p) + "</div>" +
+        imgsHTML(p) + pollHTML(p) +
+        '<div class="pf-post-f" style="margin-top:14px">' + likeBtn(p) + shareBtn(p) + delBtnPost(p) + "</div>" +
       "</article>" +
       '<div class="pf-h">Comentarios</div>' +
       '<div class="pf-comp pf-comp-c"><textarea id="pp-ctext" maxlength="1000" placeholder="Sumate al hilo… (@ # $)"></textarea><div class="pf-crow"><span class="pf-msg" id="pp-cmsg"></span><button class="pf-btn pf-spin" id="pp-csend">Comentar</button></div></div>' +
@@ -386,6 +585,9 @@
       '<div class="pf-h">Último video (carrusel)</div>' +
       '<div class="pf-row"><input class="pf-input" id="ad-vid" placeholder="https://youtu.be/..." /><button class="pf-btn" id="ad-vidsave">Guardar</button></div>' +
       '<p class="pf-msg" id="ad-vidmsg" style="min-height:1em"></p>' +
+      '<div class="pf-h">Pregunta del día</div>' +
+      '<div class="pf-row"><input class="pf-input" id="ad-pdd" inputmode="numeric" placeholder="ID del posteo (el $número)" /><button class="pf-btn" id="ad-pddsave">Fijar</button><button class="pf-btn ghost" id="ad-pddoff">Sacar</button></div>' +
+      '<p class="pf-msg" id="ad-pddmsg" style="min-height:1em"></p>' +
       '<div class="pf-h">Usuarios</div>' +
       '<div class="pf-row"><input class="pf-input" id="ad-q" maxlength="20" placeholder="buscar por nick…" /><button class="pf-btn" id="ad-go">Buscar</button></div>' +
       '<p class="pf-msg" id="ad-msg" style="min-height:1em"></p>' +
@@ -393,6 +595,9 @@
     const qEl = body().querySelector("#ad-q"), am = body().querySelector("#ad-msg");
     (async () => { try { const c = await (await fetch("/api/config", AH)).json(); if (c && c.video) body().querySelector("#ad-vid").value = c.video; } catch (_) {} })();
     body().querySelector("#ad-vidsave").onclick = async () => { const vm = body().querySelector("#ad-vidmsg"); vm.textContent = "..."; const { r, d } = await api("/api/admin/config", { method: "POST", headers: JH, body: JSON.stringify({ video: body().querySelector("#ad-vid").value.trim() }) }); vm.textContent = r.ok ? "Guardado." : ((d && d.message) || "No se pudo."); };
+    (async () => { try { const { d } = await api("/api/admin/pdd", AH); if (d && d.ok && d.pdd) body().querySelector("#ad-pdd").value = d.pdd; } catch (_) {} })();
+    body().querySelector("#ad-pddsave").onclick = async () => { const m2 = body().querySelector("#ad-pddmsg"); m2.textContent = "..."; const { r, d } = await api("/api/admin/pdd", { method: "POST", headers: JH, body: JSON.stringify({ id: Number(body().querySelector("#ad-pdd").value) || 0 }) }); m2.textContent = r.ok ? "Fijada arriba del feed." : ((d && d.message) || "No se pudo."); };
+    body().querySelector("#ad-pddoff").onclick = async () => { const m2 = body().querySelector("#ad-pddmsg"); m2.textContent = "..."; const { r } = await api("/api/admin/pdd", { method: "POST", headers: JH, body: JSON.stringify({ id: null }) }); m2.textContent = r.ok ? "Sacada." : "No se pudo."; body().querySelector("#ad-pdd").value = ""; };
     async function load() {
       const q = qEl.value.trim();
       const { d } = await api("/api/admin/users" + (q ? "?q=" + encodeURIComponent(q) : ""), AH);
@@ -689,8 +894,15 @@
   function rightRail() {
     const r = root.querySelector("#pf-right"); if (!r) return;
     r.innerHTML =
+      '<div class="pf-widget"><div class="pf-wh">De qué se habla</div><div id="rg-trend"><p class="pf-dimc" style="padding:14px">Cargando…</p></div></div>' +
       '<div class="pf-widget"><div class="pf-wh">Tus mensajes</div><div id="rg-prev"><p class="pf-dimc">Cargando…</p></div></div>' +
       '<div class="pf-widget"><div class="pf-wh">Tops</div><div id="rg-tops"><p class="pf-dimc" style="padding:14px">Cargando…</p></div></div>';
+    (async function trend() {
+      const box = r.querySelector("#rg-trend"); if (!box) return;
+      const { d } = await api("/api/social/trending", AH);
+      const tags = (d && d.tags) || [];
+      box.innerHTML = tags.length ? tags.map((t) => '<a class="pf-trow" data-tag="' + esc(t.tag) + '">#' + esc(t.tag) + "<b>" + t.n + "</b></a>").join("") : '<p class="pf-dimc" style="padding:14px">Tirá el primer #hashtag y arrancá la conversación.</p>';
+    })();
     async function prev() { const { d } = await api("/api/social/amigos", AH); const box = r.querySelector("#rg-prev"); if (!box) return; const am = (d && d.amigos) || []; box.innerHTML = am.length ? am.slice(0, 6).map((n) => '<div class="pf-prev" data-n="' + esc(n) + '"><span class="pf-ava">' + avatar(headFor(n)) + '</span><div>' + uname(n) + '<span>tocá para escribir</span></div></div>').join("") : '<p class="pf-dimc" style="padding:14px">Agregá amigos para chatear.</p>'; box.querySelectorAll("[data-n]").forEach((b) => b.onclick = () => { window.__dmOpen = b.getAttribute("data-n"); setView("mensajes"); }); }
     prev(); rt.push(setInterval(() => { if (!document.hidden) prev(); }, 20000));
     (function mountTops() {
