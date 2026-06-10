@@ -609,6 +609,7 @@
     mural: { l: "Mural", go: "/tristos" },
     pueblo: { l: "Pueblo", go: "/pueblo" },
     feed: { l: "Feed", v: "feed" },
+    msn: { l: "Mensajes", msn: true },
   };
   const DK_GLYPH = {
     folder: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
@@ -623,6 +624,7 @@
     pueblo: '<path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/>',
     feed: '<path d="M4 7h16M4 12h16M4 17h10"/>',
     tv: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 3l4 4 4-4"/><circle cx="17.5" cy="11" r="1" fill="currentColor" stroke="none"/>',
+    msn: '<path d="M4 5h16v11H10l-5 4z"/><path d="M8 9h8M8 12h5"/>',
   };
   function dkSvg(g, color) { return '<svg viewBox="0 0 24 24" fill="none" stroke="' + (color || "currentColor") + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (DK_GLYPH[g] || DK_GLYPH.note) + "</svg>"; }
   async function viewDesktop(nick) {
@@ -638,7 +640,7 @@
     body().innerHTML =
       '<a class="pf-back2" id="dk-back">&#8592; Perfil de ' + esc(nick) + "</a>" +
       (own ? '<div class="dk-bar"><button class="pf-btn ghost pf-mini" id="dk-ncar">+ Carpeta</button><button class="pf-btn ghost pf-mini" id="dk-nnota">+ Nota</button><button class="pf-btn ghost pf-mini" id="dk-nacc">+ Acceso</button><button class="pf-btn ghost pf-mini" id="dk-nwid">+ Widget</button><button class="pf-btn ghost pf-mini" id="dk-ntv">+ Tele</button><button class="pf-btn ghost pf-mini" id="dk-caja">Caja <b id="dk-cajan"></b></button><span class="pf-dimc" id="dk-msg" style="margin-left:auto"></span></div>' : "") +
-      '<div class="dk-surface" id="dk-s"' + (D.perfil && D.perfil.banner ? ' style="background-image:url(\'' + esc(D.perfil.banner) + '\')"' : ' style="background:linear-gradient(135deg,' + acc + '22,#08080b 70%)"') + '><div class="dk-scan"></div><button class="dk-fsbtn" id="dk-fs" type="button" title="Pantalla completa">⛶</button><span class="dk-pres" id="dk-pres" style="display:none"></span></div>';
+      '<div class="dk-surface" id="dk-s"' + (D.perfil && D.perfil.banner ? ' style="background-image:url(\'' + esc(D.perfil.banner) + '\')"' : ' style="background:linear-gradient(135deg,' + acc + '22,#08080b 70%)"') + '><div class="dk-scan"></div><button class="dk-fsbtn" id="dk-fs" type="button" title="Pantalla completa">⛶</button><button class="dk-fsbtn dk-chatbtn" id="dk-dchat" type="button" title="Chat del escritorio">💬</button><span class="dk-pres" id="dk-pres" style="display:none"></span></div>';
     body().querySelector("#dk-back").onclick = () => viewUser(nick);
     const S = body().querySelector("#dk-s");
     const colsN = () => Math.max(3, Math.floor(S.clientWidth / CELL));
@@ -649,7 +651,114 @@
     function ocupado() { const m = {}; rootItems().forEach((i) => { m[i.x + "_" + i.y] = i.id; }); return m; }
     function freeCell() { const m = ocupado(); m["0_0"] = "sys"; const C = colsN(); for (let y = 0; y < 40; y++) for (let x = 0; x < C; x++) if (!m[x + "_" + y]) return { x: x, y: y }; return { x: 0, y: 0 }; }
     function setCajaN() { const el = body().querySelector("#dk-cajan"); if (el) el.textContent = String(cajaItems().length + trofeosSinPoner().length || ""); }
-    function navShortcut(app2) { const a = DK_APPS[app2]; if (!a) return; if (a.v) setView(a.v); else location.href = a.go; }
+    function navShortcut(app2) {
+      const a = DK_APPS[app2];
+      if (!a) return;
+      if (a.msn) { winMsn(); return; }
+      if (a.v) { setView(a.v); return; }
+      const w = openWin("app" + app2, esc(a.l), '<div class="dk-appf"><iframe src="' + esc(a.go) + '" title="' + esc(a.l) + '"></iframe></div><div class="dk-fbar" style="margin-top:8px"><a class="pf-btn ghost pf-mini" href="' + esc(a.go) + '">Abrir afuera ↗</a></div>');
+      w.classList.add("dk-appwin");
+    }
+    function winMsn() {
+      const w = openWin("msn", "Mensajes", '<div id="msn-list"><p class="pf-dimc" style="padding:8px">Cargando contactos…</p></div>');
+      (async () => {
+        const { d: dd } = await api("/api/social/amigos", AH);
+        const box = w.querySelector("#msn-list"); if (!box) return;
+        const am = (dd && dd.amigos) || [];
+        box.innerHTML = am.length
+          ? am.map((n) => '<div class="dk-fila"><span><span class="dk-on"></span> ' + esc(n) + '</span><button class="pf-btn pf-mini" data-msn="' + esc(n) + '">Chatear</button></div>').join("")
+          : '<p class="pf-dimc" style="padding:8px">Sin amigos todavía. Agregá gente desde el feed y volvé.</p>';
+        box.querySelectorAll("[data-msn]").forEach((b) => b.onclick = () => dmWin(b.getAttribute("data-msn")));
+      })();
+    }
+    function dmWin(con) {
+      const key = "dm" + con.toLowerCase();
+      const w = openWin(key, esc(con), '<div class="dk-chatlog" id="cl"></div><div class="pf-row" style="margin-top:8px"><input class="pf-input" id="ct" maxlength="300" placeholder="escribí…" autocomplete="off" /><button class="pf-btn pf-mini" id="cs">Enviar</button></div><p class="pf-msg" id="ce" style="margin:4px 0 0"></p>');
+      const log = w.querySelector("#cl"), txt = w.querySelector("#ct"), em = w.querySelector("#ce");
+      let maxId = 0;
+      function add(m) { const dv = document.createElement("div"); dv.className = "pf-m" + (m.mio ? " mio" : ""); dv.textContent = m.body; log.appendChild(dv); if (m.id > maxId) maxId = m.id; }
+      async function load(first) {
+        const { r: rr, d: dd } = await api("/api/social/dm?con=" + encodeURIComponent(con) + (maxId ? "&since=" + maxId : ""), AH);
+        if (rr.status === 403) { em.textContent = "Tienen que ser amigos."; return; }
+        if (dd && dd.mensajes && dd.mensajes.length) { dd.mensajes.forEach(add); log.scrollTop = log.scrollHeight; if (!first && dd.mensajes.some((m) => !m.mio)) ping(); }
+      }
+      load(true);
+      const iv = setInterval(() => { if (!document.hidden) load(false); }, 3000);
+      vt.push(iv);
+      w.__onclose = () => clearInterval(iv);
+      async function send() {
+        const t = txt.value.trim(); if (!t) return;
+        const { r: rr, d: dd } = await api("/api/social/dm", { method: "POST", headers: JH, body: JSON.stringify({ nick: con, body: t }) });
+        if (rr.ok && dd && dd.mensaje) { add(dd.mensaje); log.scrollTop = log.scrollHeight; txt.value = ""; } else em.textContent = (dd && dd.message) || "No se pudo.";
+      }
+      w.querySelector("#cs").onclick = send;
+      txt.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    }
+    function winDeskChat() {
+      const w = openWin("dchat", "Chat del escritorio", '<div class="dk-chatlog" id="dcl"><p class="pf-dimc">Los que están acá ahora, charlando. Se borra solo: lo que pasa en el escritorio, queda en el escritorio.</p></div>' + (me ? '<div class="pf-row" style="margin-top:8px"><input class="pf-input" id="dct" maxlength="200" placeholder="decí algo…" autocomplete="off" /><button class="pf-btn pf-mini" id="dcs">Enviar</button></div><p class="pf-msg" id="dce" style="margin:4px 0 0"></p>' : '<p class="pf-dimc" style="padding:8px 0 0">Entrá a YATA para chatear.</p>'));
+      const log = w.querySelector("#dcl");
+      let maxId = 0, first = true;
+      function add(m) { if (first) { log.innerHTML = ""; first = false; } const dv = document.createElement("div"); dv.className = "pf-gcm"; const b = document.createElement("b"); b.textContent = m.nick + ":"; const sp = document.createElement("span"); sp.textContent = " " + m.body; dv.appendChild(b); dv.appendChild(sp); log.appendChild(dv); if (m.id > maxId) maxId = m.id; }
+      async function load() {
+        const { d: dd } = await api("/api/desktop/chat?nick=" + encodeURIComponent(nick) + (maxId ? "&since=" + maxId : ""), AH);
+        if (dd && dd.ok && dd.mensajes && dd.mensajes.length) { const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 60; dd.mensajes.forEach(add); if (stick) log.scrollTop = log.scrollHeight; }
+      }
+      load();
+      const iv = setInterval(() => { if (!document.hidden) load(); }, 3000);
+      vt.push(iv);
+      w.__onclose = () => clearInterval(iv);
+      const txt = w.querySelector("#dct");
+      if (txt) {
+        const em = w.querySelector("#dce");
+        const send = async () => {
+          const t = txt.value.trim(); if (!t) return;
+          const { r: rr, d: dd } = await api("/api/desktop/chat", { method: "POST", headers: JH, body: JSON.stringify({ nick: nick, body: t }) });
+          if (rr.ok) { txt.value = ""; load(); } else em.textContent = (dd && dd.message) || "No se pudo.";
+        };
+        w.querySelector("#dcs").onclick = send;
+        txt.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+      }
+    }
+    function ctxMenu(it, px, py) {
+      const w = openWin("ctx", it.type === "photo" ? "Foto" : "Ícono", '<div class="dk-fbar" style="flex-direction:column;align-items:stretch;margin:0">' +
+        '<button class="pf-btn ghost pf-mini" id="cx-caja">Guardar en la Caja</button>' +
+        ((it.type === "folder" || it.type === "note" || it.type === "shortcut") ? '<button class="pf-btn ghost pf-mini" id="cx-ico">Cambiar ícono</button><input type="file" id="cx-file" accept="image/*" style="display:none" />' : "") +
+        '<button class="pf-btn pf-mini" id="cx-del" style="background:#D23B47;border-color:#D23B47">Tirar a la basura</button>' +
+        '</div><p class="pf-msg" id="cx-m" style="margin:6px 0 0"></p>');
+      w.style.left = Math.max(0, Math.min(px, S.clientWidth - 200)) + "px";
+      w.style.top = Math.max(0, Math.min(py, S.clientHeight - 160)) + "px";
+      w.querySelector("#cx-caja").onclick = async () => {
+        const { r: rr } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, hidden: true }) });
+        if (rr.ok) { it.hidden = true; refresh(); winKill("ctx"); }
+      };
+      w.querySelector("#cx-del").onclick = async () => {
+        const { r: rr } = await api("/api/desktop/borrar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id }) });
+        if (rr.ok) {
+          if (it.type === "folder") D.items.forEach((i) => { if (i.parent === it.id) i.parent = null; });
+          if (it.type === "photo") D.fotos.unshift({ url: String(it.data.url || ""), post: 0 });
+          D.items = D.items.filter((i) => i.id !== it.id);
+          refresh(); winKill("ctx"); toast("A la basura. Sin papelera, sin culpa.");
+        }
+      };
+      const ib = w.querySelector("#cx-ico");
+      if (ib) {
+        const fi = w.querySelector("#cx-file");
+        ib.onclick = () => fi.click();
+        fi.onchange = () => {
+          const f = fi.files && fi.files[0]; if (!f) return;
+          w.querySelector("#cx-m").textContent = "Subiendo ícono…";
+          resizeToBlob(f, 96, 96, async (bl) => {
+            if (!bl) { w.querySelector("#cx-m").textContent = "No se pudo leer."; return; }
+            const url = await subirPerfilR2(bl);
+            if (!url) { w.querySelector("#cx-m").textContent = "No se pudo subir."; return; }
+            const data = it.type === "folder" ? { name: it.data.name, icon: url } : it.type === "note" ? { text: it.data.text, icon: url } : { app: it.data.app, icon: url };
+            const { r: rr, d: dd } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, data: data }) });
+            if (rr.ok) { it.data = (dd && dd.data) || data; refresh(); winKill("ctx"); toast("Ícono nuevo, escritorio tuyo."); }
+            else w.querySelector("#cx-m").textContent = (dd && dd.message) || "No se pudo.";
+          });
+        };
+      }
+    }
     const GAME_LBL = { tetristo: "TeTristo", parpadeo: "No Parpadees", laberinto: "El Laberinto" };
     function wLabel(it) { const k = String(it.data.kind); if (k === "top") return "Top " + (GAME_LBL[String(it.data.game)] || "TeTristo"); return k === "reloj" ? "Reloj" : k === "karma" ? "Karma" : k === "racha" ? "Racha" : "Visitas"; }
     function wVal(k, game) {
@@ -662,7 +771,7 @@
     }
     function updateWidgets() { S.querySelectorAll(".dk-wv").forEach((el) => { el.textContent = wVal(el.getAttribute("data-wk"), el.getAttribute("data-wgame") || "tetristo"); }); }
     function setPres(n) { MIR = n || 1; const el = S.querySelector("#dk-pres"); if (!el) return; if (MIR >= 2) { el.style.display = ""; el.textContent = "👁 " + MIR + " mirando ahora"; } else el.style.display = "none"; }
-    function winKill(key) { const w = S.querySelector('[data-win="' + key + '"]'); if (w) w.remove(); }
+    function winKill(key) { const w = S.querySelector('[data-win="' + key + '"]'); if (w) { if (w.__onclose) { try { w.__onclose(); } catch (_) {} } w.remove(); } }
     function openWin(key, title, html) {
       winKill(key);
       const w = document.createElement("div");
@@ -673,7 +782,7 @@
       w.innerHTML = '<div class="dk-tit"><span>' + title + '</span><button class="dk-x" type="button">&times;</button></div><div class="dk-body">' + html + "</div>";
       S.appendChild(w);
       w.addEventListener("pointerdown", () => { w.style.zIndex = ++zTop; });
-      w.querySelector(".dk-x").onclick = () => w.remove();
+      w.querySelector(".dk-x").onclick = () => { if (w.__onclose) { try { w.__onclose(); } catch (_) {} } w.remove(); };
       const tit = w.querySelector(".dk-tit");
       tit.addEventListener("pointerdown", (e) => {
         if (e.target.closest(".dk-x")) return;
@@ -714,12 +823,14 @@
       });
     }
     function openTv(it) {
-      const vid = String(it.data.video || ""), t0 = Number(it.data.t0 || 0);
+      const vid = String(it.data.video || ""), web = String(it.data.web || ""), t0 = Number(it.data.t0 || 0);
       const start = vid && t0 ? Math.max(0, Math.floor((Date.now() - t0) / 1000)) : 0;
       const frame = vid
         ? '<div class="dk-tvf"><iframe src="https://www.youtube-nocookie.com/embed/' + esc(vid) + '?start=' + start + '&autoplay=1&mute=1&rel=0" title="YATA TV" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div><p class="pf-dimc" style="padding:6px 0 0">' + (own ? "Lo que pongas acá lo ven todos los que visiten tu escritorio." : "Sincronizada con este escritorio. Tocá play o sacale el mute si no arranca.") + "</p>"
-        : '<p class="pf-dimc" style="padding:8px 0">' + (own ? "Pegá un link de YouTube y dejá algo sonando para las visitas." : "El dueño no dejó nada puesto. Pura estática.") + "</p>";
-      const ctl = own ? '<div class="dk-fbar" style="margin-top:10px"><input class="pf-input" id="dk-tvu" placeholder="https://youtube.com/watch?v=…" style="flex:1" /><button class="pf-btn pf-mini" id="dk-tvgo">Poner</button>' + (vid ? '<button class="pf-btn ghost pf-mini" id="dk-tvoff">Apagar</button>' : "") + '</div><p class="pf-msg" id="dk-tvm" style="margin:4px 0 0"></p>' : "";
+        : web
+        ? '<div class="dk-tvf"><iframe src="' + esc(web) + '" title="YATA TV" frameborder="0" sandbox="allow-scripts allow-same-origin allow-presentation" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe></div><p class="pf-dimc" style="padding:6px 0 0">Canal web en vivo. Si se ve negro, ese sitio no se deja incrustar — no depende de nosotros.</p>'
+        : '<p class="pf-dimc" style="padding:8px 0">' + (own ? "Pegá un link de YouTube (o una URL https) y dejá algo sonando para las visitas." : "El dueño no dejó nada puesto. Pura estática.") + "</p>";
+      const ctl = own ? '<div class="dk-fbar" style="margin-top:10px"><input class="pf-input" id="dk-tvu" placeholder="YouTube o URL https…" style="flex:1" /><button class="pf-btn pf-mini" id="dk-tvgo">Poner</button>' + ((vid || web) ? '<button class="pf-btn ghost pf-mini" id="dk-tvoff">Apagar</button>' : "") + '</div><p class="pf-msg" id="dk-tvm" style="margin:4px 0 0"></p>' : "";
       const w = openWin("tv" + it.id, "YATA TV", frame + ctl);
       w.classList.add("dk-tvwin");
       const go = w.querySelector("#dk-tvgo");
@@ -766,13 +877,14 @@
     }
     function iconHTML(it) {
       if (it.sys) return '<span class="dk-g">' + dkSvg("folder", acc) + '</span><i class="dk-l">Mis fotos</i>';
-      if (it.type === "folder") return '<span class="dk-g">' + dkSvg("folder") + '</span><i class="dk-l">' + esc(it.data.name) + "</i>";
-      if (it.type === "note") return '<span class="dk-g">' + dkSvg("note", "#facc15") + '</span><i class="dk-l">' + esc(String(it.data.text || "nota").slice(0, 14)) + "</i>";
+      const cIco = it.data && it.data.icon ? '<span class="dk-g dk-gimg"><img src="' + esc(String(it.data.icon)) + '" alt="" /></span>' : "";
+      if (it.type === "folder") return (cIco || '<span class="dk-g">' + dkSvg("folder") + "</span>") + '<i class="dk-l">' + esc(it.data.name) + "</i>";
+      if (it.type === "note") return (cIco || '<span class="dk-g">' + dkSvg("note", "#facc15") + "</span>") + '<i class="dk-l">' + esc(String(it.data.text || "nota").slice(0, 14)) + "</i>";
       if (it.type === "trophy") return '<span class="dk-g">' + dkSvg("trophy", "#e2b23c") + '</span><i class="dk-l">' + esc(it.data.label || "trofeo") + "</i>";
-      if (it.type === "shortcut") { const a = DK_APPS[it.data.app] || { l: "?" }; return '<span class="dk-g">' + dkSvg(String(it.data.app), acc) + '</span><i class="dk-l">' + esc(a.l) + "</i>"; }
+      if (it.type === "shortcut") { const a = DK_APPS[it.data.app] || { l: "?" }; return (cIco || '<span class="dk-g">' + dkSvg(String(it.data.app), acc) + "</span>") + '<i class="dk-l">' + esc(a.l) + "</i>"; }
       if (it.type === "photo") return '<span class="dk-g dk-gimg"><img src="' + esc(String(it.data.url || "")) + '" alt="" /></span><i class="dk-l">foto</i>';
       if (it.type === "widget") { const k = String(it.data.kind); return '<span class="dk-wv" data-wk="' + esc(k) + '"' + (it.data.game ? ' data-wgame="' + esc(String(it.data.game)) + '"' : "") + '>—</span><i class="dk-l">' + esc(wLabel(it)) + "</i>"; }
-      if (it.type === "tv") return '<span class="dk-g">' + dkSvg("tv", it.data.video ? "#e25b5b" : null) + '</span><i class="dk-l">' + (it.data.video ? "● EN VIVO" : "YATA TV") + "</i>";
+      if (it.type === "tv") { const prendida = !!(it.data.video || it.data.web); return '<span class="dk-g">' + dkSvg("tv", prendida ? "#e25b5b" : null) + '</span><i class="dk-l">' + (prendida ? "● EN VIVO" : "YATA TV") + "</i>"; }
       return "";
     }
     function place(el, x, y) { el.style.left = (x * CELL + 6) + "px"; el.style.top = (y * CELL + 6) + "px"; }
@@ -789,6 +901,7 @@
         S.appendChild(el);
         let moved = false;
         if (own && !it.sys) {
+          el.addEventListener("contextmenu", (e) => { e.preventDefault(); const r2 = S.getBoundingClientRect(); ctxMenu(it, e.clientX - r2.left, e.clientY - r2.top); });
           el.addEventListener("pointerdown", (e) => {
             if (e.button !== 0 && e.pointerType === "mouse") return;
             const sx = e.clientX, sy = e.clientY, ox = el.offsetLeft, oy = el.offsetTop;
@@ -838,6 +951,8 @@
       if (S.requestFullscreen) { S.requestFullscreen().catch(() => S.classList.toggle("dk-full")); }
       else S.classList.toggle("dk-full");
     };
+    const dcB = S.querySelector("#dk-dchat");
+    if (dcB) dcB.onclick = () => winDeskChat();
     async function pollDesk() {
       if (document.hidden || dragging) return;
       const res = await api("/api/desktop?nick=" + encodeURIComponent(nick) + "&poll=1", AH);
@@ -865,7 +980,14 @@
       moves.forEach((ni) => { const it = D.items.find((i) => i.id === ni.id); if (it) { it.x = ni.x; it.y = ni.y; const el = S.querySelector('.dk-ico[data-id="' + ni.id + '"]'); if (el) place(el, ni.x, ni.y); } });
       updateWidgets();
     }
-    vt.push(setInterval(pollDesk, own ? 12000 : 5000));
+    vt.push(setInterval(pollDesk, own ? 6000 : 4000));
+    window.__deskPoll = pollDesk;
+    if (!window.__deskWired) {
+      window.__deskWired = true;
+      const wake = () => { if (!document.hidden && cur === "desk" && window.__deskPoll) window.__deskPoll(); };
+      document.addEventListener("visibilitychange", wake);
+      window.addEventListener("focus", wake);
+    }
     if (own) {
       body().querySelector("#dk-ncar").onclick = async () => {
         const name = window.prompt("Nombre de la carpeta:"); if (!name) return;

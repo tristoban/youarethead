@@ -603,7 +603,7 @@ export function buildApp(db: Db): FastifyInstance {
   const imgRate = new Map<number, number[]>();
 
   // ---- El Escritorio: catálogo, stats vivas, presencia, trofeos y helpers ----
-  const DESK_APPS: readonly string[] = ['tetristo', 'parpadeo', 'laberinto', 'chat', 'boton', 'mural', 'pueblo', 'feed'];
+  const DESK_APPS: readonly string[] = ['tetristo', 'parpadeo', 'laberinto', 'chat', 'boton', 'mural', 'pueblo', 'feed', 'msn'];
   const DESK_TYPES: readonly string[] = ['folder', 'note', 'shortcut', 'trophy', 'photo', 'widget', 'tv'];
   const DESK_WIDGETS: readonly string[] = ['reloj', 'karma', 'racha', 'top', 'visitas'];
   const DESK_GAMES: readonly string[] = ['tetristo', 'parpadeo', 'laberinto'];
@@ -658,25 +658,31 @@ export function buildApp(db: Db): FastifyInstance {
     else if (st.nposts >= 1) out.push({ kind: 'post1', label: 'Primer posteo' });
     return out;
   }
+  function deskIcon(o: Record<string, unknown>): string | null {
+    const ic = typeof o.icon === 'string' ? o.icon : '';
+    if (!ic || !R2_ENABLED || !ic.startsWith(R2_PUBLIC_BASE + '/perfil/') || ic.length > 500 || !/^[\w\-./:%]+$/.test(ic)) return null;
+    return ic;
+  }
   function deskData(type: string, raw: unknown, muted: boolean): { ok: true; data: Record<string, unknown> } | { ok: false; code: number; error: string; message: string } {
     const o = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {};
+    const icon = deskIcon(o);
     if (type === 'folder') {
       const name = typeof o.name === 'string' ? o.name.replace(/\s+/g, ' ').trim().slice(0, 24) : '';
       if (!name) return { ok: false, code: 400, error: 'bad_name', message: 'Ponele un nombre a la carpeta.' };
       if (muted) return { ok: false, code: 403, error: 'muted', message: 'Estás silenciado.' };
       if (offensiveText(name)) return { ok: false, code: 400, error: 'bad_words', message: 'Ese nombre no va.' };
-      return { ok: true, data: { name } };
+      return { ok: true, data: icon ? { name, icon } : { name } };
     }
     if (type === 'note') {
       const text = typeof o.text === 'string' ? o.text.replace(/\n{3,}/g, '\n\n').trim().slice(0, 400) : '';
       if (muted) return { ok: false, code: 403, error: 'muted', message: 'Estás silenciado.' };
       if (offensiveText(text)) return { ok: false, code: 400, error: 'bad_words', message: 'Eso no va.' };
-      return { ok: true, data: { text } };
+      return { ok: true, data: icon ? { text, icon } : { text } };
     }
     if (type === 'shortcut') {
       const app2 = typeof o.app === 'string' && DESK_APPS.indexOf(o.app) >= 0 ? o.app : '';
       if (!app2) return { ok: false, code: 400, error: 'bad_app', message: 'Ese acceso no existe.' };
-      return { ok: true, data: { app: app2 } };
+      return { ok: true, data: icon ? { app: app2, icon } : { app: app2 } };
     }
     if (type === 'photo') {
       const url = typeof o.url === 'string' ? o.url.slice(0, 500) : '';
@@ -696,8 +702,9 @@ export function buildApp(db: Db): FastifyInstance {
       const url = typeof o.url === 'string' ? o.url.trim().slice(0, 300) : '';
       if (!url) return { ok: true, data: { video: '', t0: 0 } };
       const vid = ytId(url);
-      if (!vid) return { ok: false, code: 400, error: 'bad_yt', message: 'Ese link no parece de YouTube.' };
-      return { ok: true, data: { video: vid, t0: Date.now() } };
+      if (vid) return { ok: true, data: { video: vid, t0: Date.now() } };
+      if (/^https:\/\/[\w\-.]+(?::\d+)?(?:\/[^\s"'<>]*)?$/.test(url)) return { ok: true, data: { web: url, t0: Date.now() } };
+      return { ok: false, code: 400, error: 'bad_url', message: 'Pasame un link de YouTube o una URL https válida.' };
     }
     return { ok: true, data: {} }; // trophy: data.kind se valida aparte
   }
@@ -812,7 +819,7 @@ export function buildApp(db: Db): FastifyInstance {
     let dataOut: Record<string, unknown> | null = null;
     if (b.data !== undefined) {
       const type = String(row.type);
-      if (type === 'trophy' || type === 'photo' || type === 'widget' || type === 'shortcut') return reply.code(400).send({ ok: false, error: 'no_editable' });
+      if (type === 'trophy' || type === 'photo' || type === 'widget') return reply.code(400).send({ ok: false, error: 'no_editable' });
       const dv = deskData(type, b.data, u.muted);
       if (!dv.ok) return reply.code(dv.code).send({ ok: false, error: dv.error, message: dv.message });
       await db.query('UPDATE desktop_items SET data = $3::jsonb WHERE id = $1 AND user_id = $2', [id, u.id, JSON.stringify(dv.data)]);
@@ -832,6 +839,43 @@ export function buildApp(db: Db): FastifyInstance {
     if (String(row.type) === 'folder') await db.query('UPDATE desktop_items SET parent_id = NULL WHERE parent_id = $1 AND user_id = $2', [id, u.id]);
     await db.query('DELETE FROM desktop_items WHERE id = $1 AND user_id = $2', [id, u.id]);
     return { ok: true };
+  });
+
+  // Chat efímero del escritorio (en memoria: lo que pasa en el escritorio, se evapora con el deploy)
+  const deskChats = new Map<number, { seq: number; msgs: Array<{ id: number; nick: string; body: string; t: number }> }>();
+  const deskChatRate = new Map<number, number>();
+  app.get('/api/desktop/chat', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const qy = (req.query ?? {}) as { nick?: unknown; since?: unknown };
+    const nick = String(qy.nick ?? '').trim();
+    if (!nick) return reply.code(400).send({ ok: false, error: 'bad' });
+    const ur = (await db.query('SELECT id FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()])).rows[0];
+    if (!ur) return reply.code(404).send({ ok: false, error: 'not_found' });
+    const room = deskChats.get(Number(ur.id));
+    const since = Math.floor(Number(qy.since)) || 0;
+    return { ok: true, mensajes: room ? room.msgs.filter((m) => m.id > since) : [] };
+  });
+  app.post('/api/desktop/chat', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login', message: 'Entrá para chatear.' });
+    if (u.muted) return reply.code(403).send({ ok: false, error: 'muted', message: 'Estás silenciado.' });
+    const b = (req.body ?? {}) as { nick?: unknown; body?: unknown };
+    const nick = String(b.nick ?? '').trim();
+    const text = typeof b.body === 'string' ? b.body.replace(/\s+/g, ' ').trim().slice(0, 200).trim() : '';
+    if (!nick || !text) return reply.code(400).send({ ok: false, error: 'empty', message: 'Escribí algo.' });
+    if (offensiveText(text)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Eso no va.' });
+    const ur = (await db.query('SELECT id FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()])).rows[0];
+    if (!ur) return reply.code(404).send({ ok: false, error: 'not_found' });
+    const now = Date.now();
+    if (now - (deskChatRate.get(u.id) ?? 0) < 1500) return reply.code(429).send({ ok: false, error: 'slow', message: 'Pará un toque.' });
+    deskChatRate.set(u.id, now);
+    const uid = Number(ur.id);
+    let room = deskChats.get(uid);
+    if (!room) { room = { seq: 0, msgs: [] }; deskChats.set(uid, room); }
+    const msg = { id: ++room.seq, nick: u.nick ?? 'anón', body: text, t: now };
+    room.msgs.push(msg);
+    if (room.msgs.length > 100) room.msgs.shift();
+    return reply.code(201).send({ ok: true, mensaje: msg });
   });
   const GATED = new Set(['/index.html', '/tshirt.png', '/pic1.png', '/pic2.png', '/pic3.png', '/pic3.jpg']);
   app.addHook('onRequest', async (req, reply) => {
