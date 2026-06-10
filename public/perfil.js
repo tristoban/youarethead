@@ -624,7 +624,7 @@
 
   /* ---------- El Escritorio (S.O. de perfil) ---------- */
   const DK_APPS = {
-    tetristo: { l: "TeTristo", go: "/tristos?juego=tetristo", emb: "/tristos?juego=tetristo&embed=1" },
+    tetristo: { l: "TeTristo", go: "/tetristo", emb: "/tetristo" },
     parpadeo: { l: "No Parpadees", go: "/tristos?juego=parpadeo", emb: "/tristos?juego=parpadeo&embed=1" },
     laberinto: { l: "El Laberinto", go: "/laberinto" },
     chat: { l: "Chat Global", v: "chat" },

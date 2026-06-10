@@ -2424,6 +2424,10 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     return reply.sendFile('consola.html');
   });
+  app.get('/tetristo', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return reply.sendFile('tetristo.html');
+  });
 
   app.get('/tristos', async (_req, reply) => {
     reply.header('cache-control', 'no-store');

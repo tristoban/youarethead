@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TeTristo · YATA</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/favicon-02.png" type="image/png" />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/game.css?v=5" />
+  <style>
+    html, body { margin: 0; min-height: 100%; background: #060606; color: #f5f5f7; font-family: Montserrat, system-ui, sans-serif; }
+    #yg-overlay { background: #060606; }
+    .tet-again { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 50; }
+    .tet-again button { background: #f5f5f7; color: #060606; border: 0; border-radius: 12px; padding: 16px 38px; font: 800 16px Montserrat, sans-serif; letter-spacing: .08em; cursor: pointer; }
+    .tet-again button:hover { transform: scale(1.04); }
+  </style>
+</head>
+<body>
+  <div class="tet-again" id="tet-again" style="display:none"><button id="tet-go" type="button">JUGAR DE NUEVO</button></div>
+  <script src="/game.js?v=10"></script>
+  <script>
+    (function () {
+      var again = document.getElementById("tet-again");
+      function abrir() { again.style.display = "none"; if (window.clickeame) window.clickeame(); }
+      document.getElementById("tet-go").onclick = abrir;
+      var n = 0;
+      var t = setInterval(function () {
+        n++;
+        if (window.clickeame) { clearInterval(t); abrir(); vigilar(); }
+        else if (n > 60) clearInterval(t);
+      }, 100);
+      function vigilar() {
+        setInterval(function () {
+          var ov = document.getElementById("yg-overlay");
+          var abierto = ov && ov.classList.contains("yg-open");
+          again.style.display = abierto ? "none" : "flex";
+        }, 600);
+      }
+    })();
+  </script>
+</body>
+</html>

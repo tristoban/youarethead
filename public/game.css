@@ -2,7 +2,7 @@
 
 #yg-overlay {
   position: fixed; inset: 0; z-index: 9999; display: none;
-  align-items: center; justify-content: center; padding: 16px;
+  align-items: flex-start; justify-content: center; padding: 16px;
   background: transparent; /* deja ver la niebla de la landing por detrás */
   font-family: "Montserrat", system-ui, -apple-system, sans-serif;
   color: #f5f5f7; overflow: auto; touch-action: manipulation;
@@ -10,7 +10,7 @@
 #yg-overlay.yg-open { display: flex; }
 
 .yg-shell {
-  position: relative; display: grid; grid-template-columns: auto 220px; gap: 20px;
+  position: relative; margin: auto; display: grid; grid-template-columns: auto 220px; gap: 20px;
   padding: 20px; border-radius: 14px;
   background: rgba(8, 8, 10, 0.55);
   backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
