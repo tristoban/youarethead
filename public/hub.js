@@ -267,4 +267,14 @@
 
   refreshMe();
   viewMenu();
+  // Modo escritorio: /tristos?juego=X&embed=1 abre el juego directo, sin chat ni distracciones
+  try {
+    const qp = new URLSearchParams(location.search);
+    if (qp.get("embed") === "1") document.body.classList.add("th-embed");
+    const j = qp.get("juego");
+    if (j === "boton") viewBoton();
+    else if (j === "parpadeo") viewParpadeo();
+    else if (j === "mural") viewMural();
+    else if (j === "tetristo") { let n = 0; const t = setInterval(() => { n++; if (window.clickeame) { clearInterval(t); window.clickeame(); } else if (n > 40) clearInterval(t); }, 150); }
+  } catch (_) {}
 })();

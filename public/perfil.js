@@ -609,12 +609,12 @@
 
   /* ---------- El Escritorio (S.O. de perfil) ---------- */
   const DK_APPS = {
-    tetristo: { l: "TeTristo", go: "/tristos" },
-    parpadeo: { l: "No Parpadees", go: "/tristos" },
+    tetristo: { l: "TeTristo", go: "/tristos?juego=tetristo", emb: "/tristos?juego=tetristo&embed=1" },
+    parpadeo: { l: "No Parpadees", go: "/tristos?juego=parpadeo", emb: "/tristos?juego=parpadeo&embed=1" },
     laberinto: { l: "El Laberinto", go: "/laberinto" },
     chat: { l: "Chat Global", v: "chat" },
-    boton: { l: "El Botón", go: "/tristos" },
-    mural: { l: "Mural", go: "/tristos" },
+    boton: { l: "El Botón", go: "/tristos?juego=boton", emb: "/tristos?juego=boton&embed=1" },
+    mural: { l: "Mural", go: "/tristos?juego=mural", emb: "/tristos?juego=mural&embed=1" },
     pueblo: { l: "Pueblo", go: "/pueblo" },
     feed: { l: "Feed", v: "feed" },
     msn: { l: "Mensajes", msn: true },
@@ -676,7 +676,7 @@
       if (!a) return;
       if (a.msn) { winMsn(); return; }
       if (a.v) { setView(a.v); return; }
-      const w = openWin("app" + app2, esc(a.l), '<div class="dk-appf"><iframe src="' + esc(a.go) + '" title="' + esc(a.l) + '"></iframe></div><div class="dk-fbar" style="margin-top:8px"><a class="pf-btn ghost pf-mini" href="' + esc(a.go) + '">Abrir afuera ↗</a></div>');
+      const w = openWin("app" + app2, esc(a.l), '<div class="dk-appf"><iframe src="' + esc(a.emb || a.go) + '" title="' + esc(a.l) + '"></iframe></div><div class="dk-fbar" style="margin-top:8px"><a class="pf-btn ghost pf-mini" href="' + esc(a.go) + '">Abrir afuera ↗</a></div>');
       w.classList.add("dk-appwin");
     }
     function winMsn() {

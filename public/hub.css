@@ -96,6 +96,10 @@
 .th-sw { width: 30px; height: 30px; border-radius: 6px; border: 2px solid rgba(255, 255, 255, 0.25); cursor: pointer; }
 .th-sw.on { border-color: #fff; transform: scale(1.12); }
 
+/* modo embed (ventana del escritorio): juego puro, sin chat ni música */
+.th-embed .hd-chat, .th-embed .snd { display: none !important; }
+.th-embed .th-shell { margin-top: 1vh; }
+
 @media (max-width: 540px) {
   .th-shell { padding: 16px 14px 20px; margin-top: 2vh; }
   .th-grid { grid-template-columns: 1fr; }
