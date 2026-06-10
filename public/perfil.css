@@ -568,3 +568,18 @@
 .dk-win.dk-min .dk-body { display: none; }
 .dk-win.dk-max { position: fixed !important; left: 3vw !important; top: 4vh !important; right: 3vw; bottom: 4vh; width: auto !important; height: auto !important; z-index: 650; resize: none; }
 .dk-appwin { resize: none; }
+
+/* ---- D7: nav nueva, escritorios, online ---- */
+.pf-chatabajo { margin-top: 6px; opacity: .85; }
+.pf-online { display: flex; align-items: center; gap: 7px; padding: 8px 14px 4px; font: 600 11px "Montserrat", sans-serif; color: #8a8f98; }
+.pf-online i { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 8px #22c55e99; flex: none; animation: pf-resp 2.4s infinite; }
+@keyframes pf-resp { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.pf-eskgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 0 0 14px; }
+.pf-eskc { position: relative; aspect-ratio: 16 / 9; border: 1px solid rgba(255,255,255,.14); border-radius: 12px; background-size: cover; background-position: center; cursor: pointer; overflow: hidden; padding: 0; transition: transform .12s, border-color .12s; }
+.pf-eskc:hover { transform: translateY(-2px); border-color: rgba(107,140,255,.6); }
+.pf-eskc::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,5,8,.15), rgba(5,5,8,.72)); }
+.pf-eskb { position: absolute; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 7px; }
+.pf-eskb b { color: #fff; font: 800 13px "Montserrat", sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+.pf-eskv { position: absolute; top: 8px; right: 8px; background: rgba(8,8,11,.75); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 3px 9px; font: 700 10.5px "Montserrat", sans-serif; color: #d7dae1; display: flex; align-items: center; gap: 5px; }
+.pf-eskon { width: 7px; height: 7px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 8px #ef4444; display: inline-block; }
+@media (max-width: 680px) { .pf-eskgrid { grid-template-columns: repeat(2, 1fr); } }

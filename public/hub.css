@@ -100,6 +100,16 @@
 .th-embed .hd-chat, .th-embed .snd { display: none !important; }
 .th-embed .th-shell { margin-top: 1vh; }
 
+/* el chat global del hub solo vive en el menú; cada juego respira solo */
+body[data-view="boton"] .hd-chat, body[data-view="parpadeo"] .hd-chat, body[data-view="mural"] .hd-chat { display: none !important; }
+
+/* chat propio del Mural */
+.th-mchat { margin-top: 14px; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 10px 12px; background: rgba(0,0,0,.3); }
+.th-mchat-h { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #4ade80; margin-bottom: 6px; }
+.th-mclog { height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.th-mcm b { color: #fff; margin-right: 4px; }
+.th-mcm span { color: #c7cbd4; }
+
 @media (max-width: 540px) {
   .th-shell { padding: 16px 14px 20px; margin-top: 2vh; }
   .th-grid { grid-template-columns: 1fr; }

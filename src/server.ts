@@ -1053,9 +1053,13 @@ export function buildApp(db: Db): FastifyInstance {
     const qy = (req.query ?? {}) as { nick?: unknown; since?: unknown };
     const nick = String(qy.nick ?? '').trim();
     if (!nick) return reply.code(400).send({ ok: false, error: 'bad' });
-    const ur = (await db.query('SELECT id FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()])).rows[0];
-    if (!ur) return reply.code(404).send({ ok: false, error: 'not_found' });
-    const room = deskChats.get(Number(ur.id));
+    let uid = 0;
+    if (nick !== '__mural') {
+      const ur = (await db.query('SELECT id FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()])).rows[0];
+      if (!ur) return reply.code(404).send({ ok: false, error: 'not_found' });
+      uid = Number(ur.id);
+    }
+    const room = deskChats.get(uid);
     const since = Math.floor(Number(qy.since)) || 0;
     return { ok: true, mensajes: room ? room.msgs.filter((m) => m.id > since) : [] };
   });
@@ -1068,12 +1072,15 @@ export function buildApp(db: Db): FastifyInstance {
     const text = typeof b.body === 'string' ? b.body.replace(/\s+/g, ' ').trim().slice(0, 200).trim() : '';
     if (!nick || !text) return reply.code(400).send({ ok: false, error: 'empty', message: 'Escribí algo.' });
     if (offensiveText(text)) return reply.code(400).send({ ok: false, error: 'bad_words', message: 'Eso no va.' });
-    const ur = (await db.query('SELECT id FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()])).rows[0];
-    if (!ur) return reply.code(404).send({ ok: false, error: 'not_found' });
+    let uid = 0;
+    if (nick !== '__mural') {
+      const ur = (await db.query('SELECT id FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()])).rows[0];
+      if (!ur) return reply.code(404).send({ ok: false, error: 'not_found' });
+      uid = Number(ur.id);
+    }
     const now = Date.now();
     if (now - (deskChatRate.get(u.id) ?? 0) < 1500) return reply.code(429).send({ ok: false, error: 'slow', message: 'Pará un toque.' });
     deskChatRate.set(u.id, now);
-    const uid = Number(ur.id);
     let room = deskChats.get(uid);
     if (!room) { room = { seq: 0, msgs: [] }; deskChats.set(uid, room); }
     const msg = { id: ++room.seq, nick: u.nick ?? 'anón', body: text, t: now };
@@ -2008,12 +2015,34 @@ export function buildApp(db: Db): FastifyInstance {
     return { ok: true, unread, items: rows.map((r) => ({ id: Number(r.id), type: r.type, actor: r.actor, postId: r.post_id ? Number(r.post_id) : null, body: (r.body as string | null) ?? '', read: r.read === true, t: r.created_at })) };
   });
 
+  const onlineMap = new Map<number, { t: number; nick: string }>();
+  function onlineAhora(): { n: number; nicks: string[] } {
+    const now = Date.now();
+    const nicks: string[] = [];
+    for (const [k, v] of onlineMap) { if (now - v.t > 70000) onlineMap.delete(k); else nicks.push(v.nick); }
+    return { n: nicks.length, nicks: nicks.slice(0, 12) };
+  }
   app.get('/api/notifs/count', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
-    if (!u) return { ok: true, unread: 0 };
+    if (!u) return { ok: true, unread: 0, online: onlineAhora().n };
+    if (u.nick) onlineMap.set(u.id, { t: Date.now(), nick: u.nick });
     const unread = Number((await db.query('SELECT count(*) AS c FROM notifs WHERE user_id = $1 AND read = false', [u.id])).rows[0]?.c ?? 0);
-    return { ok: true, unread };
+    const on = onlineAhora();
+    return { ok: true, unread, online: on.n, despiertos: on.nicks };
+  });
+
+  app.get('/api/escritorios', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const rows = (await db.query("SELECT u.id, u.nick, u.avatar, u.accent, u.banner, u.admin, u.badges, COALESCE(ds.visitas, 0) AS visitas FROM hub_users u LEFT JOIN desktop_stats ds ON ds.user_id = u.id WHERE u.nick IS NOT NULL AND u.banned = false ORDER BY COALESCE(ds.visitas, 0) DESC, u.id ASC LIMIT 60")).rows;
+    const lista = rows.map((r) => {
+      const uid = Number(r.id);
+      const m = deskPresence.get(uid);
+      let adentro = 0;
+      if (m) { const now = Date.now(); for (const [, t] of m) if (now - t <= 15000) adentro++; }
+      return { nick: r.nick, avatar: (r.avatar as string | null) ?? null, accent: (r.accent as string | null) ?? null, banner: (r.banner as string | null) ?? null, admin: r.admin === true || isAdminNick(r.nick as string), founder: String(r.nick ?? '').toLowerCase() === 'tristoban', badges: (r.badges as unknown) ?? null, visitas: Number(r.visitas ?? 0), adentro };
+    });
+    return { ok: true, escritorios: lista };
   });
 
   app.post('/api/notifs/read', async (req, reply) => {

@@ -27,24 +27,25 @@
   }
   function paintIdent() {
     if (!identEl) return;
-    if (me.logged) identEl.innerHTML = 'Jugás como <b>' + esc(me.nick || "sin nick") + '</b> · <a href="#" id="th-out">salir</a>';
-    else identEl.innerHTML = 'Invitado' + (guestNick() ? ' <b>' + esc(guestNick()) + '</b>' : '') + ' · <a href="#" id="th-in">entrar con mail</a>';
-    const out = root.querySelector("#th-out");
-    if (out) out.onclick = async (e) => { e.preventDefault(); await api("/api/hub/logout", { method: "POST", headers: JH, body: "{}" }); me = { logged: false, nick: null }; paintIdent(); };
+    if (me.logged) identEl.innerHTML = 'Jugás como <b>' + esc(me.nick || "sin nick") + '</b>';
+    else identEl.innerHTML = 'Invitado' + (guestNick() ? ' <b>' + esc(guestNick()) + '</b>' : '') + ' · <a href="#" id="th-in">entrar</a>';
     const inn = root.querySelector("#th-in");
     if (inn) inn.onclick = (e) => { e.preventDefault(); viewLogin(); };
   }
+  function marcarVista(v) { try { document.body.setAttribute("data-view", v); } catch (_) {} }
 
   /* ---------- Menú ---------- */
   function card(g, t, s) { return '<button class="th-card" data-g="' + g + '"><b>' + t + '</b><span>' + s + '</span></button>'; }
   function viewMenu() {
     stopMural();
+    marcarVista("menu");
     viewEl.innerHTML = '<div class="th-grid">' +
       card("tetristo", "TeTristo", "El tetris de la casa. Top 10 global.") +
       card("boton", "El Botón", "NO LO APRIETES.") +
       card("parpadeo", "No Parpadees", "¿Qué viste? Cada vez más rápido.") +
       card("mural", "El Mural", "Un lienzo entre todos. 1 px cada 5s.") +
       card("laberinto", "El Laberinto", "No tiene fin. Algo te persigue. Aguantá.") +
+      card("consola", "La Consola", "Emulador retro. Traé tu rom, jugás local.") +
       '</div>';
     viewEl.querySelectorAll(".th-card").forEach((c) => {
       c.onclick = () => {
@@ -54,6 +55,7 @@
         else if (g === "parpadeo") viewParpadeo();
         else if (g === "mural") viewMural();
         else if (g === "laberinto") location.href = "/laberinto";
+        else if (g === "consola") location.href = "/consola";
       };
     });
   }
@@ -75,6 +77,7 @@
   /* ---------- El Botón ---------- */
   function viewBoton() {
     stopMural();
+    marcarVista("boton");
     viewEl.innerHTML =
       '<div class="th-boton">' +
         '<div class="th-fallen" id="th-fallen" aria-hidden="true"></div>' +
@@ -147,6 +150,7 @@
   }
   function viewParpadeo() {
     stopMural();
+    marcarVista("parpadeo");
     viewEl.innerHTML =
       '<div class="th-parp">' +
         '<a href="#" class="th-back" id="th-back">← volver</a>' +
@@ -217,6 +221,7 @@
   /* ---------- El Mural ---------- */
   function viewMural() {
     stopMural();
+    marcarVista("mural");
     viewEl.innerHTML =
       '<div class="th-mural">' +
         '<a href="#" class="th-back" id="th-back">← volver</a>' +
@@ -225,7 +230,25 @@
         '<canvas id="th-mcv" width="600" height="336"></canvas>' +
         '<div class="th-pal" id="th-pal"></div>' +
         '<p class="th-msg" id="th-mmsg"></p>' +
+        '<div class="th-mchat"><div class="th-mchat-h">● Chat del Mural</div><div class="th-mclog" id="mc-log"></div>' +
+        (me.logged ? '<div class="th-row" style="margin-top:6px"><input id="mc-txt" maxlength="200" placeholder="hablá mientras pintás…" autocomplete="off" style="flex:1" /><button class="th-btn" id="mc-send">Enviar</button></div><p class="th-msg" id="mc-em"></p>' : '<p class="th-dim" style="font-size:12px">Entrá con tu cuenta para chatear acá.</p>') +
+        '</div>' +
       '</div>';
+    (function muralChat() {
+      const log = viewEl.querySelector("#mc-log");
+      let maxId = 0, first = true;
+      function add(m) { if (first) { log.innerHTML = ""; first = false; } const d2 = document.createElement("div"); d2.className = "th-mcm"; const b = document.createElement("b"); b.textContent = m.nick + ":"; const sp = document.createElement("span"); sp.textContent = " " + m.body; d2.appendChild(b); d2.appendChild(sp); log.appendChild(d2); if (m.id > maxId) maxId = m.id; }
+      async function load() { const { d } = await api("/api/desktop/chat?nick=__mural" + (maxId ? "&since=" + maxId : ""), { headers: { accept: "application/json" } }); if (d && d.ok && d.mensajes && d.mensajes.length) { const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 50; d.mensajes.forEach(add); if (stick) log.scrollTop = log.scrollHeight; } else if (first) log.innerHTML = '<p class="th-dim" style="font-size:12px;padding:4px">Nadie dijo nada todavía. Pintá y opiná.</p>'; }
+      load();
+      fxInt = setInterval(() => { if (!document.hidden) load(); }, 3500);
+      const txt = viewEl.querySelector("#mc-txt");
+      if (txt) {
+        const em = viewEl.querySelector("#mc-em");
+        const send = async () => { const t = txt.value.trim(); if (!t) return; const { r, d } = await api("/api/desktop/chat", { method: "POST", headers: JH, body: JSON.stringify({ nick: "__mural", body: t }) }); if (r.ok) { txt.value = ""; load(); } else em.textContent = (d && d.message) || "No se pudo."; };
+        viewEl.querySelector("#mc-send").onclick = send;
+        txt.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+      }
+    })();
     viewEl.querySelector("#th-back").onclick = (e) => { e.preventDefault(); viewMenu(); };
     const cv = viewEl.querySelector("#th-mcv"), mx = cv.getContext("2d"), mmsg = viewEl.querySelector("#th-mmsg");
     const GR = ["#000000", "#242424", "#484848", "#6d6d6d", "#919191", "#b6b6b6", "#dadada", "#ffffff"];

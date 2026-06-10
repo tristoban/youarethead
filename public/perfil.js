@@ -305,14 +305,15 @@
     root.innerHTML =
       '<div class="pf-app">' +
         '<aside class="pf-left"><a href="/" class="pf-brand">youarethead.com.ar</a><nav class="pf-nav" id="pf-nav">' +
-          '<a href="/">' + ic("inicio") + '<span>Inicio</span></a>' + navItem("feed", "Feed") +
+          '<a href="/">' + ic("tienda") + '<span>La remera</span></a>' + navItem("feed", "Feed") +
           '<button data-v="notifs" id="pf-navnotif">' + ic("notifs") + '<span>Notificaciones</span><i class="pf-ndot" id="pf-nb"></i></button>' +
-          navItem("mensajes", "Mensajes") + navItem("amigos", "Amigos") + navItem("chat", "Chat Global") +
+          navItem("mensajes", "Mensajes") + navItem("escritorios", "Escritorios") +
           navItem("juegos", "Juegos") + navItem("tienda", "Tienda") + navItem("canal", "Insomnio Crónico") +
-          navItem("perfil", "Perfil") + (me.admin ? navItem("admin", "Admin") : "") +
-          '<button class="pf-postbtn" id="pf-postbtn">Postear</button>' +
+          navItem("perfil", "My Hell") + (me.admin ? navItem("admin", "Admin") : "") +
           '<div class="pf-me" id="pf-me"><span class="pf-ava">' + avaPic(me.avatar, myHead) + '</span><div><b>' + esc(me.nick) + '</b><span>@' + esc(me.nick) + '</span></div></div>' +
           '<button class="pf-logout" id="pf-logout">' + ic("salir") + '<span>Cerrar sesión</span></button>' +
+          '<button data-v="chat" class="pf-chatabajo">' + ic("chat") + '<span>Chat Global</span></button>' +
+          '<div class="pf-online" id="pf-online"><i></i><span>despertando…</span></div>' +
         '</nav></aside>' +
         '<main class="pf-center"><div class="pf-chead" id="pf-chead"></div><div id="pf-body"></div></main>' +
         '<aside class="pf-right" id="pf-right"></aside>' +
@@ -320,7 +321,7 @@
       '<header class="pf-topbar"><a href="/" class="pf-tb-brand">youarethead</a><button class="pf-tbell" id="pf-tbell" type="button" aria-label="Notificaciones">' + ic("notifs") + '<span class="pf-tb-badge" id="pf-tbell-b" style="display:none">0</span></button></header>' +
       '<nav class="pf-tabbar">' +
         '<button class="pf-tab" data-v="feed" type="button">' + ic("inicio") + '<span>Inicio</span></button>' +
-        '<button class="pf-tab" data-v="amigos" type="button">' + ic("amigos") + '<span>Amigos</span></button>' +
+        '<button class="pf-tab" data-v="escritorios" type="button">' + ic("inicio") + '<span>Escritorios</span></button>' +
         '<button class="pf-tab pf-tab-mas" id="pf-tabmas" type="button" aria-label="Más"><img src="/simbolomas.png" alt="Más" /></button>' +
         '<button class="pf-tab" data-v="mensajes" type="button">' + ic("mensajes") + '<span>Mensajes</span></button>' +
         '<button class="pf-tab" data-v="perfil" type="button">' + ic("perfil") + '<span>Perfil</span></button>' +
@@ -334,7 +335,6 @@
         '<button class="pf-sheet-cancel" id="pf-sheetx" type="button">Cerrar</button>' +
       '</div></div>';
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => { b.onclick = () => setView(b.getAttribute("data-v")); });
-    root.querySelector("#pf-postbtn").onclick = () => { setView("feed"); const t = root.querySelector("#pf-post"); if (t) t.focus(); };
     root.querySelector("#pf-me").onclick = () => setView("perfil");
     root.querySelector("#pf-logout").onclick = async () => { await api("/api/hub/logout", { method: "POST", headers: JH, body: "{}" }); boot(); };
     if (!root.__uwired) { root.__uwired = true; root.addEventListener("click", (e) => {
@@ -378,6 +378,7 @@
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === v));
     root.querySelectorAll(".pf-tabbar [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === v));
     if (v === "feed") viewFeed();
+    else if (v === "escritorios") viewEscritorios();
     else if (v === "amigos") viewAmigos();
     else if (v === "mensajes") viewMsgs();
     else if (v === "chat") viewChat();
@@ -1518,6 +1519,36 @@
     render();
   }
 
+  /* ---------- Escritorios (directorio estilo Twitch) ---------- */
+  async function viewEscritorios() {
+    chead("Escritorios");
+    body().innerHTML = '<p class="pf-dimc">Tocando timbres…</p>';
+    const { d } = await api("/api/escritorios", AH);
+    if (!d || !d.ok) { body().innerHTML = '<p class="pf-empty">No se pudo cargar el barrio.</p>'; return; }
+    const todos = d.escritorios || [];
+    const tiene = (e, t) => Array.isArray(e.badges) && e.badges.some((b) => String(b.t || "").toLowerCase() === t);
+    const fundador = todos.filter((e) => e.founder);
+    const staff = todos.filter((e) => !e.founder && (e.admin || tiene(e, "staff")));
+    const vips = todos.filter((e) => !e.founder && !e.admin && !tiene(e, "staff") && (tiene(e, "vip") || tiene(e, "mvp")));
+    const resto = todos.filter((e) => !fundador.includes(e) && !staff.includes(e) && !vips.includes(e));
+    const tarjeta = (e) => {
+      const acc = (typeof e.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(e.accent)) ? e.accent : "#6b8cff";
+      const fondo = e.banner ? 'background-image:url(\'' + esc(e.banner) + '\')' : "background:linear-gradient(135deg," + acc + "33,#0b0b0e)";
+      return '<button class="pf-eskc" data-esk="' + esc(e.nick) + '" type="button" style="' + fondo + '">' +
+        '<span class="pf-eskv">' + (e.adentro > 0 ? '<i class="pf-eskon"></i>' + e.adentro + " adentro" : fmt.format(e.visitas) + " visitas") + "</span>" +
+        '<span class="pf-eskb"><span class="pf-ava pf-ava-sm">' + avaPic(e.avatar, headFor(e.nick)) + "</span><b>" + esc(e.nick) + "</b></span>" +
+        "</button>";
+    };
+    const seccion = (titulo, lista) => lista.length ? '<div class="pf-h">' + titulo + '</div><div class="pf-eskgrid">' + lista.map(tarjeta).join("") + "</div>" : "";
+    body().innerHTML =
+      seccion("El Fundador", fundador) +
+      seccion("Staff", staff) +
+      seccion("VIPs", vips) +
+      seccion("Demonios", resto) +
+      (todos.length ? "" : '<p class="pf-empty">Ni un escritorio todavía. Armá el tuyo y estrenás el barrio.</p>');
+    body().querySelectorAll("[data-esk]").forEach((b) => b.onclick = () => viewDesktop(b.getAttribute("data-esk")));
+  }
+
   /* ---------- Amigos ---------- */
   function viewAmigos() {
     chead("Amigos");
@@ -1547,7 +1578,8 @@
 
   /* ---------- Mensajes (DM + grupos) ---------- */
   function viewMsgs() {
-    chead("Mensajes", '<div class="pf-row" style="padding:0 18px 12px"><button class="pf-btn pf-mini" id="m-new">+ Nuevo grupo</button></div>');
+    chead("Mensajes", '<div class="pf-row" style="padding:0 18px 12px"><button class="pf-btn pf-mini" id="m-new">+ Nuevo grupo</button><button class="pf-btn ghost pf-mini" id="m-amigos">Amigos</button></div>');
+    root.querySelector("#m-amigos").onclick = () => setView("amigos");
     body().innerHTML = '<div class="pf-dm"><div class="pf-dml" id="m-list"><p class="pf-dimc">Cargando…</p></div><div id="m-conv"><p class="pf-dimc">Elegí un amigo o grupo.</p></div></div>';
     let con = window.__dmOpen || null, g = null, maxId = 0; window.__dmOpen = null;
     function mark(b) { body().querySelectorAll(".pf-dmf").forEach((x) => x.classList.remove("on")); if (b) b.classList.add("on"); }
@@ -1711,7 +1743,19 @@
     const dot = root.querySelector("#pf-nb"); if (dot) { dot.classList.toggle("on", n > 0); dot.textContent = n > 9 ? "9+" : String(n); }
     const mb = root.querySelector("#pf-tbell-b"); if (mb) { mb.style.display = n > 0 ? "flex" : "none"; mb.textContent = n > 9 ? "9+" : String(n); }
   }
-  async function pollNotifs() { try { const { d } = await api("/api/notifs/count", AH); if (d && d.ok && cur !== "notifs") setNotifBadge(d.unread || 0); } catch (_) {} }
+  async function pollNotifs() {
+    try {
+      const { d } = await api("/api/notifs/count", AH);
+      if (!d || !d.ok) return;
+      if (cur !== "notifs") setNotifBadge(d.unread || 0);
+      const on = root.querySelector("#pf-online");
+      if (on) {
+        const n = d.online || 0;
+        const quien = (d.despiertos || []).slice(0, 3).join(", ");
+        on.innerHTML = "<i></i><span>" + n + (n === 1 ? " despierto" : " despiertos") + " ahora" + (quien ? " · " + esc(quien) + (n > 3 ? "…" : "") : "") + "</span>";
+      }
+    } catch (_) {}
+  }
 
   /* ---------- Columna derecha (persistente): Chat Global + Mensajes ---------- */
   function rightRail() {
