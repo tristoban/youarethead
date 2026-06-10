@@ -124,6 +124,26 @@
     }; img.onerror = () => cb(null); img.src = String(fr.result); };
     fr.onerror = () => cb(null); fr.readAsDataURL(file);
   }
+  let IMG_ON = false;
+  function resizeToBlob(file, W, H, cb) {
+    const fr = new FileReader();
+    fr.onload = () => { const img = new Image(); img.onload = () => {
+      const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+      const ctx = cv.getContext("2d"), scale = Math.max(W / img.width, H / img.height), w = img.width * scale, h = img.height * scale;
+      ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+      try { cv.toBlob((bl) => cb(bl), "image/webp", 0.85); } catch (_) { cb(null); }
+    }; img.onerror = () => cb(null); img.src = String(fr.result); };
+    fr.onerror = () => cb(null); fr.readAsDataURL(file);
+  }
+  async function subirPerfilR2(blob) {
+    const sg = await api("/api/img/sign", { method: "POST", headers: JH, body: JSON.stringify({ type: blob.type, size: blob.size, scope: "perfil" }) });
+    if (!sg.r.ok || !sg.d || !sg.d.ok) return null;
+    try {
+      const up = await fetch(sg.d.put, { method: "PUT", body: blob, headers: { "content-type": blob.type } });
+      if (!up.ok) return null;
+      return sg.d.url;
+    } catch (_) { return null; }
+  }
   function resizeBanner(file, cb) {
     const fr = new FileReader();
     fr.onload = () => { const img = new Image(); img.onload = () => {
@@ -320,6 +340,7 @@
     root.querySelector("#pf-sheetx").onclick = closeSheet;
     root.querySelectorAll(".pf-sheet-i[data-act]").forEach((b) => b.onclick = () => { const a = b.getAttribute("data-act"); closeSheet(); if (a === "postear") { setView("feed"); const t = root.querySelector("#pf-post"); if (t) t.focus(); } else if (a === "chat") setView("chat"); else if (a === "amigos") setView("amigos"); });
     pollNotifs(); rt.push(setInterval(pollNotifs, 25000));
+    api("/api/img/cfg", AH).then(({ d }) => { IMG_ON = !!(d && d.on); }).catch(() => {});
     rightRail();
     setView("feed");
   }
@@ -1183,11 +1204,39 @@
     const fileEl = body().querySelector("#c-file"), pmsg = body().querySelector("#c-pmsg");
     const setChip = () => { const chip = root.querySelector("#pf-me .pf-ava"); if (chip) chip.innerHTML = avaPic(me.avatar, me.char ? me.char.head : "o"); };
     body().querySelector("#c-photo").onclick = () => fileEl.click(); body().querySelector("#c-ava").onclick = () => fileEl.click();
-    fileEl.onchange = () => { const f = fileEl.files && fileEl.files[0]; if (!f) return; pmsg.textContent = "Subiendo…"; resizeImg(f, async (dataUrl) => { if (!dataUrl) { pmsg.textContent = "No se pudo leer la imagen."; return; } const { r, d: dd } = await api("/api/hub/avatar", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl }) }); if (r.ok) { me.avatar = dd.avatar; setChip(); viewCuenta(); } else pmsg.textContent = (dd && dd.message) || "No se pudo."; }); };
+    fileEl.onchange = () => {
+      const f = fileEl.files && fileEl.files[0]; if (!f) return;
+      pmsg.textContent = "Subiendo…";
+      if (IMG_ON) {
+        resizeToBlob(f, 512, 512, async (bl) => {
+          if (!bl) { pmsg.textContent = "No se pudo leer la imagen."; return; }
+          const url = await subirPerfilR2(bl);
+          if (!url) { pmsg.textContent = "No se pudo subir. Probá de nuevo."; return; }
+          const { r, d: dd } = await api("/api/hub/avatar", { method: "POST", headers: JH, body: JSON.stringify({ url: url }) });
+          if (r.ok) { me.avatar = dd.avatar; setChip(); viewCuenta(); } else pmsg.textContent = (dd && dd.message) || "No se pudo.";
+        });
+        return;
+      }
+      resizeImg(f, async (dataUrl) => { if (!dataUrl) { pmsg.textContent = "No se pudo leer la imagen."; return; } const { r, d: dd } = await api("/api/hub/avatar", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl }) }); if (r.ok) { me.avatar = dd.avatar; setChip(); viewCuenta(); } else pmsg.textContent = r.status === 413 ? "La foto quedó muy pesada. Probá una más liviana." : ((dd && dd.message) || "No se pudo."); });
+    };
     const pdel = body().querySelector("#c-photodel"); if (pdel) pdel.onclick = async () => { const { r } = await api("/api/hub/avatar", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl: null }) }); if (r.ok) { me.avatar = null; setChip(); viewCuenta(); } };
     const bnFile = body().querySelector("#c-bnfile");
     body().querySelector("#c-bn").onclick = () => bnFile.click();
-    bnFile.onchange = () => { const f = bnFile.files && bnFile.files[0]; if (!f) return; const sm = body().querySelector("#c-smsg"); sm.textContent = "Subiendo portada…"; resizeBanner(f, async (dataUrl) => { if (!dataUrl) { sm.textContent = "No se pudo."; return; } const { r, d: dd } = await api("/api/hub/banner", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl }) }); if (r.ok) { me.banner = dd.banner; sm.textContent = "Portada lista."; viewCuenta(); } else sm.textContent = (dd && dd.message) || "No se pudo."; }); };
+    bnFile.onchange = () => {
+      const f = bnFile.files && bnFile.files[0]; if (!f) return;
+      const sm = body().querySelector("#c-smsg"); sm.textContent = "Subiendo portada…";
+      if (IMG_ON) {
+        resizeToBlob(f, 1280, 384, async (bl) => {
+          if (!bl) { sm.textContent = "No se pudo leer la imagen."; return; }
+          const url = await subirPerfilR2(bl);
+          if (!url) { sm.textContent = "No se pudo subir. Probá de nuevo."; return; }
+          const { r, d: dd } = await api("/api/hub/banner", { method: "POST", headers: JH, body: JSON.stringify({ url: url }) });
+          if (r.ok) { me.banner = dd.banner; sm.textContent = "Portada lista."; viewCuenta(); } else sm.textContent = (dd && dd.message) || "No se pudo.";
+        });
+        return;
+      }
+      resizeBanner(f, async (dataUrl) => { if (!dataUrl) { sm.textContent = "No se pudo."; return; } const { r, d: dd } = await api("/api/hub/banner", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl }) }); if (r.ok) { me.banner = dd.banner; sm.textContent = "Portada lista."; viewCuenta(); } else sm.textContent = r.status === 413 ? "La imagen quedó muy pesada. Probá una más liviana." : ((dd && dd.message) || "No se pudo."); });
+    };
     const bnDel = body().querySelector("#c-bndel"); if (bnDel) bnDel.onclick = async () => { const { r } = await api("/api/hub/banner", { method: "POST", headers: JH, body: JSON.stringify({ dataUrl: null }) }); if (r.ok) { me.banner = null; viewCuenta(); } };
   }
 

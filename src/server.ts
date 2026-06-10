@@ -1176,6 +1176,12 @@ export function buildApp(db: Db): FastifyInstance {
   app.post('/api/hub/avatar', async (req, reply) => {
     const u = await hubUserBySession(db, req);
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const burl = ((req.body ?? {}) as { url?: unknown }).url;
+    if (typeof burl === 'string' && burl) {
+      if (!R2_ENABLED || !burl.startsWith(R2_PUBLIC_BASE + '/perfil/') || burl.length > 500 || !/^[\w\-./:%]+$/.test(burl)) return reply.code(400).send({ ok: false, error: 'bad_img', message: 'Esa imagen no va.' });
+      await db.query('UPDATE hub_users SET avatar = $2 WHERE id = $1', [u.id, burl]);
+      return { ok: true, avatar: burl };
+    }
     const raw = ((req.body ?? {}) as { dataUrl?: unknown }).dataUrl;
     if (raw === null || raw === '') { await db.query('UPDATE hub_users SET avatar = NULL WHERE id = $1', [u.id]); return { ok: true, avatar: null }; }
     const dataUrl = typeof raw === 'string' ? raw : '';
@@ -1400,6 +1406,12 @@ export function buildApp(db: Db): FastifyInstance {
   app.post('/api/hub/banner', async (req, reply) => {
     const u = await hubUserBySession(db, req);
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const burl = ((req.body ?? {}) as { url?: unknown }).url;
+    if (typeof burl === 'string' && burl) {
+      if (!R2_ENABLED || !burl.startsWith(R2_PUBLIC_BASE + '/perfil/') || burl.length > 500 || !/^[\w\-./:%]+$/.test(burl)) return reply.code(400).send({ ok: false, error: 'bad_img', message: 'Esa imagen no va.' });
+      await db.query('UPDATE hub_users SET banner = $2 WHERE id = $1', [u.id, burl]);
+      return { ok: true, banner: burl };
+    }
     const raw = ((req.body ?? {}) as { dataUrl?: unknown }).dataUrl;
     if (raw === null || raw === '') { await db.query('UPDATE hub_users SET banner = NULL WHERE id = $1', [u.id]); return { ok: true, banner: null }; }
     const dataUrl = typeof raw === 'string' ? raw : '';
@@ -1616,7 +1628,8 @@ export function buildApp(db: Db): FastifyInstance {
     if (hist.length >= 30) return reply.code(429).send({ ok: false, error: 'slow', message: 'Demasiadas fotos por hora. Tomate un mate.' });
     hist.push(now); imgRate.set(u.id, hist);
     const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg';
-    const key = 'posts/' + u.id + '/' + Date.now().toString(36) + randomBytes(6).toString('hex') + '.' + ext;
+    const carpeta = (b as { scope?: unknown }).scope === 'perfil' ? 'perfil' : 'posts';
+    const key = carpeta + '/' + u.id + '/' + Date.now().toString(36) + randomBytes(6).toString('hex') + '.' + ext;
     return { ok: true, put: r2PresignPut(key), url: R2_PUBLIC_BASE + '/' + key, type };
   });
 
