@@ -704,3 +704,18 @@
 .pf-chip { background: #15151a; border: 0; border-radius: 10px; padding: 8px 6px; }
 .pf-chip span { font-size: 9px; letter-spacing: .1em; margin-bottom: 2px; }
 .pf-chip b { font-size: 14px; }
+
+/* ---- UX1.8: detalles exactos de la maqueta aprobada ---- */
+.pf-ava { align-items: center; color: #9aa0a8; }
+.pf-ghost { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; }
+.pf-ghost svg { width: 58%; height: 58%; }
+.pf-like, .pf-fact, .pf-shr, .pf-dots { border: 1px solid rgba(255,255,255,.13); background: rgba(255,255,255,.025); border-radius: 9px; padding: 5px 11px; transition: border-color .12s, background .12s, color .12s, transform .1s; }
+.pf-like:hover, .pf-fact:hover, .pf-shr:hover, .pf-dots:hover { border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.06); color: #e8eaee; }
+.pf-dots { margin-left: auto; padding: 5px 9px; }
+.pf-like.pf-like-sm { border: 0; background: none; padding: 2px 0; }
+.pf-post-f { gap: 8px; }
+.pf-post .pf-post-b { color: #b9bdc4; }
+.pf-foldrow { display: none; align-items: center; gap: 10px; }
+.pf-fold .pf-foldrow { display: flex; }
+.pf-foldava { width: 38px !important; height: 38px !important; flex: none; }
+.pf-foldline { flex: 1; padding: 2px 0; }

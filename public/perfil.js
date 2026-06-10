@@ -19,11 +19,7 @@
   const BODY = ["...BB...", "..BBBB..", ".BBBBBB.", "..BBBB..", "...BB...", "..L..L..", "..L..L..", ".LL..LL."];
   function headFor(nick) { let s = 0; const n = String(nick || ""); for (let i = 0; i < n.length; i++) s += n.charCodeAt(i); return HK[s % HK.length]; }
   function avatar(head) {
-    const cv = document.createElement("canvas"); cv.width = 32; cv.height = 40;
-    const ctx = cv.getContext("2d"); const rows = (HEADS[head] || HEADS["o"]).concat(BODY);
-    const px = 4, x0 = Math.round(cv.width / 2 - 4 * px), y0 = cv.height - rows.length * px - 2;
-    for (let r = 0; r < rows.length; r++) for (let i = 0; i < rows[r].length; i++) { const c = PAL[rows[r][i]]; if (c) { ctx.fillStyle = c; ctx.fillRect(x0 + i * px, y0 + r * px, px, px); } }
-    return cv.outerHTML;
+    return '<span class="pf-ghost" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11a7 7 0 0114 0v8l-2.33-1.86L14.33 19 12 17.14 9.67 19l-2.34-1.86L5 19z"/><circle cx="9.5" cy="11" r=".7" fill="currentColor" stroke="none"/><circle cx="14.5" cy="11" r=".7" fill="currentColor" stroke="none"/></svg></span>';
   }
   function maskMail(e) { const a = String(e).split("@"); if (a.length !== 2) return ""; return (a[0] || "").slice(0, 2) + "***@" + a[1]; }
   const PLATS = [
@@ -449,7 +445,7 @@
       '<div id="pf-carousel" class="pf-carousel"></div>' +
       '<div class="pf-srch"><input id="pf-q" maxlength="60" placeholder="Buscar posteos y gente…" autocomplete="off" /><button class="pf-btn pf-mini" id="pf-qgo">Buscar</button></div>' +
       '<div class="pf-comp pf-fold" id="pf-comp">' +
-        '<button class="pf-foldline" id="pf-foldgo" type="button">¿Qué está pasando en tu cabeza?</button>' +
+        '<div class="pf-foldrow"><span class="pf-ava pf-foldava">' + avaPic(me.avatar, headFor(me.nick)) + '</span><button class="pf-foldline" id="pf-foldgo" type="button">¿Qué está pasando en tu cabeza?</button><button class="pf-btn pf-mini" id="pf-foldpub" type="button">Postear</button></div>' +
         '<div class="pf-compwrap"><div class="pf-compin">' +
         '<input class="pf-cti" id="pf-ttl" maxlength="120" placeholder="Título de tu posteo" />' +
         '<textarea id="pf-post" maxlength="2000" placeholder="Texto (opcional). @ para nombrar, # para temas, $ para citar otro posteo."></textarea>' +
@@ -492,7 +488,9 @@
     load(); mountCarousel(); vt.push(setInterval(() => { if (!document.hidden) checkNew(); }, 12000));
     body().querySelector("#pf-new").onclick = () => load();
     const compEl = body().querySelector("#pf-comp");
-    body().querySelector("#pf-foldgo").onclick = () => { compEl.classList.remove("pf-fold"); const tx = body().querySelector("#pf-post"); if (tx) tx.focus(); };
+    const unfoldGo = () => { compEl.classList.remove("pf-fold"); const tx = body().querySelector("#pf-post"); if (tx) tx.focus(); };
+    body().querySelector("#pf-foldgo").onclick = unfoldGo;
+    body().querySelector("#pf-foldpub").onclick = unfoldGo;
     root.querySelector("#pf-chead").querySelectorAll("[data-s]").forEach((b) => { b.onclick = () => { scope = b.getAttribute("data-s"); root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.remove("on")); b.classList.add("on"); load(); }; });
     body().querySelectorAll("#pf-fchips [data-ft]").forEach((b) => b.onclick = () => { topic = b.getAttribute("data-ft") || ""; body().querySelectorAll("#pf-fchips [data-ft]").forEach((x) => x.classList.toggle("on", x === b)); load(); });
     const qEl = body().querySelector("#pf-q");
