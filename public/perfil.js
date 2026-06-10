@@ -186,13 +186,21 @@
     const wantUser = um ? decodeURIComponent(um[1]) : null;
     const pmm = location.pathname.match(/^\/p\/(\d+)$/);
     const wantPost = pmm ? Number(pmm[1]) : null;
+    const dm2 = location.pathname.match(/^\/u\/(.+)\/escritorio$/);
+    const wantDesk = dm2 ? decodeURIComponent(dm2[1]) : null;
     const { d } = await api("/api/hub/me", AH);
     if (!d || !d.ok) { root.innerHTML = '<p class="pf-loading">No responde. Probá en un rato.</p>'; return; }
-    if (!d.logged) { if (wantUser) { guestProfile(wantUser); return; } if (wantPost) { guestPost(wantPost); return; } login(oauth); return; }
+    if (!d.logged) {
+      if (wantDesk) { root.innerHTML = '<div class="pf-guest" style="max-width:980px"><div class="pf-chead" id="pf-chead"></div><div id="pf-body"></div><a class="pf-btn pf-spin" href="/yata" style="margin-top:14px;display:inline-flex">Entrá a YATA</a></div>'; viewDesktop(wantDesk); return; }
+      if (wantUser && !dm2) { guestProfile(wantUser); return; }
+      if (wantPost) { guestPost(wantPost); return; }
+      login(oauth); return;
+    }
     me = d;
     if (oauth === "migrated") { migrationModal(() => app()); return; }
     app();
-    if (wantUser) viewUser(wantUser);
+    if (wantDesk) viewDesktop(wantDesk);
+    else if (wantUser) viewUser(wantUser);
     else if (wantPost) viewPost(wantPost);
   }
   async function guestPost(id) {
@@ -635,20 +643,32 @@
     const { r, d } = await api("/api/desktop?nick=" + encodeURIComponent(nick), AH);
     if (!r.ok || !d || !d.ok) { body().innerHTML = '<p class="pf-empty">No se pudo cargar este escritorio.</p>'; return; }
     const D = d, own = !!d.own, CELL = (root.offsetWidth || 600) <= 680 ? 80 : 100;
-    let zTop = 10, dragging = false, STATS = d.stats || {}, MIR = d.mirando || 1;
+    let zTop = 10, dragging = false, STATS = d.stats || {}, MIR = d.mirando || 1, CFG = d.config || {}, POSTW = d.post || null, MIRONES = d.mirones || null, lastReact = 0;
     const acc = (D.perfil && typeof D.perfil.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(D.perfil.accent)) ? D.perfil.accent : "#6b8cff";
+    D.papelera = d.papelera || []; D.firmas = d.firmas || []; D.mascota = d.mascota || null;
     body().innerHTML =
       '<a class="pf-back2" id="dk-back">&#8592; Perfil de ' + esc(nick) + "</a>" +
-      (own ? '<div class="dk-bar"><button class="pf-btn ghost pf-mini" id="dk-ncar">+ Carpeta</button><button class="pf-btn ghost pf-mini" id="dk-nnota">+ Nota</button><button class="pf-btn ghost pf-mini" id="dk-nacc">+ Acceso</button><button class="pf-btn ghost pf-mini" id="dk-nwid">+ Widget</button><button class="pf-btn ghost pf-mini" id="dk-ntv">+ Tele</button><button class="pf-btn ghost pf-mini" id="dk-caja">Caja <b id="dk-cajan"></b></button><span class="pf-dimc" id="dk-msg" style="margin-left:auto"></span></div>' : "") +
-      '<div class="dk-surface" id="dk-s"' + (D.perfil && D.perfil.banner ? ' style="background-image:url(\'' + esc(D.perfil.banner) + '\')"' : ' style="background:linear-gradient(135deg,' + acc + '22,#08080b 70%)"') + '><div class="dk-scan"></div><button class="dk-fsbtn" id="dk-fs" type="button" title="Pantalla completa">⛶</button><button class="dk-fsbtn dk-chatbtn" id="dk-dchat" type="button" title="Chat del escritorio">💬</button><span class="dk-pres" id="dk-pres" style="display:none"></span></div>';
+      (own ? '<div class="dk-bar"><button class="pf-btn ghost pf-mini" id="dk-ncar">+ Carpeta</button><button class="pf-btn ghost pf-mini" id="dk-nnota">+ Nota</button><button class="pf-btn ghost pf-mini" id="dk-nacc">+ Acceso</button><button class="pf-btn ghost pf-mini" id="dk-nwid">+ Widget</button><button class="pf-btn ghost pf-mini" id="dk-ntv">+ Tele</button><button class="pf-btn ghost pf-mini" id="dk-nstk">+ Sticker</button><input type="file" id="dk-stkf" accept="image/*" style="display:none" /><button class="pf-btn ghost pf-mini" id="dk-nmar">+ Marquesina</button><button class="pf-btn ghost pf-mini" id="dk-conf">Personalizar</button><button class="pf-btn ghost pf-mini" id="dk-pape">Papelera <b id="dk-papen"></b></button><button class="pf-btn ghost pf-mini" id="dk-caja">Caja <b id="dk-cajan"></b></button><span class="pf-dimc" id="dk-msg" style="margin-left:auto"></span></div>' : "") +
+      '<div class="dk-surface" id="dk-s"><div class="dk-scan" id="dk-scan"></div><button class="dk-fsbtn" id="dk-fs" type="button" title="Pantalla completa">⛶</button><button class="dk-fsbtn dk-chatbtn" id="dk-dchat" type="button" title="Chat del escritorio">💬</button><button class="dk-fsbtn dk-firbtn" id="dk-fir" type="button" title="Libro de firmas">✒</button><span class="dk-pres" id="dk-pres" style="display:none"></span><div class="dk-reactbar" id="dk-rbar"></div></div>';
     body().querySelector("#dk-back").onclick = () => viewUser(nick);
+    function applyCfg() {
+      const wp = String(CFG.wallpaper || "");
+      if (wp) { S.style.background = ""; S.style.backgroundImage = "url('" + wp + "')"; }
+      else if (D.perfil && D.perfil.banner) { S.style.background = ""; S.style.backgroundImage = "url('" + D.perfil.banner + "')"; }
+      else { S.style.backgroundImage = ""; S.style.background = "linear-gradient(135deg," + acc + "22,#08080b 70%)"; }
+      const sc = S.querySelector("#dk-scan"); if (sc) sc.style.display = CFG.scan === false ? "none" : "";
+      S.classList.remove("dk-skin-win95", "dk-skin-fosforo", "dk-skin-vapor");
+      if (CFG.skin && CFG.skin !== "crt") S.classList.add("dk-skin-" + CFG.skin);
+      S.style.cursor = CFG.cursor ? "url('" + CFG.cursor + "') 4 4, auto" : "";
+    }
     const S = body().querySelector("#dk-s");
     const colsN = () => Math.max(3, Math.floor(S.clientWidth / CELL));
     const rowsN = () => Math.max(4, Math.floor(S.clientHeight / CELL));
     function rootItems() { return D.items.filter((i) => !i.parent && !i.hidden); }
     function cajaItems() { return D.items.filter((i) => i.hidden); }
     function trofeosSinPoner() { const puestos = new Set(D.items.filter((i) => i.type === "trophy").map((i) => String(i.data.kind))); return (D.trofeos || []).filter((t) => !puestos.has(t.kind)); }
-    function ocupado() { const m = {}; rootItems().forEach((i) => { m[i.x + "_" + i.y] = i.id; }); return m; }
+    function gridItems() { return rootItems().filter((i) => i.type !== "deco" && i.type !== "marquee"); }
+    function ocupado() { const m = {}; gridItems().forEach((i) => { m[i.x + "_" + i.y] = i.id; }); return m; }
     function freeCell() { const m = ocupado(); m["0_0"] = "sys"; const C = colsN(); for (let y = 0; y < 40; y++) for (let x = 0; x < C; x++) if (!m[x + "_" + y]) return { x: x, y: y }; return { x: 0, y: 0 }; }
     function setCajaN() { const el = body().querySelector("#dk-cajan"); if (el) el.textContent = String(cajaItems().length + trofeosSinPoner().length || ""); }
     function navShortcut(app2) {
@@ -673,10 +693,11 @@
     }
     function dmWin(con) {
       const key = "dm" + con.toLowerCase();
-      const w = openWin(key, esc(con), '<div class="dk-chatlog" id="cl"></div><div class="pf-row" style="margin-top:8px"><input class="pf-input" id="ct" maxlength="300" placeholder="escribí…" autocomplete="off" /><button class="pf-btn pf-mini" id="cs">Enviar</button></div><p class="pf-msg" id="ce" style="margin:4px 0 0"></p>');
+      const w = openWin(key, esc(con), '<div class="dk-chatlog" id="cl"></div><div class="pf-row" style="margin-top:8px"><input class="pf-input" id="ct" maxlength="300" placeholder="escribí…" autocomplete="off" /><button class="pf-btn pf-mini" id="cs">Enviar</button><button class="pf-btn ghost pf-mini" id="cz" title="Zumbido">⚡</button></div><p class="pf-msg" id="ce" style="margin:4px 0 0"></p>');
       const log = w.querySelector("#cl"), txt = w.querySelector("#ct"), em = w.querySelector("#ce");
       let maxId = 0;
-      function add(m) { const dv = document.createElement("div"); dv.className = "pf-m" + (m.mio ? " mio" : ""); dv.textContent = m.body; log.appendChild(dv); if (m.id > maxId) maxId = m.id; }
+      function add(m) { const dv = document.createElement("div"); dv.className = "pf-m" + (m.mio ? " mio" : ""); if (m.body === "*ZUMBIDO*") { dv.textContent = "⚡ ZUMBIDO"; dv.style.fontWeight = "800"; if (!m.mio) { w.classList.add("dk-shake"); setTimeout(() => w.classList.remove("dk-shake"), 650); } } else dv.textContent = m.body; log.appendChild(dv); if (m.id > maxId) maxId = m.id; }
+      w.querySelector("#cz").onclick = async () => { const { r: rr, d: dd } = await api("/api/social/dm", { method: "POST", headers: JH, body: JSON.stringify({ nick: con, body: "*ZUMBIDO*" }) }); if (rr.ok && dd && dd.mensaje) { add(dd.mensaje); log.scrollTop = log.scrollHeight; w.classList.add("dk-shake"); setTimeout(() => w.classList.remove("dk-shake"), 650); } };
       async function load(first) {
         const { r: rr, d: dd } = await api("/api/social/dm?con=" + encodeURIComponent(con) + (maxId ? "&since=" + maxId : ""), AH);
         if (rr.status === 403) { em.textContent = "Tienen que ser amigos."; return; }
@@ -723,8 +744,20 @@
       const w = openWin("ctx", it.type === "photo" ? "Foto" : "Ícono", '<div class="dk-fbar" style="flex-direction:column;align-items:stretch;margin:0">' +
         '<button class="pf-btn ghost pf-mini" id="cx-caja">Guardar en la Caja</button>' +
         ((it.type === "folder" || it.type === "note" || it.type === "shortcut") ? '<button class="pf-btn ghost pf-mini" id="cx-ico">Cambiar ícono</button><input type="file" id="cx-file" accept="image/*" style="display:none" />' : "") +
+        (it.type === "folder" ? '<button class="pf-btn ghost pf-mini" id="cx-pin">' + (it.data.pin ? "Sacar candado" : "Ponerle candado (PIN)") + "</button>" : "") +
         '<button class="pf-btn pf-mini" id="cx-del" style="background:#D23B47;border-color:#D23B47">Tirar a la basura</button>' +
         '</div><p class="pf-msg" id="cx-m" style="margin:6px 0 0"></p>');
+      const pinB = w.querySelector("#cx-pin");
+      if (pinB) pinB.onclick = async () => {
+        let nuevo = null;
+        if (!it.data.pin) { nuevo = window.prompt("PIN de 4 dígitos para esta carpeta:"); if (!nuevo || !/^\d{4}$/.test(nuevo.trim())) { w.querySelector("#cx-m").textContent = "Tienen que ser 4 dígitos."; return; } nuevo = nuevo.trim(); }
+        const data = { name: it.data.name };
+        if (it.data.icon) data.icon = it.data.icon;
+        if (nuevo) data.pin = nuevo;
+        const { r: rr, d: dd } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, data: data }) });
+        if (rr.ok) { it.data = (dd && dd.data) || data; refresh(); winKill("ctx"); toast(nuevo ? "Carpeta con candado." : "Candado afuera."); }
+        else w.querySelector("#cx-m").textContent = (dd && dd.message) || "No se pudo.";
+      };
       w.style.left = Math.max(0, Math.min(px, S.clientWidth - 200)) + "px";
       w.style.top = Math.max(0, Math.min(py, S.clientHeight - 160)) + "px";
       w.querySelector("#cx-caja").onclick = async () => {
@@ -760,16 +793,18 @@
       }
     }
     const GAME_LBL = { tetristo: "TeTristo", parpadeo: "No Parpadees", laberinto: "El Laberinto" };
-    function wLabel(it) { const k = String(it.data.kind); if (k === "top") return "Top " + (GAME_LBL[String(it.data.game)] || "TeTristo"); return k === "reloj" ? "Reloj" : k === "karma" ? "Karma" : k === "racha" ? "Racha" : "Visitas"; }
-    function wVal(k, game) {
+    function wLabel(it) { const k = String(it.data.kind); if (k === "top") return "Top " + (GAME_LBL[String(it.data.game)] || "TeTristo"); if (k === "count") return esc(String(it.data.label || "Cuenta")); if (k === "post") return "Mi posteo"; return k === "reloj" ? "Reloj" : k === "karma" ? "Karma" : k === "racha" ? "Racha" : "Visitas"; }
+    function wVal(k, game, it) {
       if (k === "reloj") { const t = new Date(); return ("0" + t.getHours()).slice(-2) + ":" + ("0" + t.getMinutes()).slice(-2); }
       if (k === "karma") return fmt.format(STATS.karma || 0);
       if (k === "racha") return (STATS.racha || 0) + "d";
       if (k === "visitas") return fmt.format(STATS.visitas || 0);
       if (k === "top") { const t = STATS.tops && STATS.tops[game]; return t ? "#" + t.rank : "—"; }
+      if (k === "count") { const h = Number(it && it.data ? it.data.hasta : 0) - Date.now(); if (h <= 0) return "¡YA!"; const dd2 = Math.floor(h / 86400000), hh = Math.floor((h % 86400000) / 3600000), mm = Math.floor((h % 3600000) / 60000); return dd2 > 0 ? dd2 + "d " + hh + "h" : hh + "h " + mm + "m"; }
+      if (k === "post") return POSTW ? "$" + POSTW.id : "—";
       return "—";
     }
-    function updateWidgets() { S.querySelectorAll(".dk-wv").forEach((el) => { el.textContent = wVal(el.getAttribute("data-wk"), el.getAttribute("data-wgame") || "tetristo"); }); }
+    function updateWidgets() { S.querySelectorAll(".dk-wv").forEach((el) => { const id2 = Number(el.getAttribute("data-wid2")) || 0; const it = D.items.find((i) => i.id === id2); el.textContent = wVal(el.getAttribute("data-wk"), el.getAttribute("data-wgame") || "tetristo", it); }); }
     function setPres(n) { MIR = n || 1; const el = S.querySelector("#dk-pres"); if (!el) return; if (MIR >= 2) { el.style.display = ""; el.textContent = "👁 " + MIR + " mirando ahora"; } else el.style.display = "none"; }
     function winKill(key) { const w = S.querySelector('[data-win="' + key + '"]'); if (w) { if (w.__onclose) { try { w.__onclose(); } catch (_) {} } w.remove(); } }
     function openWin(key, title, html) {
@@ -851,6 +886,19 @@
         return;
       }
       if (it.type === "tv") { openTv(it); return; }
+      if (it.type === "folder" && it.data.locked && !own) {
+        const w = openWin("f" + it.id, esc(it.data.name) + " 🔒", '<p class="pf-dimc" style="padding:4px 0 8px">Carpeta con candado. Si sabés el PIN, pasá.</p><div class="pf-row"><input class="pf-input" id="pin-i" inputmode="numeric" maxlength="4" placeholder="• • • •" style="text-align:center;letter-spacing:6px" /><button class="pf-btn pf-mini" id="pin-go">Abrir</button></div><p class="pf-msg" id="pin-m" style="margin:6px 0 0"></p>');
+        w.querySelector("#pin-go").onclick = async () => {
+          const m2 = w.querySelector("#pin-m"); m2.textContent = "...";
+          const { r: rr, d: dd } = await api("/api/desktop/abrir", { method: "POST", headers: JH, body: JSON.stringify({ nick: nick, id: it.id, pin: w.querySelector("#pin-i").value.trim() }) });
+          if (rr.ok && dd && dd.ok) {
+            const dentro = (dd.items || []).map((i) => ({ url: String(i.data.url || ""), id: i.id }));
+            winKill("f" + it.id);
+            const w2 = openWin("f" + it.id, esc(it.data.name) + " 🔓", fotoThumbs(dentro, true)); wireMv(w2);
+          } else m2.textContent = (dd && dd.message) || "No se pudo.";
+        };
+        return;
+      }
       if (it.type === "folder") {
         const dentro = D.items.filter((i) => i.parent === it.id).map((i) => ({ url: String(i.data.url || ""), id: i.id }));
         const extra = own ? '<div class="dk-fbar"><button class="pf-btn ghost pf-mini" id="dk-fren">Renombrar</button><button class="pf-btn ghost pf-mini" id="dk-fdel">Tirar carpeta</button></div>' : "";
@@ -861,8 +909,11 @@
       }
       if (it.type === "note") {
         if (!own) { openWin("n" + it.id, "Nota", '<div class="dk-ntext">' + rich(it.data.text || "") + "</div>"); return; }
-        const w = openWin("n" + it.id, "Nota", '<textarea class="dk-ta" maxlength="400">' + esc(it.data.text || "") + '</textarea><div class="dk-fbar"><button class="pf-btn pf-mini" id="dk-ns">Guardar</button><button class="pf-btn ghost pf-mini" id="dk-nd">Tirar</button><span class="pf-msg" id="dk-nm" style="margin:0"></span></div>');
-        w.querySelector("#dk-ns").onclick = async () => { const t = w.querySelector(".dk-ta").value; const { r: rr, d: dd } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, data: { text: t } }) }); w.querySelector("#dk-nm").textContent = rr.ok ? "Guardada." : ((dd && dd.message) || "No se pudo."); if (rr.ok) { it.data.text = t; refresh(); } };
+        const COLORES = ["#facc15", "#ec4899", "#38bdf8", "#22c55e"];
+        const w = openWin("n" + it.id, "Nota", '<textarea class="dk-ta" maxlength="400">' + esc(it.data.text || "") + '</textarea><div class="dk-fbar" style="margin:8px 0 0">' + COLORES.map((c2) => '<button type="button" class="dk-cdot" data-nc="' + c2 + '" style="background:' + c2 + (String(it.data.c || "#facc15") === c2 ? ";outline:2px solid #fff" : "") + '"></button>').join("") + '<button class="pf-btn pf-mini" id="dk-ns" style="margin-left:auto">Guardar</button><button class="pf-btn ghost pf-mini" id="dk-nd">Tirar</button><span class="pf-msg" id="dk-nm" style="margin:0"></span></div>');
+        let notaC = String(it.data.c || "");
+        w.querySelectorAll("[data-nc]").forEach((b) => b.onclick = () => { notaC = b.getAttribute("data-nc"); w.querySelectorAll("[data-nc]").forEach((x) => x.style.outline = x === b ? "2px solid #fff" : ""); });
+        w.querySelector("#dk-ns").onclick = async () => { const t = w.querySelector(".dk-ta").value; const data = { text: t }; if (it.data.icon) data.icon = it.data.icon; if (notaC) data.c = notaC; const { r: rr, d: dd } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, data: data }) }); w.querySelector("#dk-nm").textContent = rr.ok ? "Guardada." : ((dd && dd.message) || "No se pudo."); if (rr.ok) { it.data = (dd && dd.data) || data; refresh(); } };
         w.querySelector("#dk-nd").onclick = async () => { const { r: rr } = await api("/api/desktop/borrar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id }) }); if (rr.ok) { D.items = D.items.filter((i) => i.id !== it.id); refresh(); winKill("n" + it.id); } };
         return;
       }
@@ -874,24 +925,73 @@
       }
       if (it.type === "shortcut") { navShortcut(String(it.data.app)); return; }
       if (it.type === "photo") { lightbox(String(it.data.url || "")); return; }
+      if (it.type === "widget" && String(it.data.kind) === "post" && POSTW) { if (own || me) viewPost(POSTW.id); else location.href = "/p/" + POSTW.id; return; }
     }
     function iconHTML(it) {
       if (it.sys) return '<span class="dk-g">' + dkSvg("folder", acc) + '</span><i class="dk-l">Mis fotos</i>';
       const cIco = it.data && it.data.icon ? '<span class="dk-g dk-gimg"><img src="' + esc(String(it.data.icon)) + '" alt="" /></span>' : "";
       if (it.type === "folder") return (cIco || '<span class="dk-g">' + dkSvg("folder") + "</span>") + '<i class="dk-l">' + esc(it.data.name) + "</i>";
-      if (it.type === "note") return (cIco || '<span class="dk-g">' + dkSvg("note", "#facc15") + "</span>") + '<i class="dk-l">' + esc(String(it.data.text || "nota").slice(0, 14)) + "</i>";
-      if (it.type === "trophy") return '<span class="dk-g">' + dkSvg("trophy", "#e2b23c") + '</span><i class="dk-l">' + esc(it.data.label || "trofeo") + "</i>";
+      if (it.type === "note") return (cIco || '<span class="dk-g">' + dkSvg("note", String(it.data.c || "#facc15")) + "</span>") + '<i class="dk-l">' + esc(String(it.data.text || "nota").slice(0, 14)) + "</i>";
+      if (it.type === "trophy") return '<span class="dk-g">' + dkSvg("trophy", String(it.data.kind) === "sello" ? "#ff5ba0" : "#e2b23c") + '</span><i class="dk-l">' + esc(it.data.label || "trofeo") + "</i>";
       if (it.type === "shortcut") { const a = DK_APPS[it.data.app] || { l: "?" }; return (cIco || '<span class="dk-g">' + dkSvg(String(it.data.app), acc) + "</span>") + '<i class="dk-l">' + esc(a.l) + "</i>"; }
       if (it.type === "photo") return '<span class="dk-g dk-gimg"><img src="' + esc(String(it.data.url || "")) + '" alt="" /></span><i class="dk-l">foto</i>';
-      if (it.type === "widget") { const k = String(it.data.kind); return '<span class="dk-wv" data-wk="' + esc(k) + '"' + (it.data.game ? ' data-wgame="' + esc(String(it.data.game)) + '"' : "") + '>—</span><i class="dk-l">' + esc(wLabel(it)) + "</i>"; }
+      if (it.type === "widget") { const k = String(it.data.kind); return '<span class="dk-wv" data-wk="' + esc(k) + '" data-wid2="' + it.id + '"' + (it.data.game ? ' data-wgame="' + esc(String(it.data.game)) + '"' : "") + '>—</span><i class="dk-l">' + esc(wLabel(it)) + "</i>"; }
       if (it.type === "tv") { const prendida = !!(it.data.video || it.data.web); return '<span class="dk-g">' + dkSvg("tv", prendida ? "#e25b5b" : null) + '</span><i class="dk-l">' + (prendida ? "● EN VIVO" : "YATA TV") + "</i>"; }
       return "";
     }
     function place(el, x, y) { el.style.left = (x * CELL + 6) + "px"; el.style.top = (y * CELL + 6) + "px"; }
+    function renderDecos() {
+      S.querySelectorAll(".dk-deco, .dk-marq").forEach((e) => e.remove());
+      rootItems().filter((i) => i.type === "deco").forEach((it) => {
+        const el = document.createElement("img");
+        el.className = "dk-deco"; el.src = String(it.data.url || ""); el.alt = "";
+        el.style.left = (it.x / 10) + "%"; el.style.top = (it.y / 10) + "%";
+        el.style.width = Number(it.data.w || 160) + "px";
+        el.style.transform = "rotate(" + Number(it.data.r || 0) + "deg)";
+        el.setAttribute("data-id", String(it.id));
+        if (own) {
+          el.addEventListener("contextmenu", (e) => { e.preventDefault(); const r2 = S.getBoundingClientRect(); ctxMenu(it, e.clientX - r2.left, e.clientY - r2.top); });
+          el.addEventListener("pointerdown", (e) => {
+            const sx = e.clientX, sy = e.clientY, ox = el.offsetLeft, oy = el.offsetTop;
+            let mv2 = false;
+            const mv = (ev) => { const dx = ev.clientX - sx, dy = ev.clientY - sy; if (!mv2 && Math.abs(dx) + Math.abs(dy) < 6) return; mv2 = true; dragging = true; el.style.left = Math.max(0, ox + dx) + "px"; el.style.top = Math.max(0, oy + dy) + "px"; };
+            const up = async () => {
+              document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up);
+              setTimeout(() => { dragging = false; }, 0);
+              if (!mv2) return;
+              const nx = Math.max(0, Math.min(960, Math.round(el.offsetLeft / S.clientWidth * 1000)));
+              const ny = Math.max(0, Math.min(960, Math.round(el.offsetTop / S.clientHeight * 1000)));
+              const { r: rr } = await api("/api/desktop/mover", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, x: nx, y: ny }) });
+              if (rr.ok) { it.x = nx; it.y = ny; }
+              renderDecos();
+            };
+            document.addEventListener("pointermove", mv); document.addEventListener("pointerup", up);
+            e.preventDefault();
+          });
+        }
+        S.appendChild(el);
+      });
+      rootItems().filter((i) => i.type === "marquee").forEach((it) => {
+        const el = document.createElement("div");
+        el.className = "dk-marq"; el.style.top = (it.y / 10) + "%";
+        el.innerHTML = '<span>' + esc(String(it.data.text || "")) + "</span>";
+        el.setAttribute("data-id", String(it.id));
+        if (own) el.addEventListener("contextmenu", (e) => { e.preventDefault(); const r2 = S.getBoundingClientRect(); ctxMenu(it, e.clientX - r2.left, e.clientY - r2.top); });
+        S.appendChild(el);
+      });
+      const vieja = S.querySelector(".dk-masco"); if (vieja) vieja.remove();
+      if (D.mascota) {
+        const mc = document.createElement("div");
+        mc.className = "dk-masco";
+        mc.innerHTML = avatar(D.mascota.head);
+        mc.title = esc(nick) + " del Pueblo · vida " + D.mascota.vida + " · hambre " + D.mascota.hambre + " · sueño " + D.mascota.sueno;
+        S.appendChild(mc);
+      }
+    }
     function refresh() {
       S.querySelectorAll(".dk-ico").forEach((e) => e.remove());
       const sys = { sys: true, x: 0, y: 0 };
-      const list = [sys].concat(rootItems());
+      const list = [sys].concat(gridItems());
       list.forEach((it) => {
         const el = document.createElement("button");
         el.type = "button"; el.className = "dk-ico" + (it.sys ? " dk-sys" : "");
@@ -940,9 +1040,122 @@
         el.addEventListener("click", () => { if (!dragging && !moved) abrir(it); moved = false; });
       });
       setCajaN();
+      const pn = body().querySelector("#dk-papen"); if (pn) pn.textContent = String(D.papelera.length || "");
       updateWidgets();
+      renderDecos();
+    }
+    function winFirmas() {
+      const lista = (D.firmas || []).map((f) => '<div class="dk-firma"><b>' + esc(f.nick) + "</b> " + esc(f.body) + '<span class="pf-nt">' + cuando(f.t) + "</span></div>").join("");
+      const w = openWin("firmas", "Libro de firmas", '<div class="dk-chatlog" id="fir-l" style="height:180px">' + (lista || '<p class="pf-dimc">Nadie firmó todavía. Estrená el libro.</p>') + "</div>" + (me ? '<div class="pf-row" style="margin-top:8px"><input class="pf-input" id="fir-t" maxlength="120" placeholder="dejá tu firma…" autocomplete="off" /><button class="pf-btn pf-mini" id="fir-s">Firmar</button></div><p class="pf-msg" id="fir-m" style="margin:4px 0 0"></p>' : '<p class="pf-dimc" style="padding:8px 0 0">Entrá a YATA para firmar.</p>'));
+      const tx = w.querySelector("#fir-t");
+      if (tx) w.querySelector("#fir-s").onclick = async () => {
+        const m2 = w.querySelector("#fir-m"); m2.textContent = "...";
+        const { r: rr, d: dd } = await api("/api/desktop/firmar", { method: "POST", headers: JH, body: JSON.stringify({ nick: nick, body: tx.value }) });
+        if (rr.ok && dd && dd.firma) { D.firmas.unshift(dd.firma); winKill("firmas"); winFirmas(); toast("Firmado. Quedó para la historia."); }
+        else m2.textContent = (dd && dd.message) || "No se pudo.";
+      };
+    }
+    function winMirones() {
+      if (!MIRONES) return;
+      const h = '<div class="pf-h" style="padding:0 0 6px">Mirando ahora</div>' +
+        (MIRONES.nicks.length ? MIRONES.nicks.map((n) => '<div class="dk-fila"><span><span class="dk-on"></span> ' + esc(n) + "</span></div>").join("") : '<p class="pf-dimc">Nadie con nombre.</p>') +
+        (MIRONES.fantasmas ? '<p class="pf-dimc" style="padding:4px 0">+ ' + MIRONES.fantasmas + (MIRONES.fantasmas === 1 ? " fantasma 👻" : " fantasmas 👻") + "</p>" : "") +
+        (MIRONES.recientes && MIRONES.recientes.length ? '<div class="pf-h" style="padding:8px 0 6px">Pasaron por acá</div>' + MIRONES.recientes.map((v) => '<div class="dk-fila"><span>' + esc(v.nick) + '</span><span class="pf-nt">' + cuando(v.t) + "</span></div>").join("") : "") +
+        (MIRONES.rey && MIRONES.rey.length ? '<div class="pf-h" style="padding:8px 0 6px">Los más clavados</div>' + MIRONES.rey.map((k2, i2) => '<div class="dk-fila"><span>' + (i2 === 0 ? "👑 " : "") + esc(k2.nick) + "</span><b>" + k2.min + " min</b></div>").join("") : "");
+      openWin("mirones", "La puerta", h);
+    }
+    function winPapelera() {
+      const h = D.papelera.length
+        ? D.papelera.map((i) => '<div class="dk-fila"><span>' + esc(i.type === "note" ? String(i.data.text || "nota").slice(0, 18) : i.type === "folder" ? String(i.data.name || "carpeta") : i.type === "trophy" ? String(i.data.label || "trofeo") : i.type) + '</span><span style="display:flex;gap:6px"><button class="pf-btn pf-mini" data-res="' + i.id + '">Restaurar</button><button class="pf-btn ghost pf-mini" data-def="' + i.id + '">Borrar ya</button></span></div>').join("") + '<p class="pf-dimc" style="padding:6px 0 0">Lo de acá se borra solo a los 7 días.</p>'
+        : '<p class="pf-dimc" style="padding:8px">Vacía. Sos de tirar poco.</p>';
+      const w = openWin("pape", "Papelera", h);
+      w.querySelectorAll("[data-res]").forEach((b) => b.onclick = async () => {
+        const id2 = Number(b.getAttribute("data-res"));
+        const { r: rr } = await api("/api/desktop/restaurar", { method: "POST", headers: JH, body: JSON.stringify({ id: id2 }) });
+        if (rr.ok) { const it = D.papelera.find((i) => i.id === id2); if (it) { D.papelera = D.papelera.filter((i) => i.id !== id2); const fc = freeCell(); it.x = fc.x; it.y = fc.y; it.parent = null; D.items.push(it); await api("/api/desktop/mover", { method: "POST", headers: JH, body: JSON.stringify({ id: id2, x: fc.x, y: fc.y }) }); } refresh(); winKill("pape"); winPapelera(); }
+      });
+      w.querySelectorAll("[data-def]").forEach((b) => b.onclick = async () => {
+        const id2 = Number(b.getAttribute("data-def"));
+        const { r: rr } = await api("/api/desktop/borrar", { method: "POST", headers: JH, body: JSON.stringify({ id: id2, definitivo: true }) });
+        if (rr.ok) { D.papelera = D.papelera.filter((i) => i.id !== id2); refresh(); winKill("pape"); winPapelera(); }
+      });
+    }
+    function winPersonalizar() {
+      const w = openWin("conf", "Personalizar", '<div class="dk-fbar" style="flex-direction:column;align-items:stretch;margin:0;gap:8px">' +
+        '<button class="pf-btn ghost pf-mini" id="cf-wp">Subir fondo propio</button><input type="file" id="cf-wpf" accept="image/*" style="display:none" />' +
+        '<button class="pf-btn ghost pf-mini" id="cf-wpx">Volver al banner</button>' +
+        '<button class="pf-btn ghost pf-mini" id="cf-cur">Subir cursor (imagen chica)</button><input type="file" id="cf-curf" accept="image/*" style="display:none" />' +
+        '<button class="pf-btn ghost pf-mini" id="cf-curx">Cursor normal</button>' +
+        '<button class="pf-btn ghost pf-mini" id="cf-scan">Scanlines: <b>' + (CFG.scan === false ? "OFF" : "ON") + "</b></button>" +
+        '<div class="pf-row" style="gap:6px">' + ["crt", "win95", "fosforo", "vapor"].map((s2) => '<button class="pf-btn ghost pf-mini" data-skin="' + s2 + '">' + s2 + "</button>").join("") + "</div>" +
+        '</div><p class="pf-msg" id="cf-m" style="margin:6px 0 0"></p>');
+      const m2 = w.querySelector("#cf-m");
+      async function setCfg(patch) {
+        const { r: rr, d: dd } = await api("/api/desktop/config", { method: "POST", headers: JH, body: JSON.stringify(patch) });
+        if (rr.ok && dd) { CFG = dd.config || CFG; applyCfg(); winKill("conf"); winPersonalizar(); toast("Listo."); }
+        else m2.textContent = (dd && dd.message) || "No se pudo.";
+      }
+      function subir(fileInputId, W2, H2, key) {
+        const fi = w.querySelector(fileInputId);
+        fi.onchange = () => {
+          const f = fi.files && fi.files[0]; if (!f) return;
+          m2.textContent = "Subiendo…";
+          resizeToBlob(f, W2, H2, async (bl) => {
+            if (!bl) { m2.textContent = "No se pudo leer."; return; }
+            const url = await subirPerfilR2(bl);
+            if (!url) { m2.textContent = "No se pudo subir."; return; }
+            const patch = {}; patch[key] = url; setCfg(patch);
+          });
+        };
+        fi.click();
+      }
+      w.querySelector("#cf-wp").onclick = () => subir("#cf-wpf", 1600, 900, "wallpaper");
+      w.querySelector("#cf-wpx").onclick = () => setCfg({ wallpaper: "" });
+      w.querySelector("#cf-cur").onclick = () => subir("#cf-curf", 32, 32, "cursor");
+      w.querySelector("#cf-curx").onclick = () => setCfg({ cursor: "" });
+      w.querySelector("#cf-scan").onclick = () => setCfg({ scan: CFG.scan === false });
+      w.querySelectorAll("[data-skin]").forEach((b) => b.onclick = () => setCfg({ skin: b.getAttribute("data-skin") }));
+    }
+    function renderReact(rx) {
+      const el = document.createElement("div");
+      el.className = "dk-react";
+      el.textContent = rx.e;
+      el.title = rx.nick;
+      el.style.left = (12 + Math.random() * 76) + "%";
+      S.appendChild(el);
+      setTimeout(() => el.remove(), 2600);
     }
     refresh();
+    applyCfg();
+    if (D.reacts) D.reacts.forEach((rx) => { if (rx.id > lastReact) lastReact = rx.id; });
+    const rbar = S.querySelector("#dk-rbar");
+    if (rbar && me) {
+      rbar.innerHTML = ["💀", "🔥", "👻", "❤️", "😂", "👍"].map((e2) => '<button type="button" data-re="' + e2 + '">' + e2 + "</button>").join("");
+      rbar.querySelectorAll("[data-re]").forEach((b) => b.onclick = async () => {
+        const e2 = b.getAttribute("data-re");
+        renderReact({ e: e2, nick: me.nick, id: 0 });
+        await api("/api/desktop/reaccion", { method: "POST", headers: JH, body: JSON.stringify({ nick: nick, e: e2 }) });
+      });
+    }
+    const firB = S.querySelector("#dk-fir");
+    if (firB) firB.onclick = () => winFirmas();
+    const presEl = S.querySelector("#dk-pres");
+    if (presEl && (own || (me && me.admin))) presEl.style.cursor = "pointer", presEl.onclick = () => winMirones();
+    if (!window.__konamiWired) {
+      window.__konamiWired = true;
+      let kseq = [];
+      const KONAMI = "ArrowUp,ArrowUp,ArrowDown,ArrowDown,ArrowLeft,ArrowRight,ArrowLeft,ArrowRight,b,a";
+      document.addEventListener("keydown", (e) => {
+        if (cur !== "desk") return;
+        const S2 = document.getElementById("dk-s"); if (!S2) return;
+        kseq.push(e.key); if (kseq.length > 10) kseq.shift();
+        if (kseq.join(",") === KONAMI) {
+          kseq = [];
+          for (let i2 = 0; i2 < 24; i2++) setTimeout(() => { const sk = document.createElement("div"); sk.className = "dk-lluvia"; sk.textContent = "💀"; sk.style.left = Math.random() * 96 + "%"; sk.style.animationDuration = (1.2 + Math.random() * 1.6) + "s"; S2.appendChild(sk); setTimeout(() => sk.remove(), 3000); }, i2 * 90);
+          toast("Modo insomnio total.");
+        }
+      });
+    }
     setPres(MIR);
     vt.push(setInterval(updateWidgets, 1000));
     const fsB = S.querySelector("#dk-fs");
@@ -959,6 +1172,9 @@
       if (!res.r.ok || !res.d || !res.d.ok) return;
       const nd = res.d;
       STATS = nd.stats || STATS; setPres(nd.mirando); D.trofeos = nd.trofeos || D.trofeos;
+      MIRONES = nd.mirones || MIRONES; D.firmas = nd.firmas || D.firmas; D.mascota = nd.mascota || D.mascota; POSTW = nd.post || POSTW; D.papelera = nd.papelera || D.papelera;
+      if (JSON.stringify(nd.config || {}) !== JSON.stringify(CFG)) { CFG = nd.config || {}; applyCfg(); }
+      (nd.reacts || []).forEach((rx) => { if (rx.id > lastReact) { lastReact = rx.id; if (!me || rx.nick !== me.nick) renderReact(rx); } });
       if ((nd.fotos || []).length !== D.fotos.length) D.fotos = nd.fotos || [];
       const prev = new Map(D.items.map((i) => [i.id, i]));
       let structural = false;
@@ -1009,16 +1225,42 @@
         });
       };
       body().querySelector("#dk-nwid").onclick = () => {
-        const opts = [["reloj", "Reloj"], ["karma", "Karma"], ["racha", "Racha"], ["visitas", "Visitas"], ["top|tetristo", "Top TeTristo"], ["top|parpadeo", "Top No Parpadees"], ["top|laberinto", "Top Laberinto"]];
+        const opts = [["reloj", "Reloj"], ["karma", "Karma"], ["racha", "Racha"], ["visitas", "Visitas"], ["top|tetristo", "Top TeTristo"], ["top|parpadeo", "Top No Parpadees"], ["top|laberinto", "Top Laberinto"], ["count", "Cuenta regresiva"], ["post", "Mi posteo fijado"]];
         const w = openWin("nwid", "Widgets", '<div class="dk-apps">' + opts.map((o) => { const ps = o[0].split("|"); return '<button class="dk-app" data-wid="' + o[0] + '" type="button"><span class="dk-wv2">' + esc(wVal(ps[0], ps[1] || "tetristo")) + "</span><i>" + o[1] + "</i></button>"; }).join("") + "</div>");
         w.querySelectorAll("[data-wid]").forEach((b) => b.onclick = async () => {
           const ps = b.getAttribute("data-wid").split("|");
           const fc = freeCell();
           const data = { kind: ps[0] }; if (ps[1]) data.game = ps[1];
+          if (ps[0] === "count") {
+            const label = window.prompt("¿Qué estamos esperando? (ej: Próximo video)"); if (!label) return;
+            const hasta = window.prompt("¿Cuándo? (AAAA-MM-DD o AAAA-MM-DD HH:MM)"); if (!hasta) return;
+            data.label = label; data.hasta = hasta.trim().replace(" ", "T");
+          }
           const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "widget", data: data, x: fc.x, y: fc.y }) });
           if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); winKill("nwid"); } else toast((dd && dd.message) || "No se pudo.");
         });
       };
+      body().querySelector("#dk-nstk").onclick = () => body().querySelector("#dk-stkf").click();
+      body().querySelector("#dk-stkf").onchange = () => {
+        const fi = body().querySelector("#dk-stkf");
+        const f = fi.files && fi.files[0]; if (!f) return;
+        fi.value = "";
+        toast("Subiendo sticker…");
+        resizeToBlob(f, 480, 480, async (bl) => {
+          if (!bl) { toast("No se pudo leer la imagen."); return; }
+          const url = await subirPerfilR2(bl);
+          if (!url) { toast("No se pudo subir."); return; }
+          const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "deco", data: { url: url, w: 180, r: 0 }, x: 350, y: 300 }) });
+          if (rr.ok && dd && dd.item) { D.items.push(dd.item); renderDecos(); toast("Sticker puesto. Arrastralo a gusto."); } else toast((dd && dd.message) || "No se pudo.");
+        });
+      };
+      body().querySelector("#dk-nmar").onclick = async () => {
+        const text = window.prompt("Texto de la marquesina (corre por el escritorio):"); if (!text) return;
+        const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "marquee", data: { text: text }, x: 0, y: 80 }) });
+        if (rr.ok && dd && dd.item) { D.items.push(dd.item); renderDecos(); } else toast((dd && dd.message) || "No se pudo.");
+      };
+      body().querySelector("#dk-conf").onclick = () => winPersonalizar();
+      body().querySelector("#dk-pape").onclick = () => winPapelera();
       body().querySelector("#dk-ntv").onclick = async () => {
         const ya = D.items.find((i) => i.type === "tv");
         if (ya) {
@@ -1364,7 +1606,7 @@
 
   /* ---------- Notificaciones ---------- */
   function notifIcon(t) { if (t === "like_post" || t === "like_comment") return skull(); if (t === "comment" || t === "reply") return ic("chat"); if (t === "friend_req" || t === "friend_acc") return ic("amigos"); return ic("notifs"); }
-  const NVERB = { like_post: "te calaveó un posteo", like_comment: "te calaveó un comentario", comment: "comentó tu posteo", reply: "respondió tu comentario", mention: "te nombró", cite: "citó tu posteo", friend_req: "te mandó solicitud de amistad", friend_acc: "ahora es tu amigo" };
+  const NVERB = { like_post: "te calaveó un posteo", like_comment: "te calaveó un comentario", comment: "comentó tu posteo", reply: "respondió tu comentario", mention: "te nombró", cite: "citó tu posteo", friend_req: "te mandó solicitud de amistad", friend_acc: "ahora es tu amigo", desk_visit: "pasó por tu escritorio", sello: "te dejó el Sello de Tristo 🏵" };
   function notifLine(n) {
     const verb = NVERB[n.type] || "novedad";
     const tgt = n.postId ? ' data-post="' + n.postId + '"' : ' data-u="' + esc(n.actor) + '"';

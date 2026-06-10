@@ -506,3 +506,34 @@
 [data-win="ctx"] { width: 190px; }
 [data-win="msn"] { width: min(320px, 92%); }
 @media (max-width: 680px) { .dk-appf { height: 56vh; } .dk-chatbtn { right: 46px; } }
+
+/* ---- D5: stickers, marquesina, skins, firmas, reacciones, mascota, konami ---- */
+.dk-deco { position: absolute; z-index: 1; pointer-events: auto; user-select: none; -webkit-user-select: none; filter: drop-shadow(0 4px 14px rgba(0,0,0,.5)); touch-action: none; }
+.dk-ico, .dk-win { z-index: 2; }
+.dk-marq { position: absolute; left: 0; right: 0; z-index: 1; overflow: hidden; white-space: nowrap; pointer-events: auto; border-top: 1px solid rgba(255,255,255,.08); border-bottom: 1px solid rgba(255,255,255,.08); background: rgba(0,0,0,.25); }
+.dk-marq span { display: inline-block; padding: 4px 0; font: 800 13px "Montserrat", sans-serif; letter-spacing: .14em; text-transform: uppercase; color: #cdd6ff; animation: dk-marquee 14s linear infinite; padding-left: 100%; }
+@keyframes dk-marquee { from { transform: translateX(0); } to { transform: translateX(-200%); } }
+.dk-firbtn { right: 86px; font-size: 13px; }
+.dk-reactbar { position: absolute; left: 12px; bottom: 12px; z-index: 8; display: flex; gap: 4px; background: rgba(10,10,14,.65); border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 4px 8px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.dk-reactbar button { background: none; border: 0; font-size: 15px; cursor: pointer; padding: 2px 3px; transition: transform .12s; }
+.dk-reactbar button:hover { transform: scale(1.3); }
+.dk-react { position: absolute; bottom: 56px; z-index: 9; font-size: 26px; pointer-events: none; animation: dk-float 2.5s ease-out forwards; }
+@keyframes dk-float { from { transform: translateY(0) scale(.8); opacity: 1; } to { transform: translateY(-46vh) scale(1.4) rotate(12deg); opacity: 0; } }
+.dk-masco { position: absolute; bottom: 6px; left: 0; z-index: 2; animation: dk-paseo 26s linear infinite alternate; pointer-events: auto; cursor: help; filter: drop-shadow(0 2px 6px rgba(0,0,0,.7)); }
+@keyframes dk-paseo { from { left: 4%; } to { left: 88%; } }
+.dk-lluvia { position: absolute; top: -30px; z-index: 50; font-size: 22px; pointer-events: none; animation-name: dk-caer; animation-timing-function: linear; animation-fill-mode: forwards; }
+@keyframes dk-caer { to { transform: translateY(110vh) rotate(220deg); } }
+.dk-shake { animation: dk-temblor .6s; }
+@keyframes dk-temblor { 0%, 100% { transform: translate(0); } 20% { transform: translate(-7px, 3px); } 40% { transform: translate(6px, -4px); } 60% { transform: translate(-5px, -3px); } 80% { transform: translate(4px, 3px); } }
+.dk-firma { padding: 6px 2px; border-bottom: 1px solid rgba(255,255,255,.07); font: 500 12.5px "Montserrat", sans-serif; color: #d7dae1; }
+.dk-firma b { color: #fff; margin-right: 4px; }
+.dk-firma .pf-nt { float: right; }
+.dk-cdot { width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0,0,0,.4); cursor: pointer; }
+.dk-surface.dk-skin-win95 .dk-tit { background: linear-gradient(90deg, #1a237e, #3949ab); text-transform: none; letter-spacing: 0; }
+.dk-surface.dk-skin-win95 .dk-win { border-radius: 2px; border-color: #9e9e9e; }
+.dk-surface.dk-skin-fosforo .dk-win { border-color: #22c55e88; box-shadow: 0 0 24px #22c55e22; }
+.dk-surface.dk-skin-fosforo .dk-tit { background: #0a140c; color: #4ade80; }
+.dk-surface.dk-skin-fosforo .dk-l, .dk-surface.dk-skin-fosforo .dk-wv { color: #4ade80; text-shadow: 0 0 8px #22c55e66; }
+.dk-surface.dk-skin-vapor .dk-win { border-color: #ec489988; box-shadow: 0 0 24px #7c5cff33; }
+.dk-surface.dk-skin-vapor .dk-tit { background: linear-gradient(90deg, #7c5cff44, #ec489944); }
+@media (max-width: 680px) { .dk-firbtn { right: 82px; } .dk-reactbar { bottom: 10px; } }
