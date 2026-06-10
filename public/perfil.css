@@ -607,3 +607,47 @@
 .pf-nrow:hover { background: rgba(255,255,255,.05); }
 :focus-visible { outline: 2px solid rgba(107,140,255,.7); outline-offset: 2px; border-radius: 6px; }
 @media (prefers-reduced-motion: reduce) { .pf-post, .pf-btn, .pf-like { transition: none; animation: none; } }
+.dk-refull { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 700; background: rgba(10,10,14,.85); border: 1px solid rgba(107,140,255,.6); border-radius: 999px; padding: 9px 18px; color: #cdd6ff; font: 700 12.5px "Montserrat", sans-serif; cursor: pointer; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: pf-menuin .18s cubic-bezier(.2,.7,.2,1); box-shadow: 0 8px 28px rgba(0,0,0,.5); }
+.dk-refull:hover { background: rgba(107,140,255,.25); color: #fff; }
+
+/* ---- UX1: la card perfecta ---- */
+.pf-post-h .pf-ava { width: 40px; height: 46px; }
+.pf-post-t { font-size: 16px; margin: 10px 0 5px; }
+.pf-post .pf-post-b { font-size: 14.5px; line-height: 1.55; white-space: normal; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.pf-mas { display: inline-block; margin-top: 7px; color: #8a8f98; font: 700 12.5px "Montserrat", sans-serif; }
+.pf-post:hover .pf-mas { color: #e9ebf0; }
+.pf-fact { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; color: #8a8f98; font: 700 12px "Montserrat", sans-serif; cursor: pointer; padding: 4px 6px; border-radius: 8px; transition: color .12s, background .12s; }
+.pf-fact:hover { color: #e9ebf0; background: rgba(255,255,255,.06); }
+.pf-fact .pf-ic { width: 15px; height: 15px; }
+@media (hover: hover) and (pointer: fine) {
+  .pf-post .pf-post-f { opacity: .6; transition: opacity .15s; }
+  .pf-post:hover .pf-post-f, .pf-post:focus-within .pf-post-f { opacity: 1; }
+}
+
+/* ---- UX1: composer plegado ---- */
+.pf-comp.pf-fold { padding: 13px 16px; cursor: text; }
+.pf-foldline { display: none; width: 100%; text-align: left; background: none; border: 0; color: #6b7079; font: 400 16.5px "Montserrat", sans-serif; padding: 2px; cursor: text; }
+.pf-fold .pf-foldline { display: block; }
+.pf-compwrap { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows .2s cubic-bezier(.2,.7,.2,1), opacity .16s; }
+.pf-compin { overflow: hidden; min-height: 0; }
+.pf-fold .pf-compwrap { grid-template-rows: 0fr; opacity: 0; }
+
+/* ---- UX1: hilos de comentarios ---- */
+.pf-cmt { border-left: 0; padding: 12px 0 2px 0; margin-top: 0; }
+.pf-cmt-kids { margin-left: 13px; padding-left: 13px; border-left: 2px solid rgba(255,255,255,.1); }
+.pf-cmt-kids .pf-cmt-kids .pf-cmt-kids .pf-cmt-kids .pf-cmt-kids .pf-cmt-kids { margin-left: 0; padding-left: 0; border-left: 0; }
+.pf-vermas { display: block; width: 100%; margin: 10px 0 4px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 11px; color: #b9bdc7; font: 700 13px "Montserrat", sans-serif; cursor: pointer; transition: border-color .12s, color .12s; }
+.pf-vermas:hover { border-color: rgba(107,140,255,.5); color: #fff; }
+
+/* ---- UX1: skeletons ---- */
+.pf-sk { display: block; background: rgba(255,255,255,.055); border-radius: 8px; position: relative; overflow: hidden; }
+.pf-sk::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.05), transparent); animation: pf-skb 1.3s infinite; }
+@keyframes pf-skb { to { transform: translateX(100%); } }
+.pf-skcard { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 16px 18px; margin: 0 0 18px; }
+.pf-skrow { display: flex; align-items: center; gap: 11px; margin: 0 0 12px; }
+.pf-sk-ava { width: 36px; height: 42px; border-radius: 10px; flex: none; }
+.pf-sk-line { height: 9px; margin: 0 0 9px; border-radius: 5px; }
+.pf-skrow .pf-sk-line { margin: 0; }
+.pf-sk-chip { width: 86px; height: 30px; border-radius: 999px; }
+.pf-sk-tile { aspect-ratio: 16 / 9; border-radius: 12px; }
+@media (prefers-reduced-motion: reduce) { .pf-sk::after { animation: none; } .pf-compwrap { transition: none; } }

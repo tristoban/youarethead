@@ -51,6 +51,7 @@
   }
   function skull() { return '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2C7.3 2 4 5.4 4 9.8c0 2.2.9 3.9 2.4 5.2.3.3.6.7.6 1.2V18c0 1 .8 1.8 1.8 1.8h.4v-1.6h1.6v1.6h1.6v-1.6h1.6v1.6h.4c1 0 1.8-.8 1.8-1.8v-1.8c0-.5.3-.9.6-1.2C19.1 13.7 20 12 20 9.8 20 5.4 16.7 2 12 2zM8.6 11.3a1.7 1.7 0 110-3.4 1.7 1.7 0 010 3.4zm6.8 0a1.7 1.7 0 110-3.4 1.7 1.7 0 010 3.4zM12 12.4l1 2h-2l1-2z"/></svg>'; }
   function likeBtn(p) { return '<button class="pf-like' + (p.liked ? " on" : "") + '" data-like="' + p.id + '" type="button" title="Me cala">' + skull() + "<span>" + (p.nlik || 0) + "</span></button>"; }
+  function cmtBtn(n) { return '<button class="pf-fact" data-cmt type="button" title="Comentarios">' + ic("chat") + "<span>" + (n || 0) + "</span></button>"; }
   function canDel(nick) { return !!me && (me.admin === true || (!!me.nick && me.nick === nick)); }
   function delBtnPost(p) { return canDel(p.nick) ? '<button class="pf-del" data-delpost="' + p.id + '" type="button" title="Borrar posteo">' + ic("trash") + "</button>" : ""; }
   function delBtnCmt(c) { return canDel(c.nick) ? '<button class="pf-del" data-delcomment="' + c.id + '" type="button" title="Borrar comentario">' + ic("trash") + "</button>" : ""; }
@@ -104,7 +105,7 @@
     POLLS[id] = { opts: q.opts, votos: d.votos, total: d.total, mi: d.mi };
     document.querySelectorAll('[data-pollbox="' + id + '"]').forEach((el) => { const tmp = document.createElement("div"); tmp.innerHTML = pollHTML({ id: id, poll: POLLS[id] }); if (tmp.firstChild) el.replaceWith(tmp.firstChild); });
   }
-  function shareBtn(p) { return '<button class="pf-shr" data-share="' + p.id + '" data-sht="' + esc(p.title || "") + '" type="button" title="Compartir">' + ic("share") + "<span>Compartir</span></button>"; }
+  function shareBtn(p) { return '<button class="pf-shr" data-share="' + p.id + '" data-sht="' + esc(p.title || "") + '" type="button" title="Compartir">' + ic("share") + "</button>"; }
   async function sharePost(btn) {
     const id = btn.getAttribute("data-share");
     const url = location.origin + "/p/" + id;
@@ -358,7 +359,7 @@
     root.querySelector("#pf-tabmas").onclick = () => { const s = root.querySelector("#pf-sheet"); if (s) s.hidden = false; };
     root.querySelector("#pf-sheetbg").onclick = closeSheet;
     root.querySelector("#pf-sheetx").onclick = closeSheet;
-    root.querySelectorAll(".pf-sheet-i[data-act]").forEach((b) => b.onclick = () => { const a = b.getAttribute("data-act"); closeSheet(); if (a === "postear") { setView("feed"); const t = root.querySelector("#pf-post"); if (t) t.focus(); } else if (a === "chat") setView("chat"); else if (a === "amigos") setView("amigos"); });
+    root.querySelectorAll(".pf-sheet-i[data-act]").forEach((b) => b.onclick = () => { const a = b.getAttribute("data-act"); closeSheet(); if (a === "postear") { setView("feed"); const c = root.querySelector("#pf-comp"); if (c) c.classList.remove("pf-fold"); const t = root.querySelector("#pf-post"); if (t) t.focus(); } else if (a === "chat") setView("chat"); else if (a === "amigos") setView("amigos"); });
     pollNotifs(); rt.push(setInterval(pollNotifs, 25000));
     api("/api/img/cfg", AH).then(({ d }) => { IMG_ON = !!(d && d.on); }).catch(() => {});
     if (!window.__popWired) { window.__popWired = true; window.addEventListener("popstate", () => { if (me) rutear(); }); }
@@ -390,18 +391,27 @@
     else viewCuenta();
   }
 
+  /* ---------- UX1: skeletons ---------- */
+  function skLine(w, h2) { return '<span class="pf-sk pf-sk-line" style="width:' + w + '%' + (h2 ? ";height:" + h2 + "px" : "") + '"></span>'; }
+  function skPost() { return '<div class="pf-skcard"><div class="pf-skrow"><span class="pf-sk pf-sk-ava"></span>' + skLine(34) + "</div>" + skLine(70) + skLine(96) + skLine(58) + "</div>"; }
+  function skFeed(n) { let h = ""; for (let i = 0; i < (n || 4); i++) h += skPost(); return '<div class="pf-skwrap" aria-hidden="true">' + h + "</div>"; }
+  function skPostFull() { return '<div class="pf-skwrap" aria-hidden="true"><div class="pf-skcard"><div class="pf-skrow"><span class="pf-sk pf-sk-ava"></span>' + skLine(30) + "</div>" + skLine(85, 13) + skLine(97) + skLine(94) + skLine(40) + "</div>" + skPost() + skPost() + "</div>"; }
+  function skPerfil() { return '<div class="pf-skwrap" aria-hidden="true"><span class="pf-sk" style="display:block;height:130px;border-radius:16px"></span><div class="pf-skrow" style="margin-top:14px"><span class="pf-sk pf-sk-ava" style="width:74px;height:84px;border-radius:14px"></span>' + skLine(28, 14) + "</div>" + skLine(46) + skLine(64) + '<div class="pf-skrow" style="margin-top:12px;gap:8px"><span class="pf-sk pf-sk-chip"></span><span class="pf-sk pf-sk-chip"></span><span class="pf-sk pf-sk-chip"></span><span class="pf-sk pf-sk-chip"></span></div>' + skPost() + skPost() + "</div>"; }
+  function skGrid(n) { let h = ""; for (let i = 0; i < (n || 6); i++) h += '<span class="pf-sk pf-sk-tile"></span>'; return '<div class="pf-skwrap" aria-hidden="true"><div class="pf-eskgrid">' + h + "</div></div>"; }
+  function skRows(n) { let h = ""; for (let i = 0; i < (n || 5); i++) h += '<div class="pf-skrow"><span class="pf-sk pf-sk-ava" style="width:30px;height:34px"></span>' + skLine(22 + ((i * 19) % 46)) + "</div>"; return '<div class="pf-skwrap" aria-hidden="true">' + h + "</div>"; }
+
   /* ---------- Feed ---------- */
   function postHTML(p) {
     const raw = p.body || "";
-    const snip = raw ? (raw.length > 220 ? esc(raw.slice(0, 220)).replace(/\n/g, " ") + "…" : esc(raw).replace(/\n/g, " ")) : "";
-    const nc = p.ncom || 0;
+    const largo = raw.length > 420 || (raw.match(/\n/g) || []).length >= 6;
+    const snip = raw ? (raw.length > 420 ? esc(raw.slice(0, 420)).replace(/\n/g, " ") + "…" : esc(raw).replace(/\n/g, " ")) : "";
     return '<article class="pf-post" data-post="' + p.id + '">' +
       '<div class="pf-post-h"><span class="pf-ava">' + avaPic(p.avatar, headFor(p.nick)) + "</span>" +
-      '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div>' + topicChip(p) + '<span class="pf-code" title="código del posteo">$' + p.id + "</span></div>" +
+      '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div>' + topicChip(p) + "</div>" +
       (p.title ? '<h3 class="pf-post-t">' + esc(p.title) + "</h3>" : "") +
-      (snip ? '<p class="pf-post-b">' + snip + "</p>" : "") +
+      (snip ? '<p class="pf-post-b">' + snip + "</p>" + (largo ? '<span class="pf-mas">ver más</span>' : "") : "") +
       imgsHTML(p) + pollHTML(p) +
-      '<div class="pf-post-f">' + likeBtn(p) + '<span class="pf-cnt">' + nc + (nc === 1 ? " comentario" : " comentarios") + "</span>" + shareBtn(p) + '<button class="pf-dots" data-dots="' + p.id + '" data-dnick="' + esc(p.nick) + '" type="button" title="Más opciones">⋯</button>' + "</div>" +
+      '<div class="pf-post-f">' + likeBtn(p) + cmtBtn(p.ncom) + shareBtn(p) + '<button class="pf-dots" data-dots="' + p.id + '" data-dnick="' + esc(p.nick) + '" type="button" title="Más opciones">⋯</button>' + "</div>" +
       "</article>";
   }
   function cerrarMenus() { const e = document.getElementById("pf-menu"); if (e) e.remove(); }
@@ -410,7 +420,7 @@
     cerrarMenus();
     const m = document.createElement("div");
     m.className = "pf-menu"; m.id = "pf-menu";
-    let h = '<button data-mcopy type="button">🔗 Copiar link</button>';
+    let h = '<button data-mcopy type="button">🔗 Copiar link</button><button data-mcode type="button">$ Copiar $' + id + "</button>";
     if (cur === "user" && me && me.nick === nick) h += '<button data-mpin type="button">📌 ' + (me.pinned === id ? "Quitar fijado" : "Fijar arriba") + "</button>";
     if (canDel(nick)) h += '<button data-mdel class="rojo" type="button">🗑 Borrar</button>';
     m.innerHTML = h;
@@ -419,6 +429,7 @@
     m.style.left = Math.max(8, Math.min(r.left - 60, window.innerWidth - 190)) + "px";
     m.style.top = Math.min(r.bottom + 6, window.innerHeight - m.offsetHeight - 10) + "px";
     m.querySelector("[data-mcopy]").onclick = async () => { try { await navigator.clipboard.writeText(location.origin + "/p/" + id); toast("Link copiado. Repartilo."); } catch (_) {} cerrarMenus(); };
+    m.querySelector("[data-mcode]").onclick = async () => { try { await navigator.clipboard.writeText("$" + id); toast("Copiado: $" + id + ". Pegalo en un posteo para citar."); } catch (_) {} cerrarMenus(); };
     const mp = m.querySelector("[data-mpin]");
     if (mp) mp.onclick = async () => { const nuevo = me.pinned === id ? null : id; const { r: rr } = await api("/api/hub/pin-post", { method: "POST", headers: JH, body: JSON.stringify({ id: nuevo }) }); cerrarMenus(); if (rr.ok) { me.pinned = nuevo; toast(nuevo ? "Fijado arriba de tu perfil." : "Ya no está fijado."); viewUser(me.nick); } };
     const md = m.querySelector("[data-mdel]");
@@ -435,18 +446,21 @@
     body().innerHTML =
       '<div id="pf-carousel" class="pf-carousel"></div>' +
       '<div class="pf-srch"><input id="pf-q" maxlength="60" placeholder="Buscar posteos y gente…" autocomplete="off" /><button class="pf-btn pf-mini" id="pf-qgo">Buscar</button></div>' +
-      '<div class="pf-comp">' +
+      '<div class="pf-comp pf-fold" id="pf-comp">' +
+        '<button class="pf-foldline" id="pf-foldgo" type="button">¿Qué está pasando en tu cabeza?</button>' +
+        '<div class="pf-compwrap"><div class="pf-compin">' +
         '<input class="pf-cti" id="pf-ttl" maxlength="120" placeholder="Título de tu posteo" />' +
         '<textarea id="pf-post" maxlength="2000" placeholder="Texto (opcional). @ para nombrar, # para temas, $ para citar otro posteo."></textarea>' +
         '<div class="pf-tchips" id="pf-tchips">' + TOPIC_LIST.map((t) => '<button type="button" class="pf-tchip" data-tc="' + t + '">' + t + "</button>").join("") + "</div>" +
         '<div id="pf-poll" class="pf-pollc" style="display:none"></div>' +
         '<div id="pf-imgs" class="pf-attach" style="display:none"></div>' +
         '<div class="pf-crow"><button class="pf-ctool" id="pf-addpoll" type="button">+ Encuesta</button><button class="pf-ctool" id="pf-addimg" type="button" style="display:none">+ Fotos</button><input type="file" id="pf-file" accept="image/jpeg,image/png,image/webp" multiple style="display:none" /><span class="pf-msg" id="pf-pmsg"></span><button class="pf-btn pf-spin" id="pf-pub">Publicar</button></div>' +
+        "</div></div>" +
       "</div>" +
       '<div class="pf-fchips" id="pf-fchips"><button class="pf-tchip on" data-ft="">todos</button>' + TOPIC_LIST.map((t) => '<button class="pf-tchip" data-ft="' + t + '">' + t + "</button>").join("") + "</div>" +
       '<button id="pf-new" class="pf-newpill" type="button" style="display:none"></button>' +
       '<div id="pf-pdd"></div>' +
-      '<div id="pf-feed"><p class="pf-dimc">Cargando…</p></div>';
+      '<div id="pf-feed">' + skFeed(4) + "</div>";
     const qfor = () => {
       const ps = [];
       if (scope === "amigos") ps.push("scope=amigos");
@@ -474,6 +488,8 @@
     }
     load(); mountCarousel(); vt.push(setInterval(() => { if (!document.hidden) checkNew(); }, 12000));
     body().querySelector("#pf-new").onclick = () => load();
+    const compEl = body().querySelector("#pf-comp");
+    body().querySelector("#pf-foldgo").onclick = () => { compEl.classList.remove("pf-fold"); const tx = body().querySelector("#pf-post"); if (tx) tx.focus(); };
     root.querySelector("#pf-chead").querySelectorAll("[data-s]").forEach((b) => { b.onclick = () => { scope = b.getAttribute("data-s"); root.querySelectorAll("#pf-chead [data-s]").forEach((x) => x.classList.remove("on")); b.classList.add("on"); load(); }; });
     body().querySelectorAll("#pf-fchips [data-ft]").forEach((b) => b.onclick = () => { topic = b.getAttribute("data-ft") || ""; body().querySelectorAll("#pf-fchips [data-ft]").forEach((x) => x.classList.toggle("on", x === b)); load(); });
     const qEl = body().querySelector("#pf-q");
@@ -562,7 +578,7 @@
     clearView(); cur = "feed";
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === "feed"));
     chead("Tema: " + esc(t));
-    body().innerHTML = '<div id="pf-feed"><p class="pf-dimc">Cargando…</p></div>';
+    body().innerHTML = '<div id="pf-feed">' + skFeed(3) + "</div>";
     api("/api/social/feed?topic=" + encodeURIComponent(t), AH).then(({ d }) => {
       const box = body().querySelector("#pf-feed"); if (!box) return;
       const posts = (d && d.posts) || [];
@@ -574,7 +590,7 @@
     clearView(); cur = "buscar";
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
     chead("Buscar");
-    body().innerHTML = '<div class="pf-srch"><input id="bs-q" maxlength="60" value="' + esc(q) + '" autocomplete="off" /><button class="pf-btn pf-mini" id="bs-go">Buscar</button></div><div id="bs-res"><p class="pf-dimc">Buscando…</p></div>';
+    body().innerHTML = '<div class="pf-srch"><input id="bs-q" maxlength="60" value="' + esc(q) + '" autocomplete="off" /><button class="pf-btn pf-mini" id="bs-go">Buscar</button></div><div id="bs-res">' + skFeed(2) + "</div>";
     const inp = body().querySelector("#bs-q");
     const go = () => { const v = inp.value.trim(); if (v.length >= 2) viewSearch(v); };
     body().querySelector("#bs-go").onclick = go;
@@ -592,7 +608,7 @@
     clearView(); cur = "feed";
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === "feed"));
     chead("#" + esc(tag));
-    body().innerHTML = '<div id="pf-feed"><p class="pf-dimc">Cargando…</p></div>';
+    body().innerHTML = '<div id="pf-feed">' + skFeed(3) + "</div>";
     api("/api/social/feed?tag=" + encodeURIComponent(tag), AH).then(({ d }) => {
       const box = body().querySelector("#pf-feed"); if (!box) return;
       const posts = (d && d.posts) || [];
@@ -600,16 +616,18 @@
     });
   }
 
-  function commentTree(comments) {
+  function commentTree(comments, limit) {
     const byParent = {};
     comments.forEach((c) => { const k = c.parent || 0; (byParent[k] = byParent[k] || []).push(c); });
     function render(parent, depth) {
-      return (byParent[parent] || []).map((c) =>
-        '<div class="pf-cmt" style="margin-left:' + Math.min(depth, 5) * 18 + 'px">' +
+      let lista = byParent[parent] || [];
+      if (parent === 0 && limit) lista = lista.slice(0, limit);
+      return lista.map((c) =>
+        '<div class="pf-cmt">' +
           '<div class="pf-cmt-h"><span class="pf-ava pf-ava-sm">' + avaPic(c.avatar, headFor(c.nick)) + '</span><div class="pf-cmt-meta">' + uname(c.nick) + "<span>" + cuando(c.t) + "</span></div></div>" +
           '<div class="pf-cmt-b">' + rich(c.body) + "</div>" +
           '<div class="pf-cmt-f"><button class="pf-like pf-like-sm' + (c.liked ? " on" : "") + '" data-clike="' + c.id + '" type="button" title="Me cala">' + skull() + "<span>" + (c.nlik || 0) + '</span></button><a class="pf-reply" data-reply="' + c.id + '">Responder</a>' + delBtnCmt(c) + "</div>" +
-          render(c.id, depth + 1) +
+          ((byParent[c.id] || []).length ? '<div class="pf-cmt-kids">' + render(c.id, depth + 1) + "</div>" : "") +
         "</div>"
       ).join("");
     }
@@ -621,7 +639,8 @@
     setUrl("/p/" + Number(id));
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
     chead("Posteo");
-    body().innerHTML = '<p class="pf-dimc">Cargando…</p>';
+    const expandir = !!window.__expandCmts; window.__expandCmts = false;
+    body().innerHTML = skPostFull();
     const { r, d } = await api("/api/social/post?id=" + id, AH);
     if (!r.ok || !d || !d.ok) { body().innerHTML = '<p class="pf-empty">Ese posteo no existe.</p>'; return; }
     const p = d.post, comments = d.comments || [];
@@ -629,22 +648,30 @@
       '<a class="pf-back2" id="pp-back">&#8592; volver al feed</a>' +
       '<article class="pf-postfull">' +
         '<div class="pf-post-h"><span class="pf-ava">' + avaPic(p.avatar, headFor(p.nick)) + "</span>" +
-        '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + '</span></div><span class="pf-code">$' + p.id + "</span></div>" +
+        '<div class="pf-post-meta">' + uname(p.nick) + '<span>@' + esc(p.nick) + " · " + cuando(p.t) + "</span></div></div>" +
         (p.title ? '<h2 class="pf-postfull-t">' + esc(p.title) + "</h2>" : "") +
         (p.body ? '<div class="pf-postfull-b">' + rich(p.body) + "</div>" : "") +
         imgsHTML(p) + pollHTML(p) +
-        '<div class="pf-post-f" style="margin-top:14px">' + likeBtn(p) + shareBtn(p) + '<button class="pf-dots" data-dots="' + p.id + '" data-dnick="' + esc(p.nick) + '" type="button" title="Más opciones">⋯</button>' + "</div>" +
+        '<div class="pf-post-f" style="margin-top:14px">' + likeBtn(p) + cmtBtn(comments.length) + shareBtn(p) + '<button class="pf-dots" data-dots="' + p.id + '" data-dnick="' + esc(p.nick) + '" type="button" title="Más opciones">⋯</button>' + "</div>" +
       "</article>" +
       '<div class="pf-h">Comentarios</div>' +
       '<div class="pf-comp pf-comp-c"><textarea id="pp-ctext" maxlength="1000" placeholder="Sumate al hilo… (@ # $)"></textarea><div class="pf-crow"><span class="pf-msg" id="pp-cmsg"></span><button class="pf-btn pf-spin" id="pp-csend">Comentar</button></div></div>' +
       '<div id="pp-comments"></div>';
     const cbox = body().querySelector("#pp-comments");
-    cbox.innerHTML = comments.length ? commentTree(comments) : '<p class="pf-empty">Sin comentarios. Arrancá el hilo.</p>';
+    const tops = comments.filter((c) => !c.parent);
+    function pintaCmts(todos) {
+      cbox.innerHTML = comments.length
+        ? commentTree(comments, todos ? 0 : 3) + (!todos && tops.length > 3 ? '<button class="pf-vermas" id="pp-vermas" type="button">Ver los ' + comments.length + " comentarios</button>" : "")
+        : '<p class="pf-empty">Sin comentarios. Arrancá el hilo.</p>';
+      const vm = cbox.querySelector("#pp-vermas"); if (vm) vm.onclick = () => pintaCmts(true);
+    }
+    pintaCmts(expandir);
+    const cfo = body().querySelector(".pf-postfull [data-cmt]"); if (cfo) cfo.onclick = () => { const t = body().querySelector("#pp-ctext"); if (t) t.focus(); };
     body().querySelector("#pp-back").onclick = () => setView("feed");
     let replyTo = null;
     const cmsg = body().querySelector("#pp-cmsg"), ctext = body().querySelector("#pp-ctext");
     cbox.addEventListener("click", (e) => { const rb = e.target.closest ? e.target.closest("[data-reply]") : null; if (rb) { replyTo = Number(rb.getAttribute("data-reply")); ctext.focus(); cmsg.textContent = "Respondiendo en el hilo…"; } });
-    body().querySelector("#pp-csend").onclick = async () => { cmsg.textContent = "..."; const { r: rr, d: dd } = await api("/api/social/comment", { method: "POST", headers: JH, body: JSON.stringify({ postId: id, parentId: replyTo, body: ctext.value }) }); if (rr.ok) { ctext.value = ""; replyTo = null; cmsg.textContent = ""; viewPost(id); } else cmsg.textContent = (dd && dd.message) || "No se pudo."; };
+    body().querySelector("#pp-csend").onclick = async () => { cmsg.textContent = "..."; const { r: rr, d: dd } = await api("/api/social/comment", { method: "POST", headers: JH, body: JSON.stringify({ postId: id, parentId: replyTo, body: ctext.value }) }); if (rr.ok) { ctext.value = ""; replyTo = null; cmsg.textContent = ""; toast("Comentario publicado."); window.__expandCmts = true; viewPost(id); } else cmsg.textContent = (dd && dd.message) || "No se pudo."; };
   }
 
   /* ---------- El Escritorio (S.O. de perfil) ---------- */
@@ -1251,6 +1278,24 @@
     };
     const dcB = S.querySelector("#dk-dchat");
     if (dcB) dcB.onclick = () => winDeskChat();
+    function pillRefull() {
+      if (S.querySelector("#dk-refull")) return;
+      const b = document.createElement("button");
+      b.id = "dk-refull"; b.className = "dk-refull"; b.type = "button"; b.textContent = "⛶ Volver a pantalla completa";
+      b.onclick = () => { b.remove(); if (S.requestFullscreen) S.requestFullscreen().catch(() => {}); };
+      S.appendChild(b);
+      setTimeout(() => { if (b.parentNode) b.remove(); }, 20000);
+    }
+    window.__dkPillRefull = pillRefull;
+    if (!window.__refullWired) {
+      window.__refullWired = true;
+      document.addEventListener("fullscreenchange", () => {
+        if (document.fullscreenElement) { const p = document.getElementById("dk-refull"); if (p) p.remove(); return; }
+        if (cur !== "desk") return;
+        const S2 = document.getElementById("dk-s");
+        if (S2 && S2.querySelector(".dk-appwin") && window.__dkPillRefull) setTimeout(window.__dkPillRefull, 250);
+      });
+    }
     async function pollDesk() {
       if (document.hidden || dragging) return;
       const res = await api("/api/desktop?nick=" + encodeURIComponent(nick) + "&poll=1", AH);
@@ -1478,7 +1523,7 @@
     setUrl("/demon/" + encodeURIComponent(nick));
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
     chead("Perfil");
-    body().innerHTML = '<p class="pf-dimc">Cargando…</p>';
+    body().innerHTML = skPerfil();
     const { r, d } = await api("/api/social/perfil?nick=" + encodeURIComponent(nick), AH);
     if (!r.ok || !d || !d.ok) { body().innerHTML = '<p class="pf-empty">No se encontró ese perfil.</p>'; return; }
     const p = d.perfil, acc = (typeof p.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(p.accent)) ? p.accent : "var(--pf-acc)";
@@ -1546,7 +1591,7 @@
   /* ---------- Escritorios (directorio estilo Twitch) ---------- */
   async function viewEscritorios() {
     chead("Escritorios");
-    body().innerHTML = '<p class="pf-dimc">Tocando timbres…</p>';
+    body().innerHTML = skGrid(6);
     const { d } = await api("/api/escritorios", AH);
     if (!d || !d.ok) { body().innerHTML = '<p class="pf-empty">No se pudo cargar el barrio.</p>'; return; }
     const todos = d.escritorios || [];
@@ -1576,7 +1621,7 @@
   /* ---------- Amigos ---------- */
   function viewAmigos() {
     chead("Amigos");
-    body().innerHTML = '<div class="pf-row"><input class="pf-input" id="a-q" maxlength="14" placeholder="buscar por nick…" /><button class="pf-btn" id="a-go">Buscar</button></div><div id="a-res"></div><div id="a-sol"></div><h3 class="pf-h">Tus amigos</h3><div id="a-list"><p class="pf-dimc">Cargando…</p></div>';
+    body().innerHTML = '<div class="pf-row"><input class="pf-input" id="a-q" maxlength="14" placeholder="buscar por nick…" /><button class="pf-btn" id="a-go">Buscar</button></div><div id="a-res"></div><div id="a-sol"></div><h3 class="pf-h">Tus amigos</h3><div id="a-list">' + skRows(4) + "</div>";
     async function load() {
       const { d } = await api("/api/social/amigos", AH); if (!d || !d.ok) return;
       const sol = body().querySelector("#a-sol");
@@ -1604,7 +1649,7 @@
   function viewMsgs() {
     chead("Mensajes", '<div class="pf-row" style="padding:0 18px 12px"><button class="pf-btn pf-mini" id="m-new">+ Nuevo grupo</button><button class="pf-btn ghost pf-mini" id="m-amigos">Amigos</button></div>');
     root.querySelector("#m-amigos").onclick = () => setView("amigos");
-    body().innerHTML = '<div class="pf-dm"><div class="pf-dml" id="m-list"><p class="pf-dimc">Cargando…</p></div><div id="m-conv"><p class="pf-dimc">Elegí un amigo o grupo.</p></div></div>';
+    body().innerHTML = '<div class="pf-dm"><div class="pf-dml" id="m-list">' + skRows(4) + '</div><div id="m-conv"><p class="pf-dimc">Elegí un amigo o grupo.</p></div></div>';
     let con = window.__dmOpen || null, g = null, maxId = 0; window.__dmOpen = null;
     function mark(b) { body().querySelectorAll(".pf-dmf").forEach((x) => x.classList.remove("on")); if (b) b.classList.add("on"); }
     async function loadList() {
@@ -1757,7 +1802,7 @@
   }
   async function viewNotifs() {
     chead("Notificaciones");
-    body().innerHTML = '<div id="pf-notifs"><p class="pf-dimc">Cargando…</p></div>';
+    body().innerHTML = '<div id="pf-notifs">' + skRows(6) + "</div>";
     const { d } = await api("/api/notifs", AH);
     const box = body().querySelector("#pf-notifs"); if (!box) return;
     const items = (d && d.items) || [];
