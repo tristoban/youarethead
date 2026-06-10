@@ -296,6 +296,7 @@ export async function initDb(db: Db): Promise<void> {
     );
   `);
   await db.query(`CREATE INDEX IF NOT EXISTS desktop_user_idx ON desktop_items (user_id, parent_id);`);
+  await db.query(`CREATE TABLE IF NOT EXISTS desktop_stats (user_id BIGINT PRIMARY KEY, visitas BIGINT NOT NULL DEFAULT 0);`);
   const mp = await db.query('SELECT x, y, v FROM mural_px');
   for (const r of mp.rows) {
     const x = Number(r.x), y = Number(r.y), v = Number(r.v);
@@ -601,37 +602,60 @@ export function buildApp(db: Db): FastifyInstance {
   }
   const imgRate = new Map<number, number[]>();
 
-  // ---- El Escritorio: catálogo, trofeos calculados y helpers ----
+  // ---- El Escritorio: catálogo, stats vivas, presencia, trofeos y helpers ----
   const DESK_APPS: readonly string[] = ['tetristo', 'parpadeo', 'laberinto', 'chat', 'boton', 'mural', 'pueblo', 'feed'];
-  const DESK_TYPES: readonly string[] = ['folder', 'note', 'shortcut', 'trophy', 'photo'];
+  const DESK_TYPES: readonly string[] = ['folder', 'note', 'shortcut', 'trophy', 'photo', 'widget', 'tv'];
+  const DESK_WIDGETS: readonly string[] = ['reloj', 'karma', 'racha', 'top', 'visitas'];
+  const DESK_GAMES: readonly string[] = ['tetristo', 'parpadeo', 'laberinto'];
   const GAME_LABEL: Record<string, string> = { tetristo: 'TeTristo', parpadeo: 'No Parpadees', laberinto: 'El Laberinto' };
   const deskRate = new Map<number, number>();
+  const deskPresence = new Map<number, Map<string, number>>();
+  function deskMirando(uid: number, key: string): number {
+    const now = Date.now();
+    let m = deskPresence.get(uid);
+    if (!m) { m = new Map(); deskPresence.set(uid, m); }
+    m.set(key, now);
+    let n = 0;
+    for (const [k, t] of m) { if (now - t > 15000) m.delete(k); else n++; }
+    return n;
+  }
+  function ytId(url: string): string {
+    const m = /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{6,20})/.exec(url);
+    return m ? (m[1] ?? '') : '';
+  }
   interface Trofeo { kind: string; label: string }
-  async function computeTrofeos(uid: number, nick: string): Promise<Trofeo[]> {
-    const out: Trofeo[] = [];
+  interface DeskStats { karma: number; racha: number; visitas: number; caido: number; nposts: number; tops: Record<string, { rank: number; best: number }> }
+  async function deskStats(uid: number, nick: string): Promise<DeskStats> {
     const nl = nick.toLowerCase();
-    if (nl === 'tristoban') out.push({ kind: 'fundador', label: 'Fundador' });
-    for (const g of ['tetristo', 'parpadeo', 'laberinto']) {
+    const tops: Record<string, { rank: number; best: number }> = {};
+    for (const g of DESK_GAMES) {
       const best = Number((await db.query('SELECT max(score) AS s FROM scores WHERE game = $1 AND lower(alias) = $2', [g, nl])).rows[0]?.s ?? 0);
       if (!best) continue;
       const up = Number((await db.query('SELECT count(*) AS c FROM (SELECT lower(alias) AS a, max(score) AS s FROM scores WHERE game = $1 GROUP BY 1) t WHERE t.s > $2', [g, best])).rows[0]?.c ?? 0);
-      const rank = up + 1;
-      if (rank <= 3) out.push({ kind: 'top_' + g, label: '#' + rank + ' en ' + (GAME_LABEL[g] ?? g) });
+      tops[g] = { rank: up + 1, best };
     }
-    const st = Number((await db.query('SELECT streak FROM hub_users WHERE id = $1', [uid])).rows[0]?.streak ?? 0);
-    if (st >= 30) out.push({ kind: 'racha30', label: 'Racha 30 días' });
-    else if (st >= 7) out.push({ kind: 'racha7', label: 'Racha 7 días' });
+    const racha = Number((await db.query('SELECT streak FROM hub_users WHERE id = $1', [uid])).rows[0]?.streak ?? 0);
     const kp = Number((await db.query('SELECT count(*) AS c FROM post_likes pl JOIN posts p ON p.id = pl.post_id WHERE p.user_id = $1', [uid])).rows[0]?.c ?? 0);
     const kc = Number((await db.query('SELECT count(*) AS c FROM comment_likes cl JOIN comments c ON c.id = cl.comment_id WHERE c.user_id = $1', [uid])).rows[0]?.c ?? 0);
-    const karma = kp + kc;
-    if (karma >= 500) out.push({ kind: 'karma500', label: 'Karma 500' });
-    else if (karma >= 50) out.push({ kind: 'karma50', label: 'Karma 50' });
     const ca = (await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [uid])).rows[0];
-    const cn = ca ? Number(ca.n ?? 0) : 0;
-    if (cn > 0 && cn <= 100) out.push({ kind: 'caido', label: 'Caído N° ' + cn });
-    const np = Number((await db.query('SELECT count(*) AS c FROM posts WHERE user_id = $1', [uid])).rows[0]?.c ?? 0);
-    if (np >= 50) out.push({ kind: 'posts50', label: '50 posteos' });
-    else if (np >= 1) out.push({ kind: 'post1', label: 'Primer posteo' });
+    const nposts = Number((await db.query('SELECT count(*) AS c FROM posts WHERE user_id = $1', [uid])).rows[0]?.c ?? 0);
+    const visitas = Number((await db.query('SELECT visitas FROM desktop_stats WHERE user_id = $1', [uid])).rows[0]?.visitas ?? 0);
+    return { karma: kp + kc, racha, visitas, caido: ca ? Number(ca.n ?? 0) : 0, nposts, tops };
+  }
+  function trofeosDe(st: DeskStats, nick: string): Trofeo[] {
+    const out: Trofeo[] = [];
+    if (nick.toLowerCase() === 'tristoban') out.push({ kind: 'fundador', label: 'Fundador' });
+    for (const g of DESK_GAMES) {
+      const t = st.tops[g];
+      if (t && t.rank <= 3) out.push({ kind: 'top_' + g, label: '#' + t.rank + ' en ' + (GAME_LABEL[g] ?? g) });
+    }
+    if (st.racha >= 30) out.push({ kind: 'racha30', label: 'Racha 30 días' });
+    else if (st.racha >= 7) out.push({ kind: 'racha7', label: 'Racha 7 días' });
+    if (st.karma >= 500) out.push({ kind: 'karma500', label: 'Karma 500' });
+    else if (st.karma >= 50) out.push({ kind: 'karma50', label: 'Karma 50' });
+    if (st.caido > 0 && st.caido <= 100) out.push({ kind: 'caido', label: 'Caído N° ' + st.caido });
+    if (st.nposts >= 50) out.push({ kind: 'posts50', label: '50 posteos' });
+    else if (st.nposts >= 1) out.push({ kind: 'post1', label: 'Primer posteo' });
     return out;
   }
   function deskData(type: string, raw: unknown, muted: boolean): { ok: true; data: Record<string, unknown> } | { ok: false; code: number; error: string; message: string } {
@@ -659,18 +683,39 @@ export function buildApp(db: Db): FastifyInstance {
       if (!url) return { ok: false, code: 400, error: 'bad_url', message: 'Falta la foto.' };
       return { ok: true, data: { url } };
     }
+    if (type === 'widget') {
+      const kind = typeof o.kind === 'string' && DESK_WIDGETS.indexOf(o.kind) >= 0 ? o.kind : '';
+      if (!kind) return { ok: false, code: 400, error: 'bad_widget', message: 'Ese widget no existe.' };
+      if (kind === 'top') {
+        const game = typeof o.game === 'string' && DESK_GAMES.indexOf(o.game) >= 0 ? o.game : 'tetristo';
+        return { ok: true, data: { kind, game } };
+      }
+      return { ok: true, data: { kind } };
+    }
+    if (type === 'tv') {
+      const url = typeof o.url === 'string' ? o.url.trim().slice(0, 300) : '';
+      if (!url) return { ok: true, data: { video: '', t0: 0 } };
+      const vid = ytId(url);
+      if (!vid) return { ok: false, code: 400, error: 'bad_yt', message: 'Ese link no parece de YouTube.' };
+      return { ok: true, data: { video: vid, t0: Date.now() } };
+    }
     return { ok: true, data: {} }; // trophy: data.kind se valida aparte
   }
 
   app.get('/api/desktop', async (req, reply) => {
     reply.header('cache-control', 'no-store');
-    const nick = String(((req.query ?? {}) as { nick?: unknown }).nick ?? '').trim();
+    const qy = (req.query ?? {}) as { nick?: unknown; poll?: unknown };
+    const nick = String(qy.nick ?? '').trim();
     if (!nick) return reply.code(400).send({ ok: false, error: 'bad' });
+    const isPoll = qy.poll === '1';
     const ur = (await db.query('SELECT id, nick, accent, banner FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()])).rows[0];
     if (!ur) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese perfil.' });
     const uid = Number(ur.id);
     const meU = await hubUserBySession(db, req);
     const own = !!meU && meU.id === uid;
+    const viewerKey = meU ? 'u' + meU.id : 'ip' + hashIp(getClientIp(req)).slice(0, 16);
+    const mirando = deskMirando(uid, viewerKey);
+    if (!own && !isPoll) await db.query('INSERT INTO desktop_stats (user_id, visitas) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET visitas = desktop_stats.visitas + 1', [uid]);
     const rows = (await db.query('SELECT id, type, data, x, y, parent_id, hidden, created_at FROM desktop_items WHERE user_id = $1 ORDER BY id ASC LIMIT 200', [uid])).rows;
     const items = rows
       .filter((r) => own || r.hidden !== true)
@@ -679,8 +724,9 @@ export function buildApp(db: Db): FastifyInstance {
     const enRows = new Set(items.filter((i) => i.type === 'photo').map((i) => String((i.data as { url?: unknown }).url ?? '')));
     const fotos: Array<{ url: string; post: number }> = [];
     for (const r of fr) if (Array.isArray(r.images)) for (const u of (r.images as unknown[])) { const s = String(u); if (!enRows.has(s)) fotos.push({ url: s, post: Number(r.id) }); }
-    const trofeos = await computeTrofeos(uid, String(ur.nick ?? ''));
-    return { ok: true, own, items, fotos, trofeos, perfil: { nick: ur.nick, accent: (ur.accent as string | null) ?? null, banner: (ur.banner as string | null) ?? null } };
+    const st = await deskStats(uid, String(ur.nick ?? ''));
+    const trofeos = trofeosDe(st, String(ur.nick ?? ''));
+    return { ok: true, own, items, fotos, trofeos, stats: st, mirando, perfil: { nick: ur.nick, accent: (ur.accent as string | null) ?? null, banner: (ur.banner as string | null) ?? null } };
   });
 
   app.post('/api/desktop/crear', async (req, reply) => {
@@ -699,10 +745,15 @@ export function buildApp(db: Db): FastifyInstance {
     const data = dv.data;
     if (type === 'trophy') {
       const kind = typeof (b.data as { kind?: unknown } | undefined)?.kind === 'string' ? String((b.data as { kind: string }).kind) : '';
-      const earned = await computeTrofeos(u.id, u.nick ?? '');
+      const st = await deskStats(u.id, u.nick ?? '');
+      const earned = trofeosDe(st, u.nick ?? '');
       const tro = earned.find((t) => t.kind === kind);
       if (!tro) return reply.code(400).send({ ok: false, error: 'no_ganado', message: 'Ese trofeo todavía no es tuyo.' });
       data.kind = tro.kind; data.label = tro.label;
+    }
+    if (type === 'tv') {
+      const ya = (await db.query("SELECT 1 FROM desktop_items WHERE user_id = $1 AND type = 'tv' LIMIT 1", [u.id])).rows.length > 0;
+      if (ya) return reply.code(409).send({ ok: false, error: 'ya_tele', message: 'Ya tenés una tele. ¿Para qué querés dos?' });
     }
     if (type === 'photo') {
       const url = String(data.url ?? '');
@@ -758,15 +809,17 @@ export function buildApp(db: Db): FastifyInstance {
     if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
     const row = (await db.query('SELECT type, data FROM desktop_items WHERE id = $1 AND user_id = $2', [id, u.id])).rows[0];
     if (!row) return reply.code(404).send({ ok: false, error: 'not_found' });
+    let dataOut: Record<string, unknown> | null = null;
     if (b.data !== undefined) {
       const type = String(row.type);
-      if (type === 'trophy' || type === 'photo') return reply.code(400).send({ ok: false, error: 'no_editable' });
+      if (type === 'trophy' || type === 'photo' || type === 'widget' || type === 'shortcut') return reply.code(400).send({ ok: false, error: 'no_editable' });
       const dv = deskData(type, b.data, u.muted);
       if (!dv.ok) return reply.code(dv.code).send({ ok: false, error: dv.error, message: dv.message });
       await db.query('UPDATE desktop_items SET data = $3::jsonb WHERE id = $1 AND user_id = $2', [id, u.id, JSON.stringify(dv.data)]);
+      dataOut = dv.data;
     }
     if (typeof b.hidden === 'boolean') await db.query('UPDATE desktop_items SET hidden = $3 WHERE id = $1 AND user_id = $2', [id, u.id, b.hidden]);
-    return { ok: true };
+    return { ok: true, data: dataOut };
   });
 
   app.post('/api/desktop/borrar', async (req, reply) => {

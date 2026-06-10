@@ -601,6 +601,7 @@
     mural: '<path d="M4 4h16v16H4z"/><path d="M9 4v16M15 4v16M4 9h16M4 15h16"/>',
     pueblo: '<path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/>',
     feed: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+    tv: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 3l4 4 4-4"/><circle cx="17.5" cy="11" r="1" fill="currentColor" stroke="none"/>',
   };
   function dkSvg(g, color) { return '<svg viewBox="0 0 24 24" fill="none" stroke="' + (color || "currentColor") + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (DK_GLYPH[g] || DK_GLYPH.note) + "</svg>"; }
   async function viewDesktop(nick) {
@@ -611,12 +612,12 @@
     const { r, d } = await api("/api/desktop?nick=" + encodeURIComponent(nick), AH);
     if (!r.ok || !d || !d.ok) { body().innerHTML = '<p class="pf-empty">No se pudo cargar este escritorio.</p>'; return; }
     const D = d, own = !!d.own, CELL = (root.offsetWidth || 600) <= 680 ? 80 : 100;
-    let zTop = 10, dragging = false;
+    let zTop = 10, dragging = false, STATS = d.stats || {}, MIR = d.mirando || 1;
     const acc = (D.perfil && typeof D.perfil.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(D.perfil.accent)) ? D.perfil.accent : "#6b8cff";
     body().innerHTML =
       '<a class="pf-back2" id="dk-back">&#8592; Perfil de ' + esc(nick) + "</a>" +
-      (own ? '<div class="dk-bar"><button class="pf-btn ghost pf-mini" id="dk-ncar">+ Carpeta</button><button class="pf-btn ghost pf-mini" id="dk-nnota">+ Nota</button><button class="pf-btn ghost pf-mini" id="dk-nacc">+ Acceso</button><button class="pf-btn ghost pf-mini" id="dk-caja">Caja <b id="dk-cajan"></b></button><span class="pf-dimc" id="dk-msg" style="margin-left:auto"></span></div>' : "") +
-      '<div class="dk-surface" id="dk-s"' + (D.perfil && D.perfil.banner ? ' style="background-image:url(\'' + esc(D.perfil.banner) + '\')"' : ' style="background:linear-gradient(135deg,' + acc + '22,#08080b 70%)"') + '><div class="dk-scan"></div></div>';
+      (own ? '<div class="dk-bar"><button class="pf-btn ghost pf-mini" id="dk-ncar">+ Carpeta</button><button class="pf-btn ghost pf-mini" id="dk-nnota">+ Nota</button><button class="pf-btn ghost pf-mini" id="dk-nacc">+ Acceso</button><button class="pf-btn ghost pf-mini" id="dk-nwid">+ Widget</button><button class="pf-btn ghost pf-mini" id="dk-ntv">+ Tele</button><button class="pf-btn ghost pf-mini" id="dk-caja">Caja <b id="dk-cajan"></b></button><span class="pf-dimc" id="dk-msg" style="margin-left:auto"></span></div>' : "") +
+      '<div class="dk-surface" id="dk-s"' + (D.perfil && D.perfil.banner ? ' style="background-image:url(\'' + esc(D.perfil.banner) + '\')"' : ' style="background:linear-gradient(135deg,' + acc + '22,#08080b 70%)"') + '><div class="dk-scan"></div><button class="dk-fsbtn" id="dk-fs" type="button" title="Pantalla completa">⛶</button><span class="dk-pres" id="dk-pres" style="display:none"></span></div>';
     body().querySelector("#dk-back").onclick = () => viewUser(nick);
     const S = body().querySelector("#dk-s");
     const colsN = () => Math.max(3, Math.floor(S.clientWidth / CELL));
@@ -628,6 +629,18 @@
     function freeCell() { const m = ocupado(); m["0_0"] = "sys"; const C = colsN(); for (let y = 0; y < 40; y++) for (let x = 0; x < C; x++) if (!m[x + "_" + y]) return { x: x, y: y }; return { x: 0, y: 0 }; }
     function setCajaN() { const el = body().querySelector("#dk-cajan"); if (el) el.textContent = String(cajaItems().length + trofeosSinPoner().length || ""); }
     function navShortcut(app2) { const a = DK_APPS[app2]; if (!a) return; if (a.v) setView(a.v); else location.href = a.go; }
+    const GAME_LBL = { tetristo: "TeTristo", parpadeo: "No Parpadees", laberinto: "El Laberinto" };
+    function wLabel(it) { const k = String(it.data.kind); if (k === "top") return "Top " + (GAME_LBL[String(it.data.game)] || "TeTristo"); return k === "reloj" ? "Reloj" : k === "karma" ? "Karma" : k === "racha" ? "Racha" : "Visitas"; }
+    function wVal(k, game) {
+      if (k === "reloj") { const t = new Date(); return ("0" + t.getHours()).slice(-2) + ":" + ("0" + t.getMinutes()).slice(-2); }
+      if (k === "karma") return fmt.format(STATS.karma || 0);
+      if (k === "racha") return (STATS.racha || 0) + "d";
+      if (k === "visitas") return fmt.format(STATS.visitas || 0);
+      if (k === "top") { const t = STATS.tops && STATS.tops[game]; return t ? "#" + t.rank : "—"; }
+      return "—";
+    }
+    function updateWidgets() { S.querySelectorAll(".dk-wv").forEach((el) => { el.textContent = wVal(el.getAttribute("data-wk"), el.getAttribute("data-wgame") || "tetristo"); }); }
+    function setPres(n) { MIR = n || 1; const el = S.querySelector("#dk-pres"); if (!el) return; if (MIR >= 2) { el.style.display = ""; el.textContent = "👁 " + MIR + " mirando ahora"; } else el.style.display = "none"; }
     function winKill(key) { const w = S.querySelector('[data-win="' + key + '"]'); if (w) w.remove(); }
     function openWin(key, title, html) {
       winKill(key);
@@ -679,8 +692,33 @@
         else toast((dd && dd.message) || "No se pudo.");
       });
     }
+    function openTv(it) {
+      const vid = String(it.data.video || ""), t0 = Number(it.data.t0 || 0);
+      const start = vid && t0 ? Math.max(0, Math.floor((Date.now() - t0) / 1000)) : 0;
+      const frame = vid
+        ? '<div class="dk-tvf"><iframe src="https://www.youtube-nocookie.com/embed/' + esc(vid) + '?start=' + start + '&autoplay=1&mute=1&rel=0" title="YATA TV" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div><p class="pf-dimc" style="padding:6px 0 0">' + (own ? "Lo que pongas acá lo ven todos los que visiten tu escritorio." : "Sincronizada con este escritorio. Tocá play o sacale el mute si no arranca.") + "</p>"
+        : '<p class="pf-dimc" style="padding:8px 0">' + (own ? "Pegá un link de YouTube y dejá algo sonando para las visitas." : "El dueño no dejó nada puesto. Pura estática.") + "</p>";
+      const ctl = own ? '<div class="dk-fbar" style="margin-top:10px"><input class="pf-input" id="dk-tvu" placeholder="https://youtube.com/watch?v=…" style="flex:1" /><button class="pf-btn pf-mini" id="dk-tvgo">Poner</button>' + (vid ? '<button class="pf-btn ghost pf-mini" id="dk-tvoff">Apagar</button>' : "") + '</div><p class="pf-msg" id="dk-tvm" style="margin:4px 0 0"></p>' : "";
+      const w = openWin("tv" + it.id, "YATA TV", frame + ctl);
+      w.classList.add("dk-tvwin");
+      const go = w.querySelector("#dk-tvgo");
+      if (go) go.onclick = async () => {
+        const m2 = w.querySelector("#dk-tvm"); m2.textContent = "...";
+        const { r: rr, d: dd } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, data: { url: w.querySelector("#dk-tvu").value.trim() } }) });
+        if (rr.ok && dd && dd.data) { it.data = dd.data; refresh(); openTv(it); } else m2.textContent = (dd && dd.message) || "No se pudo.";
+      };
+      const off = w.querySelector("#dk-tvoff");
+      if (off) off.onclick = async () => { const { r: rr, d: dd } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, data: { url: "" } }) }); if (rr.ok) { it.data = (dd && dd.data) || { video: "", t0: 0 }; refresh(); openTv(it); } };
+    }
     function abrir(it) {
       if (it.sys) { const w = openWin("sys", "Mis fotos", fotoThumbs(D.fotos, false)); wireMv(w); return; }
+      if (it.type === "widget") {
+        const extra = own ? '<div class="dk-fbar"><button class="pf-btn ghost pf-mini" id="dk-wg">Guardar en la Caja</button></div>' : "";
+        const w = openWin("w" + it.id, "Widget", '<div class="dk-tro"><b>' + esc(wLabel(it)) + ": " + esc(wVal(String(it.data.kind), String(it.data.game || "tetristo"))) + "</b></div>" + extra);
+        const wg = w.querySelector("#dk-wg"); if (wg) wg.onclick = async () => { const { r: rr } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, hidden: true }) }); if (rr.ok) { it.hidden = true; refresh(); winKill("w" + it.id); } };
+        return;
+      }
+      if (it.type === "tv") { openTv(it); return; }
       if (it.type === "folder") {
         const dentro = D.items.filter((i) => i.parent === it.id).map((i) => ({ url: String(i.data.url || ""), id: i.id }));
         const extra = own ? '<div class="dk-fbar"><button class="pf-btn ghost pf-mini" id="dk-fren">Renombrar</button><button class="pf-btn ghost pf-mini" id="dk-fdel">Tirar carpeta</button></div>' : "";
@@ -712,6 +750,8 @@
       if (it.type === "trophy") return '<span class="dk-g">' + dkSvg("trophy", "#e2b23c") + '</span><i class="dk-l">' + esc(it.data.label || "trofeo") + "</i>";
       if (it.type === "shortcut") { const a = DK_APPS[it.data.app] || { l: "?" }; return '<span class="dk-g">' + dkSvg(String(it.data.app), acc) + '</span><i class="dk-l">' + esc(a.l) + "</i>"; }
       if (it.type === "photo") return '<span class="dk-g dk-gimg"><img src="' + esc(String(it.data.url || "")) + '" alt="" /></span><i class="dk-l">foto</i>';
+      if (it.type === "widget") { const k = String(it.data.kind); return '<span class="dk-wv" data-wk="' + esc(k) + '"' + (it.data.game ? ' data-wgame="' + esc(String(it.data.game)) + '"' : "") + '>—</span><i class="dk-l">' + esc(wLabel(it)) + "</i>"; }
+      if (it.type === "tv") return '<span class="dk-g">' + dkSvg("tv", it.data.video ? "#e25b5b" : null) + '</span><i class="dk-l">' + (it.data.video ? "● EN VIVO" : "YATA TV") + "</i>";
       return "";
     }
     function place(el, x, y) { el.style.left = (x * CELL + 6) + "px"; el.style.top = (y * CELL + 6) + "px"; }
@@ -722,6 +762,7 @@
       list.forEach((it) => {
         const el = document.createElement("button");
         el.type = "button"; el.className = "dk-ico" + (it.sys ? " dk-sys" : "");
+        el.setAttribute("data-id", it.sys ? "sys" : String(it.id));
         el.innerHTML = iconHTML(it);
         place(el, it.x, it.y);
         S.appendChild(el);
@@ -765,8 +806,45 @@
         el.addEventListener("click", () => { if (!dragging && !moved) abrir(it); moved = false; });
       });
       setCajaN();
+      updateWidgets();
     }
     refresh();
+    setPres(MIR);
+    vt.push(setInterval(updateWidgets, 1000));
+    const fsB = S.querySelector("#dk-fs");
+    if (fsB) fsB.onclick = () => {
+      if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); return; }
+      if (S.requestFullscreen) { S.requestFullscreen().catch(() => S.classList.toggle("dk-full")); }
+      else S.classList.toggle("dk-full");
+    };
+    async function pollDesk() {
+      if (document.hidden || dragging) return;
+      const res = await api("/api/desktop?nick=" + encodeURIComponent(nick) + "&poll=1", AH);
+      if (!res.r.ok || !res.d || !res.d.ok) return;
+      const nd = res.d;
+      STATS = nd.stats || STATS; setPres(nd.mirando); D.trofeos = nd.trofeos || D.trofeos;
+      if ((nd.fotos || []).length !== D.fotos.length) D.fotos = nd.fotos || [];
+      const prev = new Map(D.items.map((i) => [i.id, i]));
+      let structural = false;
+      const moves = [];
+      (nd.items || []).forEach((ni) => {
+        const old = prev.get(ni.id);
+        if (!old) { structural = true; return; }
+        prev.delete(ni.id);
+        if (old.hidden !== ni.hidden || old.parent !== ni.parent) structural = true;
+        else if (old.x !== ni.x || old.y !== ni.y) moves.push(ni);
+        if (JSON.stringify(old.data) !== JSON.stringify(ni.data)) {
+          old.data = ni.data;
+          if (old.type === "tv") { if (!own && S.querySelector('[data-win="tv' + ni.id + '"]')) openTv(old); const el = S.querySelector('.dk-ico[data-id="' + ni.id + '"]'); if (el) el.innerHTML = iconHTML(old); }
+          else structural = true;
+        }
+      });
+      if (prev.size) structural = true;
+      if (structural) { D.items = nd.items || []; refresh(); return; }
+      moves.forEach((ni) => { const it = D.items.find((i) => i.id === ni.id); if (it) { it.x = ni.x; it.y = ni.y; const el = S.querySelector('.dk-ico[data-id="' + ni.id + '"]'); if (el) place(el, ni.x, ni.y); } });
+      updateWidgets();
+    }
+    vt.push(setInterval(pollDesk, own ? 12000 : 5000));
     if (own) {
       body().querySelector("#dk-ncar").onclick = async () => {
         const name = window.prompt("Nombre de la carpeta:"); if (!name) return;
@@ -787,11 +865,32 @@
           if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); winKill("nacc"); } else toast((dd && dd.message) || "No se pudo.");
         });
       };
+      body().querySelector("#dk-nwid").onclick = () => {
+        const opts = [["reloj", "Reloj"], ["karma", "Karma"], ["racha", "Racha"], ["visitas", "Visitas"], ["top|tetristo", "Top TeTristo"], ["top|parpadeo", "Top No Parpadees"], ["top|laberinto", "Top Laberinto"]];
+        const w = openWin("nwid", "Widgets", '<div class="dk-apps">' + opts.map((o) => { const ps = o[0].split("|"); return '<button class="dk-app" data-wid="' + o[0] + '" type="button"><span class="dk-wv2">' + esc(wVal(ps[0], ps[1] || "tetristo")) + "</span><i>" + o[1] + "</i></button>"; }).join("") + "</div>");
+        w.querySelectorAll("[data-wid]").forEach((b) => b.onclick = async () => {
+          const ps = b.getAttribute("data-wid").split("|");
+          const fc = freeCell();
+          const data = { kind: ps[0] }; if (ps[1]) data.game = ps[1];
+          const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "widget", data: data, x: fc.x, y: fc.y }) });
+          if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); winKill("nwid"); } else toast((dd && dd.message) || "No se pudo.");
+        });
+      };
+      body().querySelector("#dk-ntv").onclick = async () => {
+        const ya = D.items.find((i) => i.type === "tv");
+        if (ya) {
+          if (ya.hidden) { const { r: rr } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: ya.id, hidden: false }) }); if (rr.ok) { ya.hidden = false; refresh(); } }
+          openTv(ya); return;
+        }
+        const fc = freeCell();
+        const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "tv", data: {}, x: fc.x, y: fc.y }) });
+        if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); openTv(dd.item); } else toast((dd && dd.message) || "No se pudo.");
+      };
       body().querySelector("#dk-caja").onclick = () => {
         const ocultos = cajaItems(), nuevos = trofeosSinPoner();
         let h = "";
         if (nuevos.length) h += '<div class="pf-h" style="padding:0 0 6px">Trofeos ganados</div>' + nuevos.map((t) => '<div class="dk-fila"><span>' + dkSvg("trophy", "#e2b23c") + " " + esc(t.label) + '</span><button class="pf-btn pf-mini" data-tk="' + esc(t.kind) + '">Al escritorio</button></div>').join("");
-        if (ocultos.length) h += '<div class="pf-h" style="padding:8px 0 6px">Guardado</div>' + ocultos.map((i) => '<div class="dk-fila"><span>' + esc(i.type === "trophy" ? (i.data.label || "trofeo") : i.type === "note" ? String(i.data.text || "nota").slice(0, 20) : String(i.data.name || i.type)) + '</span><button class="pf-btn pf-mini" data-sk="' + i.id + '">Sacar</button></div>').join("");
+        if (ocultos.length) h += '<div class="pf-h" style="padding:8px 0 6px">Guardado</div>' + ocultos.map((i) => '<div class="dk-fila"><span>' + esc(i.type === "trophy" ? (i.data.label || "trofeo") : i.type === "note" ? String(i.data.text || "nota").slice(0, 20) : i.type === "widget" ? wLabel(i) : i.type === "tv" ? "YATA TV" : String(i.data.name || i.type)) + '</span><button class="pf-btn pf-mini" data-sk="' + i.id + '">Sacar</button></div>').join("");
         const w = openWin("caja", "La Caja", h || '<p class="pf-dimc" style="padding:8px">Vacía. Todo lo tuyo está a la vista.</p>');
         w.querySelectorAll("[data-tk]").forEach((b) => b.onclick = async () => {
           const fc = freeCell();
