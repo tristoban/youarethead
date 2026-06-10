@@ -176,17 +176,28 @@
 
   let me = null, vt = [], rt = [], cur = "inicio";
   function clearView() { vt.forEach((t) => clearInterval(t)); vt = []; window.YATH_CONV = null; }
+  function setUrl(path) { try { if (location.pathname !== path) history.pushState({}, "", path); } catch (_) {} }
+  function rutear() {
+    const p = location.pathname;
+    let m = p.match(/^\/(?:u|demon)\/([^/]+)\/escritorio$/);
+    if (m) { viewDesktop(decodeURIComponent(m[1])); return; }
+    m = p.match(/^\/(?:u|demon)\/([^/]+)$/);
+    if (m) { viewUser(decodeURIComponent(m[1])); return; }
+    m = p.match(/^\/p\/(\d+)$/);
+    if (m) { viewPost(Number(m[1])); return; }
+    setView("feed");
+  }
 
   async function boot() {
     const params = new URLSearchParams(location.search);
     const oauth = params.get("oauth");
     if (oauth) history.replaceState(null, "", location.pathname);
     if (oauth === "setup") { setupScreen(); return; }
-    const um = location.pathname.match(/^\/u\/(.+)$/);
+    const um = location.pathname.match(/^\/(?:u|demon)\/([^/]+)$/);
     const wantUser = um ? decodeURIComponent(um[1]) : null;
     const pmm = location.pathname.match(/^\/p\/(\d+)$/);
     const wantPost = pmm ? Number(pmm[1]) : null;
-    const dm2 = location.pathname.match(/^\/u\/(.+)\/escritorio$/);
+    const dm2 = location.pathname.match(/^\/(?:u|demon)\/([^/]+)\/escritorio$/);
     const wantDesk = dm2 ? decodeURIComponent(dm2[1]) : null;
     const { d } = await api("/api/hub/me", AH);
     if (!d || !d.ok) { root.innerHTML = '<p class="pf-loading">No responde. Probá en un rato.</p>'; return; }
@@ -349,6 +360,7 @@
     root.querySelectorAll(".pf-sheet-i[data-act]").forEach((b) => b.onclick = () => { const a = b.getAttribute("data-act"); closeSheet(); if (a === "postear") { setView("feed"); const t = root.querySelector("#pf-post"); if (t) t.focus(); } else if (a === "chat") setView("chat"); else if (a === "amigos") setView("amigos"); });
     pollNotifs(); rt.push(setInterval(pollNotifs, 25000));
     api("/api/img/cfg", AH).then(({ d }) => { IMG_ON = !!(d && d.on); }).catch(() => {});
+    if (!window.__popWired) { window.__popWired = true; window.addEventListener("popstate", () => { if (me) rutear(); }); }
     rightRail();
     setView("feed");
   }
@@ -362,6 +374,7 @@
   function body() { return root.querySelector("#pf-body"); }
   function setView(v) {
     clearView(); cur = v;
+    if (me) setUrl("/yata");
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === v));
     root.querySelectorAll(".pf-tabbar [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === v));
     if (v === "feed") viewFeed();
@@ -579,6 +592,7 @@
 
   async function viewPost(id) {
     clearView(); cur = "post"; window.__curPost = Number(id);
+    setUrl("/p/" + Number(id));
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
     chead("Posteo");
     body().innerHTML = '<p class="pf-dimc">Cargando…</p>';
@@ -637,6 +651,7 @@
   function dkSvg(g, color) { return '<svg viewBox="0 0 24 24" fill="none" stroke="' + (color || "currentColor") + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (DK_GLYPH[g] || DK_GLYPH.note) + "</svg>"; }
   async function viewDesktop(nick) {
     clearView(); cur = "desk";
+    setUrl("/demon/" + encodeURIComponent(nick) + "/escritorio");
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
     chead("Escritorio");
     body().innerHTML = '<p class="pf-dimc">Prendiendo el monitor…</p>';
@@ -1390,6 +1405,7 @@
   function badges(p) { return badgeList(p).slice(0, 6).map((b) => '<span class="pf-tag" style="background:' + vhex(b.c) + ';color:#06070d">' + esc(b.t) + "</span>").join(""); }
   async function viewUser(nick) {
     clearView(); cur = "user";
+    setUrl("/demon/" + encodeURIComponent(nick));
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
     chead("Perfil");
     body().innerHTML = '<p class="pf-dimc">Cargando…</p>';
@@ -1431,7 +1447,7 @@
     box.querySelectorAll("[data-pin]").forEach((a) => a.onclick = async () => { const id = Number(a.getAttribute("data-pin")); const { r } = await api("/api/hub/pin-post", { method: "POST", headers: JH, body: JSON.stringify({ id: id || null }) }); if (r.ok) { me.pinned = id || null; viewUser(p.nick); } });
     const edit = body().querySelector("#pu-edit"); if (edit) edit.onclick = () => setView("editar");
     const dsk = body().querySelector("#pu-desk"); if (dsk) dsk.onclick = () => viewDesktop(p.nick);
-    const sh = body().querySelector("#pu-share"); if (sh) sh.onclick = async () => { const url = location.origin + "/u/" + encodeURIComponent(p.nick); try { await navigator.clipboard.writeText(url); sh.textContent = "¡Copiado!"; } catch (_) { sh.textContent = url; } };
+    const sh = body().querySelector("#pu-share"); if (sh) sh.onclick = async () => { const url = location.origin + "/demon/" + encodeURIComponent(p.nick); try { await navigator.clipboard.writeText(url); sh.textContent = "¡Copiado!"; } catch (_) { sh.textContent = url; } };
     const bdb = body().querySelector("#pu-badges-btn"); if (bdb) bdb.onclick = () => openBadgeEditor(p.nick, badgeList(p));
     const msgb = body().querySelector("#pu-msg"); if (msgb) msgb.onclick = () => { window.__dmOpen = p.nick; setView("mensajes"); };
     const add = body().querySelector("#pu-add"); if (add) add.onclick = async () => { add.disabled = true; add.textContent = "..."; const res = await api("/api/social/amigos/pedir", { method: "POST", headers: JH, body: JSON.stringify({ nick: p.nick }) }); add.textContent = res.r.ok ? "Solicitud enviada" : ((res.d && res.d.message) || "No se pudo."); };

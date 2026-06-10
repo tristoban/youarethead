@@ -2351,7 +2351,7 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('content-type', 'text/html; charset=utf-8');
     return reply.send(html);
   });
-  app.get('/u/:nick/escritorio', async (req, reply) => {
+  app.get('/demon/:nick/escritorio', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     const nickRaw = String(((req.params ?? {}) as { nick?: unknown }).nick ?? '');
     let nick = nickRaw;
@@ -2362,13 +2362,17 @@ export function buildApp(db: Db): FastifyInstance {
     const n = String(r.nick ?? '');
     const html = withOg({
       title: 'Escritorio de ' + n + ' — YATA',
-      desc: 'Entrá al escritorio de ' + n + ': sus trofeos, sus fotos, su tele y los que están mirando ahora.',
-      url: PUBLIC_URL + '/u/' + encodeURIComponent(n) + '/escritorio',
+      desc: 'Entrá al escritorio del demonio ' + n + ': sus trofeos, sus fotos, su tele y los que están mirando ahora.',
+      url: PUBLIC_URL + '/demon/' + encodeURIComponent(n) + '/escritorio',
       image: r.hasava === true ? PUBLIC_URL + '/og/u/' + encodeURIComponent(n) : PUBLIC_URL + '/logoyatasocial.png',
     });
     if (!html) return reply.sendFile('perfil.html');
     reply.header('content-type', 'text/html; charset=utf-8');
     return reply.send(html);
+  });
+  app.get('/u/:nick/escritorio', async (req, reply) => {
+    const nickRaw = String(((req.params ?? {}) as { nick?: unknown }).nick ?? '');
+    return redir(reply, '/demon/' + nickRaw + '/escritorio');
   });
   app.get('/og/u/:nick', async (req, reply) => {
     const nickRaw = String(((req.params ?? {}) as { nick?: unknown }).nick ?? '').replace(/\.(png|jpe?g|webp)$/i, '');
