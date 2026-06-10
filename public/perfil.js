@@ -239,14 +239,14 @@
     const p = d.perfil, acc = (typeof p.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(p.accent)) ? p.accent : "var(--pf-acc)";
     const links = (Array.isArray(p.links) ? p.links : []).map((l) => { const pl = platOf(l.url); return '<a class="pf-link" href="' + esc(l.url) + '" target="_blank" rel="noopener"><span class="pf-link-i">' + linkSvg(pl[2]) + '</span><span class="pf-link-t">' + esc(l.title) + '</span><span class="pf-link-x">&#8599;</span></a>'; }).join("");
     const banner = p.banner ? '<div class="pf-banner" style="background-image:url(\'' + esc(p.banner) + '\')"></div>' : '<div class="pf-banner" style="background:linear-gradient(120deg,#15151a,#0a0a0d)"></div>';
-    root.innerHTML = '<div class="pf-guest">' + banner +
+    root.innerHTML = '<div class="pf-guest"><div class="pf-ucard">' + banner +
       '<div class="pf-uhead"><span class="pf-ava pf-uava">' + avaPic(p.avatar, headFor(p.nick)) + "</span></div>" +
       '<div class="pf-uname">' + esc(p.nick) + " " + badges(p) + "</div>" +
       '<div class="pf-dimc" style="padding:2px 0">@' + esc(p.nick) + (p.estado ? " · " + esc(p.estado) : "") + "</div>" +
       (p.bio ? '<p style="margin:8px 0 0;white-space:pre-wrap">' + esc(p.bio) + "</p>" : "") +
       (links ? '<div class="pf-links">' + links + "</div>" : "") +
       '<a class="pf-btn pf-spin" href="/yata" style="margin-top:18px;display:inline-flex">Entrá a youarethead</a>' +
-      "</div>";
+      "</div></div>";
   }
   async function enterApp() { const { d } = await api("/api/hub/me", AH); if (d && d.logged) { me = d; app(); } else login("error"); }
 
@@ -1547,7 +1547,7 @@
       chip("No Parpadees", fmt.format(p.best.parpadeo || 0)) + (p.caido ? chip("El Botón", "N° " + fmt.format(p.caido)) : "") +
       chip("Posteos", fmt.format(p.nposts || 0)) + chip("Amigos", fmt.format(p.amigos || 0));
     body().innerHTML =
-      banner +
+      '<div class="pf-ucard">' + banner +
       '<div class="pf-uhead"><span class="pf-ava pf-uava" style="border-color:' + acc + '">' + avaPic(p.avatar, headFor(p.nick)) + '</span>' +
       '<div class="pf-uact">' + action + '<button class="pf-btn ghost pf-mini" id="pu-desk">Escritorio</button><button class="pf-btn ghost pf-mini" id="pu-share">Compartir</button>' + modTools + '</div></div>' +
       '<div class="pf-uname">' + esc(p.nick) + " " + badges(p) + '</div>' +
@@ -1557,7 +1557,7 @@
       (p.location ? '<div class="pf-umeta">' + esc(p.location) + "</div>" : "") +
       (links ? '<div class="pf-links">' + links + "</div>" : "") +
       (isAdm ? '<div id="pu-badges"></div>' : "") +
-      '<div class="pf-chips">' + chips + "</div>" +
+      '<div class="pf-chips">' + chips + "</div></div>" +
       '<div class="pf-h">Posteos</div><div id="pu-posts"></div>';
     const box = body().querySelector("#pu-posts");
     const list = (p.pinned ? [Object.assign({ pin: true }, p.pinned)] : []).concat(p.posts || []);
