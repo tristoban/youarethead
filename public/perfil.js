@@ -6,6 +6,7 @@
   const AH = { headers: { accept: "application/json" } };
   const fmt = new Intl.NumberFormat("es-AR");
   async function api(p, o) { const r = await fetch(p, o); let d = null; try { d = await r.json(); } catch (_) {} return { r, d }; }
+  async function apiQ(p) { try { return await api(p, AH); } catch (_) { return { r: { ok: false, status: 0 }, d: null }; } }
   function esc(s) { return String(s == null ? "" : s).replace(/[<>&"']/g, ""); }
   function cuando(t) { try { const d = new Date(t); const h = (Date.now() - d) / 3600000; if (h < 1) return Math.max(1, Math.round(h * 60)) + "m"; if (h < 24) return Math.round(h) + "h"; return d.toLocaleDateString("es-AR", { day: "numeric", month: "short" }); } catch (_) { return ""; } }
 
@@ -217,7 +218,7 @@
     else if (wantPost) viewPost(wantPost);
   }
   async function guestPost(id) {
-    const { r, d } = await api("/api/social/post?id=" + id, AH);
+    const { r, d } = await apiQ("/api/social/post?id=" + id);
     if (!r.ok || !d || !d.ok) { root.innerHTML = '<div class="pf-guest"><p class="pf-empty">Ese posteo no existe (o se fue a dormir).</p><a class="pf-btn pf-spin" href="/yata">Entrá a YATA</a></div>'; return; }
     const p = d.post, comments = d.comments || [];
     root.innerHTML = '<div class="pf-guest">' +
@@ -233,7 +234,7 @@
       "</div>";
   }
   async function guestProfile(nick) {
-    const { r, d } = await api("/api/social/perfil?nick=" + encodeURIComponent(nick), AH);
+    const { r, d } = await apiQ("/api/social/perfil?nick=" + encodeURIComponent(nick));
     if (!r.ok || !d || !d.ok) { root.innerHTML = '<div class="pf-guest"><p class="pf-empty">No se encontró ese perfil.</p><a class="pf-btn pf-spin" href="/yata">Entrá a youarethead</a></div>'; return; }
     const p = d.perfil, acc = (typeof p.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(p.accent)) ? p.accent : "var(--pf-acc)";
     const links = (Array.isArray(p.links) ? p.links : []).map((l) => { const pl = platOf(l.url); return '<a class="pf-link" href="' + esc(l.url) + '" target="_blank" rel="noopener"><span class="pf-link-i">' + linkSvg(pl[2]) + '</span><span class="pf-link-t">' + esc(l.title) + '</span><span class="pf-link-x">&#8599;</span></a>'; }).join("");
@@ -471,18 +472,19 @@
       return ps.length ? "?" + ps.join("&") : "";
     };
     async function load() {
-      const { d } = await api("/api/social/feed" + qfor(), AH);
+      const { d } = await apiQ("/api/social/feed" + qfor());
       const box = body().querySelector("#pf-feed"); if (!box) return;
+      if (!d || !Array.isArray(d.posts)) { box.innerHTML = '<p class="pf-empty">El feed no respondió. <button class="pf-btn pf-mini" id="pf-retry" type="button">Reintentar</button></p>'; const rb = box.querySelector("#pf-retry"); if (rb) rb.onclick = () => { box.innerHTML = skFeed(3); load(); }; return; }
       const posts = (d && d.posts) || [];
       topId = posts.reduce((m, p) => Math.max(m, p.id), 0);
       const np = body().querySelector("#pf-new"); if (np) np.style.display = "none";
       const pdb = body().querySelector("#pf-pdd");
-      if (pdb) pdb.innerHTML = (d && d.pdd) ? '<div class="pf-pddlbl">★ Pregunta del día</div><div class="pf-pdd">' + postHTML(d.pdd) + "</div>" : "";
+      if (pdb) { try { pdb.innerHTML = (d && d.pdd) ? '<div class="pf-pddlbl">★ Pregunta del día</div><div class="pf-pdd">' + postHTML(d.pdd) + "</div>" : ""; } catch (_) { pdb.innerHTML = ""; } }
       box.innerHTML = posts.length ? posts.map(postHTML).join("") : '<p class="pf-empty">' + (scope === "amigos" ? "Tus amigos no postearon nada todavía." : topic ? "Nada en " + esc(topic) + " todavía. Estrenalo vos." : "Nadie publicó nada. Sé la primera voz del encierro.") + "</p>";
     }
     async function checkNew() {
       if (scope === "hot" || scope === "top7") return;
-      const { d } = await api("/api/social/feed" + qfor(), AH);
+      const { d } = await apiQ("/api/social/feed" + qfor());
       const newer = ((d && d.posts) || []).filter((p) => p.id > topId).length;
       const np = body().querySelector("#pf-new"); if (!np) return;
       if (newer > 0) { np.textContent = "↑ " + newer + (newer === 1 ? " posteo nuevo" : " posteos nuevos"); np.style.display = "block"; }
@@ -580,7 +582,7 @@
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === "feed"));
     chead("Tema: " + esc(t));
     body().innerHTML = '<div id="pf-feed">' + skFeed(3) + "</div>";
-    api("/api/social/feed?topic=" + encodeURIComponent(t), AH).then(({ d }) => {
+    apiQ("/api/social/feed?topic=" + encodeURIComponent(t)).then(({ d }) => {
       const box = body().querySelector("#pf-feed"); if (!box) return;
       const posts = (d && d.posts) || [];
       box.innerHTML = posts.length ? posts.map(postHTML).join("") : '<p class="pf-empty">Nada en ' + esc(t) + " todavía. Estrenalo vos.</p>";
@@ -596,7 +598,7 @@
     const go = () => { const v = inp.value.trim(); if (v.length >= 2) viewSearch(v); };
     body().querySelector("#bs-go").onclick = go;
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
-    const { d } = await api("/api/social/buscar?q=" + encodeURIComponent(q), AH);
+    const { d } = await apiQ("/api/social/buscar?q=" + encodeURIComponent(q));
     const box = body().querySelector("#bs-res"); if (!box) return;
     const us = (d && d.usuarios) || [], ps = (d && d.posts) || [];
     let h = "";
@@ -610,7 +612,7 @@
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === "feed"));
     chead("#" + esc(tag));
     body().innerHTML = '<div id="pf-feed">' + skFeed(3) + "</div>";
-    api("/api/social/feed?tag=" + encodeURIComponent(tag), AH).then(({ d }) => {
+    apiQ("/api/social/feed?tag=" + encodeURIComponent(tag)).then(({ d }) => {
       const box = body().querySelector("#pf-feed"); if (!box) return;
       const posts = (d && d.posts) || [];
       box.innerHTML = posts.length ? posts.map(postHTML).join("") : '<p class="pf-empty">Nada con #' + esc(tag) + " todavía.</p>";
@@ -642,8 +644,8 @@
     chead("Posteo");
     const expandir = !!window.__expandCmts; window.__expandCmts = false;
     body().innerHTML = skPostFull();
-    const { r, d } = await api("/api/social/post?id=" + id, AH);
-    if (!r.ok || !d || !d.ok) { body().innerHTML = '<p class="pf-empty">Ese posteo no existe.</p>'; return; }
+    const { r, d } = await apiQ("/api/social/post?id=" + id);
+    if (!r.ok || !d || !d.ok) { body().innerHTML = r.status === 0 ? '<p class="pf-empty">No cargó. <button class="pf-btn pf-mini" id="pp-retry" type="button">Reintentar</button></p>' : '<p class="pf-empty">Ese posteo no existe.</p>'; const rb = body().querySelector("#pp-retry"); if (rb) rb.onclick = () => viewPost(id); return; }
     const p = d.post, comments = d.comments || [];
     body().innerHTML =
       '<a class="pf-back2" id="pp-back">&#8592; volver al feed</a>' +
@@ -1525,8 +1527,8 @@
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
     chead("Perfil");
     body().innerHTML = skPerfil();
-    const { r, d } = await api("/api/social/perfil?nick=" + encodeURIComponent(nick), AH);
-    if (!r.ok || !d || !d.ok) { body().innerHTML = '<p class="pf-empty">No se encontró ese perfil.</p>'; return; }
+    const { r, d } = await apiQ("/api/social/perfil?nick=" + encodeURIComponent(nick));
+    if (!r.ok || !d || !d.ok) { body().innerHTML = r.status === 0 ? '<p class="pf-empty">No cargó. <button class="pf-btn pf-mini" id="pu-retry" type="button">Reintentar</button></p>' : '<p class="pf-empty">No se encontró ese perfil.</p>'; const rb = body().querySelector("#pu-retry"); if (rb) rb.onclick = () => viewUser(nick); return; }
     const p = d.perfil, acc = (typeof p.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(p.accent)) ? p.accent : "var(--pf-acc)";
     const desde = p.desde ? new Date(p.desde).toLocaleDateString("es-AR", { month: "long", year: "numeric" }) : "";
     const banner = p.banner ? '<div class="pf-banner" style="background-image:url(\'' + esc(p.banner) + '\')"></div>' : '<div class="pf-banner" style="background:linear-gradient(120deg,#15151a,#0a0a0d)"></div>';
@@ -1603,8 +1605,8 @@
   async function viewEscritorios() {
     chead("Escritorios");
     body().innerHTML = skGrid(6);
-    const { d } = await api("/api/escritorios", AH);
-    if (!d || !d.ok) { body().innerHTML = '<p class="pf-empty">No se pudo cargar el barrio.</p>'; return; }
+    const { d } = await apiQ("/api/escritorios");
+    if (!d || !d.ok) { body().innerHTML = '<p class="pf-empty">No se pudo cargar el barrio. <button class="pf-btn pf-mini" id="esk-retry" type="button">Reintentar</button></p>'; const rb = body().querySelector("#esk-retry"); if (rb) rb.onclick = () => viewEscritorios(); return; }
     const todos = d.escritorios || [];
     const tiene = (e, t) => Array.isArray(e.badges) && e.badges.some((b) => String(b.t || "").toLowerCase() === t);
     const fundador = todos.filter((e) => e.founder);
@@ -1813,8 +1815,9 @@
   async function viewNotifs() {
     chead("Notificaciones");
     body().innerHTML = '<div id="pf-notifs">' + skRows(6) + "</div>";
-    const { d } = await api("/api/notifs", AH);
+    const { d } = await apiQ("/api/notifs");
     const box = body().querySelector("#pf-notifs"); if (!box) return;
+    if (!d) { box.innerHTML = '<p class="pf-empty">No cargaron. <button class="pf-btn pf-mini" id="nf-retry" type="button">Reintentar</button></p>'; const rb = box.querySelector("#nf-retry"); if (rb) rb.onclick = () => viewNotifs(); return; }
     const items = (d && d.items) || [];
     box.innerHTML = items.length ? items.map(notifLine).join("") : '<p class="pf-empty">Nada por acá todavía. Cuando te calaveen, comenten o te nombren, aparece acá.</p>';
     const resolver = async (b, aceptar) => {
@@ -1825,7 +1828,7 @@
     };
     box.querySelectorAll("[data-fok]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); resolver(b, true); });
     box.querySelectorAll("[data-fno]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); resolver(b, false); });
-    if (items.some((n) => !n.read)) await api("/api/notifs/read", { method: "POST", headers: JH, body: "{}" });
+    if (items.some((n) => !n.read)) { try { await api("/api/notifs/read", { method: "POST", headers: JH, body: "{}" }); } catch (_) {} }
     setNotifBadge(0);
   }
   function setNotifBadge(n) {

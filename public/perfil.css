@@ -682,3 +682,10 @@
 .pf-wlink2 { color: #d7dae1; }
 .pf-like.on { color: var(--pf-acc); }
 .pf-like.on svg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--pf-acc) 55%, transparent)); }
+
+/* contraste tipo maqueta: superficies sólidas que se despegan del fondo */
+.pf-post, .pf-comp, .pf-postfull { background: #0e0e12; border-color: rgba(255,255,255,.09); }
+.pf-post:hover { background: #12121a; }
+.pf-skcard { background: #0d0d11; border-color: rgba(255,255,255,.07); }
+.pf-chip, .pf-estado, .pf-pop { background: #101015; }
+.pf-srch input, .pf-cti, .pf-comp textarea, .pf-row input, .pf-input { background: rgba(255,255,255,.055); }
