@@ -583,3 +583,27 @@
 .pf-eskv { position: absolute; top: 8px; right: 8px; background: rgba(8,8,11,.75); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 3px 9px; font: 700 10.5px "Montserrat", sans-serif; color: #d7dae1; display: flex; align-items: center; gap: 5px; }
 .pf-eskon { width: 7px; height: 7px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 8px #ef4444; display: inline-block; }
 @media (max-width: 680px) { .pf-eskgrid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ---- D8: UX de urgencia — menú ⋯, notifs accionables, micro-motion ---- */
+.pf-dots { margin-left: auto; background: none; border: 0; color: #8a8f98; font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 8px; border-radius: 8px; transition: background .12s, color .12s; }
+.pf-dots:hover { background: rgba(255,255,255,.08); color: #fff; }
+.pf-shr { margin-left: 0; }
+.pf-menu { position: fixed; z-index: 700; min-width: 175px; background: #131318; border: 1px solid rgba(255,255,255,.16); border-radius: 12px; padding: 5px; box-shadow: 0 14px 44px rgba(0,0,0,.6); animation: pf-menuin .14s cubic-bezier(.2,.7,.2,1); }
+@keyframes pf-menuin { from { opacity: 0; transform: translateY(-5px) scale(.97); } to { opacity: 1; transform: none; } }
+.pf-menu button { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 9px 12px; color: #e9ebf0; font: 600 13px "Montserrat", sans-serif; cursor: pointer; transition: background .1s; }
+.pf-menu button:hover { background: rgba(107,140,255,.16); }
+.pf-menu button.rojo { color: #ff7b84; }
+.pf-menu button.rojo:hover { background: rgba(210,59,71,.18); }
+.pf-nact { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: middle; }
+.pf-nok { color: #4ade80; font-size: 12.5px; margin-left: 8px; }
+.pf-post { transition: transform .14s cubic-bezier(.2,.7,.2,1), border-color .14s, box-shadow .14s; }
+.pf-post:hover { transform: translateY(-1px); border-color: rgba(255,255,255,.22); box-shadow: 0 6px 22px rgba(0,0,0,.35); }
+.pf-btn, .pf-tchip, .pf-ctool, .dk-mit, .pf-tab { transition: transform .1s, filter .12s, background .12s, border-color .12s, color .12s; }
+.pf-btn:active, .pf-tchip:active, .pf-dots:active, .pf-shr:active, .pf-like:active { transform: scale(.95); }
+.pf-like { transition: transform .1s, color .12s; }
+.pf-like.on { animation: pf-cala .25s cubic-bezier(.2,.7,.2,1); }
+@keyframes pf-cala { 0% { transform: scale(1); } 50% { transform: scale(1.35) rotate(-7deg); } 100% { transform: scale(1); } }
+.pf-nrow { transition: background .12s; border-radius: 10px; }
+.pf-nrow:hover { background: rgba(255,255,255,.05); }
+:focus-visible { outline: 2px solid rgba(107,140,255,.7); outline-offset: 2px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { .pf-post, .pf-btn, .pf-like { transition: none; animation: none; } }

@@ -345,6 +345,7 @@
       const cl = t.closest("[data-clike]"); if (cl) { e.preventDefault(); e.stopPropagation(); toggleClike(cl); return; }
       const dpst = t.closest("[data-delpost]"); if (dpst) { e.preventDefault(); e.stopPropagation(); delPost(dpst.getAttribute("data-delpost")); return; }
       const dcmt = t.closest("[data-delcomment]"); if (dcmt) { e.preventDefault(); e.stopPropagation(); delComment(dcmt.getAttribute("data-delcomment")); return; }
+      const dots = t.closest("[data-dots]"); if (dots) { e.preventDefault(); e.stopPropagation(); postMenu(dots); return; }
       const vbtn = t.closest("[data-vote]"); if (vbtn) { e.preventDefault(); e.stopPropagation(); votePoll(vbtn); return; }
       const sbtn = t.closest("[data-share]"); if (sbtn) { e.preventDefault(); e.stopPropagation(); sharePost(sbtn); return; }
       const lbx = t.closest("[data-lbx]"); if (lbx) { e.preventDefault(); e.stopPropagation(); lightbox(lbx.getAttribute("data-lbx")); return; }
@@ -400,8 +401,32 @@
       (p.title ? '<h3 class="pf-post-t">' + esc(p.title) + "</h3>" : "") +
       (snip ? '<p class="pf-post-b">' + snip + "</p>" : "") +
       imgsHTML(p) + pollHTML(p) +
-      '<div class="pf-post-f">' + likeBtn(p) + '<span class="pf-cnt">' + nc + (nc === 1 ? " comentario" : " comentarios") + "</span>" + shareBtn(p) + delBtnPost(p) + "</div>" +
+      '<div class="pf-post-f">' + likeBtn(p) + '<span class="pf-cnt">' + nc + (nc === 1 ? " comentario" : " comentarios") + "</span>" + shareBtn(p) + '<button class="pf-dots" data-dots="' + p.id + '" data-dnick="' + esc(p.nick) + '" type="button" title="Más opciones">⋯</button>' + "</div>" +
       "</article>";
+  }
+  function cerrarMenus() { const e = document.getElementById("pf-menu"); if (e) e.remove(); }
+  function postMenu(btn) {
+    const id = Number(btn.getAttribute("data-dots")), nick = btn.getAttribute("data-dnick");
+    cerrarMenus();
+    const m = document.createElement("div");
+    m.className = "pf-menu"; m.id = "pf-menu";
+    let h = '<button data-mcopy type="button">🔗 Copiar link</button>';
+    if (cur === "user" && me && me.nick === nick) h += '<button data-mpin type="button">📌 ' + (me.pinned === id ? "Quitar fijado" : "Fijar arriba") + "</button>";
+    if (canDel(nick)) h += '<button data-mdel class="rojo" type="button">🗑 Borrar</button>';
+    m.innerHTML = h;
+    document.body.appendChild(m);
+    const r = btn.getBoundingClientRect();
+    m.style.left = Math.max(8, Math.min(r.left - 60, window.innerWidth - 190)) + "px";
+    m.style.top = Math.min(r.bottom + 6, window.innerHeight - m.offsetHeight - 10) + "px";
+    m.querySelector("[data-mcopy]").onclick = async () => { try { await navigator.clipboard.writeText(location.origin + "/p/" + id); toast("Link copiado. Repartilo."); } catch (_) {} cerrarMenus(); };
+    const mp = m.querySelector("[data-mpin]");
+    if (mp) mp.onclick = async () => { const nuevo = me.pinned === id ? null : id; const { r: rr } = await api("/api/hub/pin-post", { method: "POST", headers: JH, body: JSON.stringify({ id: nuevo }) }); cerrarMenus(); if (rr.ok) { me.pinned = nuevo; toast(nuevo ? "Fijado arriba de tu perfil." : "Ya no está fijado."); viewUser(me.nick); } };
+    const md = m.querySelector("[data-mdel]");
+    if (md) md.onclick = () => { cerrarMenus(); delPost(id); };
+  }
+  if (!window.__menuWired) {
+    window.__menuWired = true;
+    document.addEventListener("click", (e) => { if (!e.target.closest("#pf-menu") && !e.target.closest("[data-dots]")) cerrarMenus(); });
   }
   const TOPIC_LIST = ["canal", "juegos", "arte", "random", "debate"];
   function viewFeed() {
@@ -608,7 +633,7 @@
         (p.title ? '<h2 class="pf-postfull-t">' + esc(p.title) + "</h2>" : "") +
         (p.body ? '<div class="pf-postfull-b">' + rich(p.body) + "</div>" : "") +
         imgsHTML(p) + pollHTML(p) +
-        '<div class="pf-post-f" style="margin-top:14px">' + likeBtn(p) + shareBtn(p) + delBtnPost(p) + "</div>" +
+        '<div class="pf-post-f" style="margin-top:14px">' + likeBtn(p) + shareBtn(p) + '<button class="pf-dots" data-dots="' + p.id + '" data-dnick="' + esc(p.nick) + '" type="button" title="Más opciones">⋯</button>' + "</div>" +
       "</article>" +
       '<div class="pf-h">Comentarios</div>' +
       '<div class="pf-comp pf-comp-c"><textarea id="pp-ctext" maxlength="1000" placeholder="Sumate al hilo… (@ # $)"></textarea><div class="pf-crow"><span class="pf-msg" id="pp-cmsg"></span><button class="pf-btn pf-spin" id="pp-csend">Comentar</button></div></div>' +
@@ -1488,8 +1513,7 @@
       '<div class="pf-h">Posteos</div><div id="pu-posts"></div>';
     const box = body().querySelector("#pu-posts");
     const list = (p.pinned ? [Object.assign({ pin: true }, p.pinned)] : []).concat(p.posts || []);
-    box.innerHTML = list.length ? list.map((x) => (x.pin ? '<div class="pf-pinlbl">Fijado</div>' : "") + postHTML(x) + (p.rel === "me" ? '<div class="pf-pinrow"><a data-pin="' + (x.pin ? "0" : x.id) + '">' + (x.pin ? "Quitar fijado" : "Fijar arriba") + "</a></div>" : "")).join("") : '<p class="pf-empty">Todavía no posteó nada.</p>';
-    box.querySelectorAll("[data-pin]").forEach((a) => a.onclick = async () => { const id = Number(a.getAttribute("data-pin")); const { r } = await api("/api/hub/pin-post", { method: "POST", headers: JH, body: JSON.stringify({ id: id || null }) }); if (r.ok) { me.pinned = id || null; viewUser(p.nick); } });
+    box.innerHTML = list.length ? list.map((x) => (x.pin ? '<div class="pf-pinlbl">📌 Fijado</div>' : "") + postHTML(x)).join("") : '<p class="pf-empty">Todavía no posteó nada.</p>';
     const edit = body().querySelector("#pu-edit"); if (edit) edit.onclick = () => setView("editar");
     const dsk = body().querySelector("#pu-desk"); if (dsk) dsk.onclick = () => viewDesktop(p.nick);
     const sh = body().querySelector("#pu-share"); if (sh) sh.onclick = async () => { const url = location.origin + "/demon/" + encodeURIComponent(p.nick); try { await navigator.clipboard.writeText(url); sh.textContent = "¡Copiado!"; } catch (_) { sh.textContent = url; } };
@@ -1723,10 +1747,12 @@
   function notifLine(n) {
     const verb = NVERB[n.type] || "novedad";
     const tgt = n.postId ? ' data-post="' + n.postId + '"' : ' data-u="' + esc(n.actor) + '"';
+    const acciones = n.type === "friend_req" ? '<span class="pf-nact"><button class="pf-btn pf-mini" data-fok="' + esc(n.actor) + '">Aceptar</button><button class="pf-btn ghost pf-mini" data-fno="' + esc(n.actor) + '">No</button></span>' : "";
     return '<div class="pf-nrow' + (n.read ? "" : " unread") + '"' + tgt + '>' +
       '<span class="pf-nic">' + notifIcon(n.type) + "</span>" +
       '<div class="pf-ntext"><b class="pf-u" data-u="' + esc(n.actor) + '">' + esc(n.actor) + "</b> " + verb +
       (n.body ? ' <span class="pf-ndim">· ' + esc(String(n.body).slice(0, 60)) + "</span>" : "") +
+      acciones +
       '<span class="pf-nt">' + cuando(n.t) + "</span></div></div>";
   }
   async function viewNotifs() {
@@ -1736,6 +1762,14 @@
     const box = body().querySelector("#pf-notifs"); if (!box) return;
     const items = (d && d.items) || [];
     box.innerHTML = items.length ? items.map(notifLine).join("") : '<p class="pf-empty">Nada por acá todavía. Cuando te calaveen, comenten o te nombren, aparece acá.</p>';
+    const resolver = async (b, aceptar) => {
+      b.disabled = true;
+      const { r } = await api("/api/social/amigos/responder", { method: "POST", headers: JH, body: JSON.stringify({ nick: b.getAttribute(aceptar ? "data-fok" : "data-fno"), aceptar: aceptar }) });
+      const act = b.closest(".pf-nact");
+      if (act) act.outerHTML = '<b class="pf-nok">' + (r.ok ? (aceptar ? " ✓ ahora son amigos" : " · rechazada") : " · ya estaba resuelta") + "</b>";
+    };
+    box.querySelectorAll("[data-fok]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); resolver(b, true); });
+    box.querySelectorAll("[data-fno]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); resolver(b, false); });
     if (items.some((n) => !n.read)) await api("/api/notifs/read", { method: "POST", headers: JH, body: "{}" });
     setNotifBadge(0);
   }
