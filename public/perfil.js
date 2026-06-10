@@ -578,6 +578,235 @@
     body().querySelector("#pp-csend").onclick = async () => { cmsg.textContent = "..."; const { r: rr, d: dd } = await api("/api/social/comment", { method: "POST", headers: JH, body: JSON.stringify({ postId: id, parentId: replyTo, body: ctext.value }) }); if (rr.ok) { ctext.value = ""; replyTo = null; cmsg.textContent = ""; viewPost(id); } else cmsg.textContent = (dd && dd.message) || "No se pudo."; };
   }
 
+  /* ---------- El Escritorio (S.O. de perfil) ---------- */
+  const DK_APPS = {
+    tetristo: { l: "TeTristo", go: "/tristos" },
+    parpadeo: { l: "No Parpadees", go: "/tristos" },
+    laberinto: { l: "El Laberinto", go: "/laberinto" },
+    chat: { l: "Chat Global", v: "chat" },
+    boton: { l: "El Botón", go: "/tristos" },
+    mural: { l: "Mural", go: "/tristos" },
+    pueblo: { l: "Pueblo", go: "/pueblo" },
+    feed: { l: "Feed", v: "feed" },
+  };
+  const DK_GLYPH = {
+    folder: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
+    note: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 11h6M9 15h6"/>',
+    trophy: '<path d="M7 4h10v5a5 5 0 01-10 0z"/><path d="M7 6H4a3 3 0 003 3M17 6h3a3 3 0 01-3 3M12 14v3M8 20h8M10 17h4v3h-4z"/>',
+    tetristo: '<rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/>',
+    parpadeo: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
+    laberinto: '<path d="M4 4h16v16H4z"/><path d="M8 8h8v8H8zM12 4v4M4 12h4M16 12h4M12 16v4"/>',
+    chat: '<path d="M5 5h14v10H9l-4 4z"/>',
+    boton: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>',
+    mural: '<path d="M4 4h16v16H4z"/><path d="M9 4v16M15 4v16M4 9h16M4 15h16"/>',
+    pueblo: '<path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/>',
+    feed: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+  };
+  function dkSvg(g, color) { return '<svg viewBox="0 0 24 24" fill="none" stroke="' + (color || "currentColor") + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (DK_GLYPH[g] || DK_GLYPH.note) + "</svg>"; }
+  async function viewDesktop(nick) {
+    clearView(); cur = "desk";
+    root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.remove("on"));
+    chead("Escritorio");
+    body().innerHTML = '<p class="pf-dimc">Prendiendo el monitor…</p>';
+    const { r, d } = await api("/api/desktop?nick=" + encodeURIComponent(nick), AH);
+    if (!r.ok || !d || !d.ok) { body().innerHTML = '<p class="pf-empty">No se pudo cargar este escritorio.</p>'; return; }
+    const D = d, own = !!d.own, CELL = (root.offsetWidth || 600) <= 680 ? 80 : 100;
+    let zTop = 10, dragging = false;
+    const acc = (D.perfil && typeof D.perfil.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(D.perfil.accent)) ? D.perfil.accent : "#6b8cff";
+    body().innerHTML =
+      '<a class="pf-back2" id="dk-back">&#8592; Perfil de ' + esc(nick) + "</a>" +
+      (own ? '<div class="dk-bar"><button class="pf-btn ghost pf-mini" id="dk-ncar">+ Carpeta</button><button class="pf-btn ghost pf-mini" id="dk-nnota">+ Nota</button><button class="pf-btn ghost pf-mini" id="dk-nacc">+ Acceso</button><button class="pf-btn ghost pf-mini" id="dk-caja">Caja <b id="dk-cajan"></b></button><span class="pf-dimc" id="dk-msg" style="margin-left:auto"></span></div>' : "") +
+      '<div class="dk-surface" id="dk-s"' + (D.perfil && D.perfil.banner ? ' style="background-image:url(\'' + esc(D.perfil.banner) + '\')"' : ' style="background:linear-gradient(135deg,' + acc + '22,#08080b 70%)"') + '><div class="dk-scan"></div></div>';
+    body().querySelector("#dk-back").onclick = () => viewUser(nick);
+    const S = body().querySelector("#dk-s");
+    const colsN = () => Math.max(3, Math.floor(S.clientWidth / CELL));
+    const rowsN = () => Math.max(4, Math.floor(S.clientHeight / CELL));
+    function rootItems() { return D.items.filter((i) => !i.parent && !i.hidden); }
+    function cajaItems() { return D.items.filter((i) => i.hidden); }
+    function trofeosSinPoner() { const puestos = new Set(D.items.filter((i) => i.type === "trophy").map((i) => String(i.data.kind))); return (D.trofeos || []).filter((t) => !puestos.has(t.kind)); }
+    function ocupado() { const m = {}; rootItems().forEach((i) => { m[i.x + "_" + i.y] = i.id; }); return m; }
+    function freeCell() { const m = ocupado(); m["0_0"] = "sys"; const C = colsN(); for (let y = 0; y < 40; y++) for (let x = 0; x < C; x++) if (!m[x + "_" + y]) return { x: x, y: y }; return { x: 0, y: 0 }; }
+    function setCajaN() { const el = body().querySelector("#dk-cajan"); if (el) el.textContent = String(cajaItems().length + trofeosSinPoner().length || ""); }
+    function navShortcut(app2) { const a = DK_APPS[app2]; if (!a) return; if (a.v) setView(a.v); else location.href = a.go; }
+    function winKill(key) { const w = S.querySelector('[data-win="' + key + '"]'); if (w) w.remove(); }
+    function openWin(key, title, html) {
+      winKill(key);
+      const w = document.createElement("div");
+      w.className = "dk-win"; w.setAttribute("data-win", key);
+      w.style.left = Math.min(40 + S.querySelectorAll(".dk-win").length * 26, S.clientWidth - 280) + "px";
+      w.style.top = (30 + S.querySelectorAll(".dk-win").length * 24) + "px";
+      w.style.zIndex = ++zTop;
+      w.innerHTML = '<div class="dk-tit"><span>' + title + '</span><button class="dk-x" type="button">&times;</button></div><div class="dk-body">' + html + "</div>";
+      S.appendChild(w);
+      w.addEventListener("pointerdown", () => { w.style.zIndex = ++zTop; });
+      w.querySelector(".dk-x").onclick = () => w.remove();
+      const tit = w.querySelector(".dk-tit");
+      tit.addEventListener("pointerdown", (e) => {
+        if (e.target.closest(".dk-x")) return;
+        const sx = e.clientX - w.offsetLeft, sy = e.clientY - w.offsetTop;
+        const mv = (ev) => { w.style.left = Math.max(0, Math.min(S.clientWidth - 60, ev.clientX - sx)) + "px"; w.style.top = Math.max(0, Math.min(S.clientHeight - 40, ev.clientY - sy)) + "px"; };
+        const up = () => { document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up); };
+        document.addEventListener("pointermove", mv); document.addEventListener("pointerup", up);
+        e.preventDefault();
+      });
+      return w;
+    }
+    function fotoThumbs(list, enCarpeta) {
+      if (!list.length) return '<p class="pf-dimc" style="padding:10px">Vacío. Como tu heladera a fin de mes.</p>';
+      const carpetas = D.items.filter((i) => i.type === "folder");
+      return '<div class="dk-fgrid">' + list.map((f) => {
+        const sel = own ? '<select class="dk-mv" data-url="' + esc(f.url) + '" data-rid="' + (f.id || "") + '"><option value="">mover…</option><option value="root">al Escritorio</option>' + carpetas.map((c) => '<option value="' + c.id + '">' + esc(c.data.name) + "</option>").join("") + (enCarpeta && f.id ? '<option value="sys">a Mis fotos</option>' : "") + "</select>" : "";
+        return '<figure class="dk-foto"><img loading="lazy" src="' + esc(f.url) + '" data-lbx="' + esc(f.url) + '" alt="" />' + sel + "</figure>";
+      }).join("") + "</div>";
+    }
+    function wireMv(w) {
+      w.querySelectorAll(".dk-mv").forEach((s) => s.onchange = async () => {
+        const v = s.value, url = s.getAttribute("data-url"), rid = Number(s.getAttribute("data-rid")) || 0;
+        s.value = "";
+        if (!v) return;
+        if (rid) {
+          if (v === "sys") { const { r: rr } = await api("/api/desktop/borrar", { method: "POST", headers: JH, body: JSON.stringify({ id: rid }) }); if (rr.ok) { D.items = D.items.filter((i) => i.id !== rid); D.fotos.unshift({ url: url, post: 0 }); refresh(); } return; }
+          const fc = freeCell();
+          const { r: rr } = await api("/api/desktop/mover", { method: "POST", headers: JH, body: JSON.stringify({ id: rid, x: v === "root" ? fc.x : 0, y: v === "root" ? fc.y : 0, parentId: v === "root" ? null : Number(v) }) });
+          if (rr.ok) { const it = D.items.find((i) => i.id === rid); if (it) { it.parent = v === "root" ? null : Number(v); if (v === "root") { it.x = fc.x; it.y = fc.y; } } refresh(); }
+          return;
+        }
+        const fc2 = freeCell();
+        const payload = { type: "photo", data: { url: url }, x: v === "root" ? fc2.x : 0, y: v === "root" ? fc2.y : 0 };
+        if (v !== "root" && v !== "sys") payload.parentId = Number(v);
+        const { r: rr2, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify(payload) });
+        if (rr2.ok && dd && dd.item) { D.items.push(dd.item); D.fotos = D.fotos.filter((f) => f.url !== url); refresh(); }
+        else toast((dd && dd.message) || "No se pudo.");
+      });
+    }
+    function abrir(it) {
+      if (it.sys) { const w = openWin("sys", "Mis fotos", fotoThumbs(D.fotos, false)); wireMv(w); return; }
+      if (it.type === "folder") {
+        const dentro = D.items.filter((i) => i.parent === it.id).map((i) => ({ url: String(i.data.url || ""), id: i.id }));
+        const extra = own ? '<div class="dk-fbar"><button class="pf-btn ghost pf-mini" id="dk-fren">Renombrar</button><button class="pf-btn ghost pf-mini" id="dk-fdel">Tirar carpeta</button></div>' : "";
+        const w = openWin("f" + it.id, esc(it.data.name), extra + fotoThumbs(dentro, true)); wireMv(w);
+        const rn = w.querySelector("#dk-fren"); if (rn) rn.onclick = async () => { const name = window.prompt("Nuevo nombre:", it.data.name); if (!name) return; const { r: rr, d: dd } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, data: { name: name } }) }); if (rr.ok) { it.data.name = name.trim().slice(0, 24); refresh(); winKill("f" + it.id); } else toast((dd && dd.message) || "No se pudo."); };
+        const dl = w.querySelector("#dk-fdel"); if (dl) dl.onclick = async () => { if (!window.confirm("¿Tirar la carpeta? Lo de adentro vuelve al escritorio.")) return; const { r: rr } = await api("/api/desktop/borrar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id }) }); if (rr.ok) { D.items.forEach((i) => { if (i.parent === it.id) i.parent = null; }); D.items = D.items.filter((i) => i.id !== it.id); refresh(); winKill("f" + it.id); } };
+        return;
+      }
+      if (it.type === "note") {
+        if (!own) { openWin("n" + it.id, "Nota", '<div class="dk-ntext">' + rich(it.data.text || "") + "</div>"); return; }
+        const w = openWin("n" + it.id, "Nota", '<textarea class="dk-ta" maxlength="400">' + esc(it.data.text || "") + '</textarea><div class="dk-fbar"><button class="pf-btn pf-mini" id="dk-ns">Guardar</button><button class="pf-btn ghost pf-mini" id="dk-nd">Tirar</button><span class="pf-msg" id="dk-nm" style="margin:0"></span></div>');
+        w.querySelector("#dk-ns").onclick = async () => { const t = w.querySelector(".dk-ta").value; const { r: rr, d: dd } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, data: { text: t } }) }); w.querySelector("#dk-nm").textContent = rr.ok ? "Guardada." : ((dd && dd.message) || "No se pudo."); if (rr.ok) { it.data.text = t; refresh(); } };
+        w.querySelector("#dk-nd").onclick = async () => { const { r: rr } = await api("/api/desktop/borrar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id }) }); if (rr.ok) { D.items = D.items.filter((i) => i.id !== it.id); refresh(); winKill("n" + it.id); } };
+        return;
+      }
+      if (it.type === "trophy") {
+        const extra = own ? '<div class="dk-fbar"><button class="pf-btn ghost pf-mini" id="dk-tg">Guardar en la Caja</button></div>' : "";
+        const w = openWin("t" + it.id, "Trofeo", '<div class="dk-tro">' + dkSvg("trophy", "#e2b23c") + '<b>' + esc(it.data.label || it.data.kind) + "</b></div>" + extra);
+        const tg = w.querySelector("#dk-tg"); if (tg) tg.onclick = async () => { const { r: rr } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, hidden: true }) }); if (rr.ok) { it.hidden = true; refresh(); winKill("t" + it.id); } };
+        return;
+      }
+      if (it.type === "shortcut") { navShortcut(String(it.data.app)); return; }
+      if (it.type === "photo") { lightbox(String(it.data.url || "")); return; }
+    }
+    function iconHTML(it) {
+      if (it.sys) return '<span class="dk-g">' + dkSvg("folder", acc) + '</span><i class="dk-l">Mis fotos</i>';
+      if (it.type === "folder") return '<span class="dk-g">' + dkSvg("folder") + '</span><i class="dk-l">' + esc(it.data.name) + "</i>";
+      if (it.type === "note") return '<span class="dk-g">' + dkSvg("note", "#facc15") + '</span><i class="dk-l">' + esc(String(it.data.text || "nota").slice(0, 14)) + "</i>";
+      if (it.type === "trophy") return '<span class="dk-g">' + dkSvg("trophy", "#e2b23c") + '</span><i class="dk-l">' + esc(it.data.label || "trofeo") + "</i>";
+      if (it.type === "shortcut") { const a = DK_APPS[it.data.app] || { l: "?" }; return '<span class="dk-g">' + dkSvg(String(it.data.app), acc) + '</span><i class="dk-l">' + esc(a.l) + "</i>"; }
+      if (it.type === "photo") return '<span class="dk-g dk-gimg"><img src="' + esc(String(it.data.url || "")) + '" alt="" /></span><i class="dk-l">foto</i>';
+      return "";
+    }
+    function place(el, x, y) { el.style.left = (x * CELL + 6) + "px"; el.style.top = (y * CELL + 6) + "px"; }
+    function refresh() {
+      S.querySelectorAll(".dk-ico").forEach((e) => e.remove());
+      const sys = { sys: true, x: 0, y: 0 };
+      const list = [sys].concat(rootItems());
+      list.forEach((it) => {
+        const el = document.createElement("button");
+        el.type = "button"; el.className = "dk-ico" + (it.sys ? " dk-sys" : "");
+        el.innerHTML = iconHTML(it);
+        place(el, it.x, it.y);
+        S.appendChild(el);
+        let moved = false;
+        if (own && !it.sys) {
+          el.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0 && e.pointerType === "mouse") return;
+            const sx = e.clientX, sy = e.clientY, ox = el.offsetLeft, oy = el.offsetTop;
+            moved = false; dragging = false;
+            const mv = (ev) => {
+              const dx = ev.clientX - sx, dy = ev.clientY - sy;
+              if (!moved && Math.abs(dx) + Math.abs(dy) < 7) return;
+              moved = true; dragging = true; el.classList.add("drag"); el.style.zIndex = ++zTop;
+              el.style.left = Math.max(0, Math.min(S.clientWidth - 70, ox + dx)) + "px";
+              el.style.top = Math.max(0, Math.min(S.clientHeight - 70, oy + dy)) + "px";
+            };
+            const up = async () => {
+              document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up);
+              el.classList.remove("drag");
+              setTimeout(() => { dragging = false; }, 0);
+              if (!moved) return;
+              let nx = Math.max(0, Math.min(colsN() - 1, Math.round((el.offsetLeft - 6) / CELL)));
+              let ny = Math.max(0, Math.min(39, Math.round((el.offsetTop - 6) / CELL)));
+              const m = ocupado(); m["0_0"] = m["0_0"] || "sys";
+              const sobre = m[nx + "_" + ny];
+              const target = D.items.find((i) => i.id === sobre);
+              if (target && target.type === "folder" && it.type !== "folder" && target.id !== it.id) {
+                const { r: rr } = await api("/api/desktop/mover", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, x: 0, y: 0, parentId: target.id }) });
+                if (rr.ok) { it.parent = target.id; toast("Guardado en " + esc(target.data.name)); }
+                refresh(); return;
+              }
+              if (sobre && sobre !== it.id) { const fc = freeCell(); nx = fc.x; ny = fc.y; }
+              const { r: rr2 } = await api("/api/desktop/mover", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, x: nx, y: ny }) });
+              if (rr2.ok) { it.x = nx; it.y = ny; }
+              refresh();
+            };
+            document.addEventListener("pointermove", mv); document.addEventListener("pointerup", up);
+            e.preventDefault();
+          });
+        }
+        el.addEventListener("click", () => { if (!dragging && !moved) abrir(it); moved = false; });
+      });
+      setCajaN();
+    }
+    refresh();
+    if (own) {
+      body().querySelector("#dk-ncar").onclick = async () => {
+        const name = window.prompt("Nombre de la carpeta:"); if (!name) return;
+        const fc = freeCell();
+        const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "folder", data: { name: name }, x: fc.x, y: fc.y }) });
+        if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); } else toast((dd && dd.message) || "No se pudo.");
+      };
+      body().querySelector("#dk-nnota").onclick = async () => {
+        const fc = freeCell();
+        const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "note", data: { text: "Escribime…" }, x: fc.x, y: fc.y }) });
+        if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); abrir(dd.item); } else toast((dd && dd.message) || "No se pudo.");
+      };
+      body().querySelector("#dk-nacc").onclick = () => {
+        const w = openWin("nacc", "Accesos directos", '<div class="dk-apps">' + Object.keys(DK_APPS).map((k) => '<button class="dk-app" data-app="' + k + '" type="button"><span class="dk-g">' + dkSvg(k, acc) + "</span><i>" + esc(DK_APPS[k].l) + "</i></button>").join("") + "</div>");
+        w.querySelectorAll("[data-app]").forEach((b) => b.onclick = async () => {
+          const fc = freeCell();
+          const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "shortcut", data: { app: b.getAttribute("data-app") }, x: fc.x, y: fc.y }) });
+          if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); winKill("nacc"); } else toast((dd && dd.message) || "No se pudo.");
+        });
+      };
+      body().querySelector("#dk-caja").onclick = () => {
+        const ocultos = cajaItems(), nuevos = trofeosSinPoner();
+        let h = "";
+        if (nuevos.length) h += '<div class="pf-h" style="padding:0 0 6px">Trofeos ganados</div>' + nuevos.map((t) => '<div class="dk-fila"><span>' + dkSvg("trophy", "#e2b23c") + " " + esc(t.label) + '</span><button class="pf-btn pf-mini" data-tk="' + esc(t.kind) + '">Al escritorio</button></div>').join("");
+        if (ocultos.length) h += '<div class="pf-h" style="padding:8px 0 6px">Guardado</div>' + ocultos.map((i) => '<div class="dk-fila"><span>' + esc(i.type === "trophy" ? (i.data.label || "trofeo") : i.type === "note" ? String(i.data.text || "nota").slice(0, 20) : String(i.data.name || i.type)) + '</span><button class="pf-btn pf-mini" data-sk="' + i.id + '">Sacar</button></div>').join("");
+        const w = openWin("caja", "La Caja", h || '<p class="pf-dimc" style="padding:8px">Vacía. Todo lo tuyo está a la vista.</p>');
+        w.querySelectorAll("[data-tk]").forEach((b) => b.onclick = async () => {
+          const fc = freeCell();
+          const { r: rr, d: dd } = await api("/api/desktop/crear", { method: "POST", headers: JH, body: JSON.stringify({ type: "trophy", data: { kind: b.getAttribute("data-tk") }, x: fc.x, y: fc.y }) });
+          if (rr.ok && dd && dd.item) { D.items.push(dd.item); refresh(); winKill("caja"); toast("Trofeo al escritorio. Chapeá tranquilo."); } else toast((dd && dd.message) || "No se pudo.");
+        });
+        w.querySelectorAll("[data-sk]").forEach((b) => b.onclick = async () => {
+          const id = Number(b.getAttribute("data-sk")); const fc = freeCell();
+          const { r: rr } = await api("/api/desktop/editar", { method: "POST", headers: JH, body: JSON.stringify({ id: id, hidden: false }) });
+          if (rr.ok) { const it = D.items.find((i) => i.id === id); if (it) { it.hidden = false; it.x = fc.x; it.y = fc.y; await api("/api/desktop/mover", { method: "POST", headers: JH, body: JSON.stringify({ id: id, x: fc.x, y: fc.y }) }); } refresh(); winKill("caja"); }
+        });
+      };
+    }
+  }
+
   /* ---------- Admin ---------- */
   function viewAdmin() {
     chead("Admin");
@@ -681,7 +910,7 @@
     body().innerHTML =
       banner +
       '<div class="pf-uhead"><span class="pf-ava pf-uava" style="border-color:' + acc + '">' + avaPic(p.avatar, headFor(p.nick)) + '</span>' +
-      '<div class="pf-uact">' + action + '<button class="pf-btn ghost pf-mini" id="pu-share">Compartir</button>' + modTools + '</div></div>' +
+      '<div class="pf-uact">' + action + '<button class="pf-btn ghost pf-mini" id="pu-desk">Escritorio</button><button class="pf-btn ghost pf-mini" id="pu-share">Compartir</button>' + modTools + '</div></div>' +
       '<div class="pf-uname">' + esc(p.nick) + " " + badges(p) + '</div>' +
       '<div class="pf-dimc" style="padding:2px 0">@' + esc(p.nick) + (desde ? " · desde " + desde : "") + '</div>' +
       (p.estado ? '<div class="pf-estado" style="border-color:' + acc + '66">' + esc(p.estado) + "</div>" : "") +
@@ -696,6 +925,7 @@
     box.innerHTML = list.length ? list.map((x) => (x.pin ? '<div class="pf-pinlbl">Fijado</div>' : "") + postHTML(x) + (p.rel === "me" ? '<div class="pf-pinrow"><a data-pin="' + (x.pin ? "0" : x.id) + '">' + (x.pin ? "Quitar fijado" : "Fijar arriba") + "</a></div>" : "")).join("") : '<p class="pf-empty">Todavía no posteó nada.</p>';
     box.querySelectorAll("[data-pin]").forEach((a) => a.onclick = async () => { const id = Number(a.getAttribute("data-pin")); const { r } = await api("/api/hub/pin-post", { method: "POST", headers: JH, body: JSON.stringify({ id: id || null }) }); if (r.ok) { me.pinned = id || null; viewUser(p.nick); } });
     const edit = body().querySelector("#pu-edit"); if (edit) edit.onclick = () => setView("editar");
+    const dsk = body().querySelector("#pu-desk"); if (dsk) dsk.onclick = () => viewDesktop(p.nick);
     const sh = body().querySelector("#pu-share"); if (sh) sh.onclick = async () => { const url = location.origin + "/u/" + encodeURIComponent(p.nick); try { await navigator.clipboard.writeText(url); sh.textContent = "¡Copiado!"; } catch (_) { sh.textContent = url; } };
     const bdb = body().querySelector("#pu-badges-btn"); if (bdb) bdb.onclick = () => openBadgeEditor(p.nick, badgeList(p));
     const msgb = body().querySelector("#pu-msg"); if (msgb) msgb.onclick = () => { window.__dmOpen = p.nick; setView("mensajes"); };

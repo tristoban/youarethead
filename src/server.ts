@@ -281,6 +281,21 @@ export async function initDb(db: Db): Promise<void> {
       PRIMARY KEY (post_id, user_id)
     );
   `);
+  // El Escritorio (S.O. de perfil)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS desktop_items (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      type TEXT NOT NULL,
+      data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      x INT NOT NULL DEFAULT 0,
+      y INT NOT NULL DEFAULT 0,
+      parent_id BIGINT,
+      hidden BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS desktop_user_idx ON desktop_items (user_id, parent_id);`);
   const mp = await db.query('SELECT x, y, v FROM mural_px');
   for (const r of mp.rows) {
     const x = Number(r.x), y = Number(r.y), v = Number(r.v);
@@ -585,6 +600,186 @@ export function buildApp(db: Db): FastifyInstance {
     };
   }
   const imgRate = new Map<number, number[]>();
+
+  // ---- El Escritorio: catálogo, trofeos calculados y helpers ----
+  const DESK_APPS: readonly string[] = ['tetristo', 'parpadeo', 'laberinto', 'chat', 'boton', 'mural', 'pueblo', 'feed'];
+  const DESK_TYPES: readonly string[] = ['folder', 'note', 'shortcut', 'trophy', 'photo'];
+  const GAME_LABEL: Record<string, string> = { tetristo: 'TeTristo', parpadeo: 'No Parpadees', laberinto: 'El Laberinto' };
+  const deskRate = new Map<number, number>();
+  interface Trofeo { kind: string; label: string }
+  async function computeTrofeos(uid: number, nick: string): Promise<Trofeo[]> {
+    const out: Trofeo[] = [];
+    const nl = nick.toLowerCase();
+    if (nl === 'tristoban') out.push({ kind: 'fundador', label: 'Fundador' });
+    for (const g of ['tetristo', 'parpadeo', 'laberinto']) {
+      const best = Number((await db.query('SELECT max(score) AS s FROM scores WHERE game = $1 AND lower(alias) = $2', [g, nl])).rows[0]?.s ?? 0);
+      if (!best) continue;
+      const up = Number((await db.query('SELECT count(*) AS c FROM (SELECT lower(alias) AS a, max(score) AS s FROM scores WHERE game = $1 GROUP BY 1) t WHERE t.s > $2', [g, best])).rows[0]?.c ?? 0);
+      const rank = up + 1;
+      if (rank <= 3) out.push({ kind: 'top_' + g, label: '#' + rank + ' en ' + (GAME_LABEL[g] ?? g) });
+    }
+    const st = Number((await db.query('SELECT streak FROM hub_users WHERE id = $1', [uid])).rows[0]?.streak ?? 0);
+    if (st >= 30) out.push({ kind: 'racha30', label: 'Racha 30 días' });
+    else if (st >= 7) out.push({ kind: 'racha7', label: 'Racha 7 días' });
+    const kp = Number((await db.query('SELECT count(*) AS c FROM post_likes pl JOIN posts p ON p.id = pl.post_id WHERE p.user_id = $1', [uid])).rows[0]?.c ?? 0);
+    const kc = Number((await db.query('SELECT count(*) AS c FROM comment_likes cl JOIN comments c ON c.id = cl.comment_id WHERE c.user_id = $1', [uid])).rows[0]?.c ?? 0);
+    const karma = kp + kc;
+    if (karma >= 500) out.push({ kind: 'karma500', label: 'Karma 500' });
+    else if (karma >= 50) out.push({ kind: 'karma50', label: 'Karma 50' });
+    const ca = (await db.query('SELECT (SELECT count(*) FROM boton_caidos b2 WHERE b2.id <= b.id) AS n FROM boton_caidos b WHERE b.user_id = $1', [uid])).rows[0];
+    const cn = ca ? Number(ca.n ?? 0) : 0;
+    if (cn > 0 && cn <= 100) out.push({ kind: 'caido', label: 'Caído N° ' + cn });
+    const np = Number((await db.query('SELECT count(*) AS c FROM posts WHERE user_id = $1', [uid])).rows[0]?.c ?? 0);
+    if (np >= 50) out.push({ kind: 'posts50', label: '50 posteos' });
+    else if (np >= 1) out.push({ kind: 'post1', label: 'Primer posteo' });
+    return out;
+  }
+  function deskData(type: string, raw: unknown, muted: boolean): { ok: true; data: Record<string, unknown> } | { ok: false; code: number; error: string; message: string } {
+    const o = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {};
+    if (type === 'folder') {
+      const name = typeof o.name === 'string' ? o.name.replace(/\s+/g, ' ').trim().slice(0, 24) : '';
+      if (!name) return { ok: false, code: 400, error: 'bad_name', message: 'Ponele un nombre a la carpeta.' };
+      if (muted) return { ok: false, code: 403, error: 'muted', message: 'Estás silenciado.' };
+      if (offensiveText(name)) return { ok: false, code: 400, error: 'bad_words', message: 'Ese nombre no va.' };
+      return { ok: true, data: { name } };
+    }
+    if (type === 'note') {
+      const text = typeof o.text === 'string' ? o.text.replace(/\n{3,}/g, '\n\n').trim().slice(0, 400) : '';
+      if (muted) return { ok: false, code: 403, error: 'muted', message: 'Estás silenciado.' };
+      if (offensiveText(text)) return { ok: false, code: 400, error: 'bad_words', message: 'Eso no va.' };
+      return { ok: true, data: { text } };
+    }
+    if (type === 'shortcut') {
+      const app2 = typeof o.app === 'string' && DESK_APPS.indexOf(o.app) >= 0 ? o.app : '';
+      if (!app2) return { ok: false, code: 400, error: 'bad_app', message: 'Ese acceso no existe.' };
+      return { ok: true, data: { app: app2 } };
+    }
+    if (type === 'photo') {
+      const url = typeof o.url === 'string' ? o.url.slice(0, 500) : '';
+      if (!url) return { ok: false, code: 400, error: 'bad_url', message: 'Falta la foto.' };
+      return { ok: true, data: { url } };
+    }
+    return { ok: true, data: {} }; // trophy: data.kind se valida aparte
+  }
+
+  app.get('/api/desktop', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const nick = String(((req.query ?? {}) as { nick?: unknown }).nick ?? '').trim();
+    if (!nick) return reply.code(400).send({ ok: false, error: 'bad' });
+    const ur = (await db.query('SELECT id, nick, accent, banner FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()])).rows[0];
+    if (!ur) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese perfil.' });
+    const uid = Number(ur.id);
+    const meU = await hubUserBySession(db, req);
+    const own = !!meU && meU.id === uid;
+    const rows = (await db.query('SELECT id, type, data, x, y, parent_id, hidden, created_at FROM desktop_items WHERE user_id = $1 ORDER BY id ASC LIMIT 200', [uid])).rows;
+    const items = rows
+      .filter((r) => own || r.hidden !== true)
+      .map((r) => ({ id: Number(r.id), type: String(r.type), data: (r.data as Record<string, unknown>) ?? {}, x: Number(r.x ?? 0), y: Number(r.y ?? 0), parent: r.parent_id ? Number(r.parent_id) : null, hidden: r.hidden === true, t: r.created_at }));
+    const fr = (await db.query('SELECT id, images FROM posts WHERE user_id = $1 AND images IS NOT NULL ORDER BY id DESC LIMIT 100', [uid])).rows;
+    const enRows = new Set(items.filter((i) => i.type === 'photo').map((i) => String((i.data as { url?: unknown }).url ?? '')));
+    const fotos: Array<{ url: string; post: number }> = [];
+    for (const r of fr) if (Array.isArray(r.images)) for (const u of (r.images as unknown[])) { const s = String(u); if (!enRows.has(s)) fotos.push({ url: s, post: Number(r.id) }); }
+    const trofeos = await computeTrofeos(uid, String(ur.nick ?? ''));
+    return { ok: true, own, items, fotos, trofeos, perfil: { nick: ur.nick, accent: (ur.accent as string | null) ?? null, banner: (ur.banner as string | null) ?? null } };
+  });
+
+  app.post('/api/desktop/crear', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const now = Date.now();
+    if (now - (deskRate.get(u.id) ?? 0) < 700) return reply.code(429).send({ ok: false, error: 'slow', message: 'Pará un toque.' });
+    deskRate.set(u.id, now);
+    const b = (req.body ?? {}) as { type?: unknown; data?: unknown; x?: unknown; y?: unknown; parentId?: unknown };
+    const type = typeof b.type === 'string' && DESK_TYPES.indexOf(b.type) >= 0 ? b.type : '';
+    if (!type) return reply.code(400).send({ ok: false, error: 'bad_type' });
+    const cnt = Number((await db.query('SELECT count(*) AS c FROM desktop_items WHERE user_id = $1', [u.id])).rows[0]?.c ?? 0);
+    if (cnt >= 80) return reply.code(400).send({ ok: false, error: 'lleno', message: 'El escritorio está repleto (80 max). Tirá algo a la basura primero.' });
+    const dv = deskData(type, b.data, u.muted);
+    if (!dv.ok) return reply.code(dv.code).send({ ok: false, error: dv.error, message: dv.message });
+    const data = dv.data;
+    if (type === 'trophy') {
+      const kind = typeof (b.data as { kind?: unknown } | undefined)?.kind === 'string' ? String((b.data as { kind: string }).kind) : '';
+      const earned = await computeTrofeos(u.id, u.nick ?? '');
+      const tro = earned.find((t) => t.kind === kind);
+      if (!tro) return reply.code(400).send({ ok: false, error: 'no_ganado', message: 'Ese trofeo todavía no es tuyo.' });
+      data.kind = tro.kind; data.label = tro.label;
+    }
+    if (type === 'photo') {
+      const url = String(data.url ?? '');
+      const owns = (await db.query('SELECT 1 FROM posts WHERE user_id = $1 AND images ? $2 LIMIT 1', [u.id, url])).rows.length > 0;
+      const yaRow = (await db.query("SELECT 1 FROM desktop_items WHERE user_id = $1 AND type = 'photo' AND data->>'url' = $2 LIMIT 1", [u.id, url])).rows.length > 0;
+      if (!owns && !yaRow) return reply.code(400).send({ ok: false, error: 'no_tuya', message: 'Esa foto no es de tus posteos.' });
+      if (yaRow) return reply.code(409).send({ ok: false, error: 'ya_esta', message: 'Esa foto ya está en el escritorio.' });
+    }
+    let parent: number | null = null;
+    if (b.parentId != null && b.parentId !== '') {
+      const pid = Math.floor(Number(b.parentId));
+      if (Number.isInteger(pid) && pid > 0) {
+        const pf = (await db.query("SELECT 1 FROM desktop_items WHERE id = $1 AND user_id = $2 AND type = 'folder'", [pid, u.id])).rows;
+        if (pf.length) parent = pid;
+      }
+    }
+    const x = Math.max(0, Math.min(40, Math.floor(Number(b.x)) || 0));
+    const y = Math.max(0, Math.min(40, Math.floor(Number(b.y)) || 0));
+    const ins = await db.query('INSERT INTO desktop_items (user_id, type, data, x, y, parent_id) VALUES ($1, $2, $3::jsonb, $4, $5, $6) RETURNING id, created_at', [u.id, type, JSON.stringify(data), x, y, parent]);
+    const row = ins.rows[0];
+    return reply.code(201).send({ ok: true, item: { id: Number(row?.id ?? 0), type, data, x, y, parent, hidden: false, t: row?.created_at } });
+  });
+
+  app.post('/api/desktop/mover', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const b = (req.body ?? {}) as { id?: unknown; x?: unknown; y?: unknown; parentId?: unknown };
+    const id = Math.floor(Number(b.id));
+    if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
+    const own = (await db.query('SELECT type FROM desktop_items WHERE id = $1 AND user_id = $2', [id, u.id])).rows[0];
+    if (!own) return reply.code(404).send({ ok: false, error: 'not_found' });
+    let parent: number | null = null;
+    if (b.parentId != null && b.parentId !== '') {
+      const pid = Math.floor(Number(b.parentId));
+      if (Number.isInteger(pid) && pid > 0 && pid !== id) {
+        const pf = (await db.query("SELECT 1 FROM desktop_items WHERE id = $1 AND user_id = $2 AND type = 'folder'", [pid, u.id])).rows;
+        if (!pf.length) return reply.code(400).send({ ok: false, error: 'bad_carpeta' });
+        if (String(own.type) === 'folder') return reply.code(400).send({ ok: false, error: 'carpetaception', message: 'Carpetas dentro de carpetas no, que esto no es Inception.' });
+        parent = pid;
+      }
+    }
+    const x = Math.max(0, Math.min(40, Math.floor(Number(b.x)) || 0));
+    const y = Math.max(0, Math.min(40, Math.floor(Number(b.y)) || 0));
+    await db.query('UPDATE desktop_items SET x = $3, y = $4, parent_id = $5 WHERE id = $1 AND user_id = $2', [id, u.id, x, y, parent]);
+    return { ok: true };
+  });
+
+  app.post('/api/desktop/editar', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const b = (req.body ?? {}) as { id?: unknown; data?: unknown; hidden?: unknown };
+    const id = Math.floor(Number(b.id));
+    if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
+    const row = (await db.query('SELECT type, data FROM desktop_items WHERE id = $1 AND user_id = $2', [id, u.id])).rows[0];
+    if (!row) return reply.code(404).send({ ok: false, error: 'not_found' });
+    if (b.data !== undefined) {
+      const type = String(row.type);
+      if (type === 'trophy' || type === 'photo') return reply.code(400).send({ ok: false, error: 'no_editable' });
+      const dv = deskData(type, b.data, u.muted);
+      if (!dv.ok) return reply.code(dv.code).send({ ok: false, error: dv.error, message: dv.message });
+      await db.query('UPDATE desktop_items SET data = $3::jsonb WHERE id = $1 AND user_id = $2', [id, u.id, JSON.stringify(dv.data)]);
+    }
+    if (typeof b.hidden === 'boolean') await db.query('UPDATE desktop_items SET hidden = $3 WHERE id = $1 AND user_id = $2', [id, u.id, b.hidden]);
+    return { ok: true };
+  });
+
+  app.post('/api/desktop/borrar', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const id = Math.floor(Number(((req.body ?? {}) as { id?: unknown }).id));
+    if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
+    const row = (await db.query('SELECT type FROM desktop_items WHERE id = $1 AND user_id = $2', [id, u.id])).rows[0];
+    if (!row) return reply.code(404).send({ ok: false, error: 'not_found' });
+    if (String(row.type) === 'folder') await db.query('UPDATE desktop_items SET parent_id = NULL WHERE parent_id = $1 AND user_id = $2', [id, u.id]);
+    await db.query('DELETE FROM desktop_items WHERE id = $1 AND user_id = $2', [id, u.id]);
+    return { ok: true };
+  });
   const GATED = new Set(['/index.html', '/tshirt.png', '/pic1.png', '/pic2.png', '/pic3.png', '/pic3.jpg']);
   app.addHook('onRequest', async (req, reply) => {
     if (LAUNCHED || isAdmin(req)) return;

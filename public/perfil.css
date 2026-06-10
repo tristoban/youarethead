@@ -417,3 +417,66 @@
 .pf-trow:hover { background: rgba(255,255,255,.05); color: #fff; }
 .pf-trow b { color: #8a8f98; font-size: 11px; }
 @media (max-width: 680px) { .pf-pimgs img { max-height: 300px; } .pf-toast { bottom: 96px; } }
+
+/* ---- D1: desktop ancho — que la pantalla grande se use ---- */
+@media (min-width: 1400px) {
+  .pf-app { grid-template-columns: 264px minmax(0, 780px) 364px; max-width: 1480px; gap: 28px; }
+  .pf-nav button, .pf-nav a { font-size: 15px; }
+  .pf-post-t { font-size: 17px; }
+  .pf-post-b, .pf-postfull-b { font-size: 14.5px; line-height: 1.55; }
+  .pf-ctitle { font-size: 19px; }
+  .pf-widget { font-size: 14px; }
+  .pf-cmt-b { font-size: 14px; }
+}
+@media (min-width: 1750px) {
+  .pf-app { grid-template-columns: 284px minmax(0, 900px) 404px; max-width: 1680px; gap: 32px; }
+  .pf-post-t { font-size: 18px; }
+  .pf-post-b, .pf-postfull-b { font-size: 15px; }
+  .pf-pimgs img { max-height: 520px; }
+}
+
+/* ---- El Escritorio (S.O. de perfil) ---- */
+.dk-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 12px; }
+.dk-bar #dk-cajan { color: #e2b23c; }
+.dk-surface { position: relative; min-height: 68vh; border: 1px solid rgba(255,255,255,.14); border-radius: 14px; overflow: hidden; background-size: cover; background-position: center; box-shadow: inset 0 0 80px rgba(0,0,0,.75); touch-action: none; }
+.dk-surface::before { content: ""; position: absolute; inset: 0; background: rgba(5,5,8,.55); pointer-events: none; }
+.dk-scan { position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px); mix-blend-mode: overlay; }
+.dk-ico { position: absolute; width: 88px; height: 88px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; background: none; border: 1px solid transparent; border-radius: 12px; cursor: pointer; padding: 6px 4px; transition: background .12s, border-color .12s; user-select: none; -webkit-user-select: none; }
+.dk-ico:hover { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.14); }
+.dk-ico.drag { opacity: .85; cursor: grabbing; }
+.dk-g { width: 38px; height: 38px; display: block; color: #d7dae1; filter: drop-shadow(0 2px 6px rgba(0,0,0,.6)); }
+.dk-g svg { width: 100%; height: 100%; }
+.dk-gimg { border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,.25); }
+.dk-gimg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dk-l { font: 600 10.5px "Montserrat", sans-serif; font-style: normal; color: #eceef2; text-shadow: 0 1px 4px rgba(0,0,0,.9); max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-win { position: absolute; width: min(340px, 86%); background: rgba(13,13,16,.97); border: 1px solid rgba(255,255,255,.2); border-radius: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.6); overflow: hidden; }
+.dk-tit { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 8px 12px; background: linear-gradient(180deg, rgba(255,255,255,.1), rgba(255,255,255,.03)); border-bottom: 1px solid rgba(255,255,255,.14); font: 800 12px "Montserrat", sans-serif; letter-spacing: .06em; text-transform: uppercase; cursor: grab; user-select: none; -webkit-user-select: none; }
+.dk-x { background: none; border: 1px solid rgba(255,255,255,.25); border-radius: 6px; color: #eceef2; width: 22px; height: 22px; line-height: 1; cursor: pointer; font-size: 14px; }
+.dk-x:hover { background: #D23B47; border-color: #D23B47; }
+.dk-body { padding: 12px; max-height: 46vh; overflow: auto; }
+.dk-fgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.dk-foto { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.dk-foto img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: zoom-in; border: 1px solid rgba(255,255,255,.14); }
+.dk-mv { background: #141417; color: #b9bdc7; border: 1px solid rgba(255,255,255,.16); border-radius: 7px; font: 600 10.5px "Montserrat", sans-serif; padding: 3px 4px; max-width: 100%; }
+.dk-ta { width: 100%; min-height: 110px; background: rgba(250,204,21,.08); border: 1px solid rgba(250,204,21,.35); border-radius: 8px; color: #f5f0d8; font: 500 13px "Montserrat", sans-serif; padding: 9px; resize: vertical; outline: none; }
+.dk-ntext { white-space: pre-wrap; font: 500 13px "Montserrat", sans-serif; color: #f5f0d8; background: rgba(250,204,21,.07); border: 1px solid rgba(250,204,21,.3); border-radius: 8px; padding: 10px; }
+.dk-fbar { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; flex-wrap: wrap; }
+.dk-body .dk-fbar:last-child { margin: 10px 0 0; }
+.dk-tro { display: flex; align-items: center; gap: 10px; font: 800 15px "Montserrat", sans-serif; color: #f1e7c8; }
+.dk-tro svg { width: 34px; height: 34px; }
+.dk-apps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.dk-app { display: flex; flex-direction: column; align-items: center; gap: 5px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 10px 4px; cursor: pointer; transition: border-color .12s; }
+.dk-app:hover { border-color: rgba(107,140,255,.6); }
+.dk-app .dk-g { width: 26px; height: 26px; }
+.dk-app i { font: 600 9.5px "Montserrat", sans-serif; font-style: normal; color: #c7cbd4; }
+.dk-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 2px; border-bottom: 1px solid rgba(255,255,255,.07); font: 600 12.5px "Montserrat", sans-serif; color: #d7dae1; }
+.dk-fila svg { width: 16px; height: 16px; vertical-align: -3px; }
+@media (max-width: 680px) {
+  .dk-surface { min-height: 64vh; }
+  .dk-ico { width: 72px; height: 76px; }
+  .dk-g { width: 32px; height: 32px; }
+  .dk-l { max-width: 68px; font-size: 10px; }
+  .dk-apps { grid-template-columns: repeat(3, 1fr); }
+  .dk-fgrid { grid-template-columns: repeat(2, 1fr); }
+  .dk-win { width: min(300px, 92%); }
+}
