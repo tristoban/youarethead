@@ -237,7 +237,7 @@
     if (!r.ok || !d || !d.ok) { root.innerHTML = '<div class="pf-guest"><p class="pf-empty">No se encontró ese perfil.</p><a class="pf-btn pf-spin" href="/yata">Entrá a youarethead</a></div>'; return; }
     const p = d.perfil, acc = (typeof p.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(p.accent)) ? p.accent : "var(--pf-acc)";
     const links = (Array.isArray(p.links) ? p.links : []).map((l) => { const pl = platOf(l.url); return '<a class="pf-link" href="' + esc(l.url) + '" target="_blank" rel="noopener"><span class="pf-link-i">' + linkSvg(pl[2]) + '</span><span class="pf-link-t">' + esc(l.title) + '</span><span class="pf-link-x">&#8599;</span></a>'; }).join("");
-    const banner = p.banner ? '<div class="pf-banner" style="background-image:url(\'' + esc(p.banner) + '\')"></div>' : '<div class="pf-banner" style="background:linear-gradient(120deg,' + acc + '22,#0a0a0d)"></div>';
+    const banner = p.banner ? '<div class="pf-banner" style="background-image:url(\'' + esc(p.banner) + '\')"></div>' : '<div class="pf-banner" style="background:linear-gradient(120deg,#15151a,#0a0a0d)"></div>';
     root.innerHTML = '<div class="pf-guest">' + banner +
       '<div class="pf-uhead"><span class="pf-ava pf-uava">' + avaPic(p.avatar, headFor(p.nick)) + "</span></div>" +
       '<div class="pf-uname">' + esc(p.nick) + " " + badges(p) + "</div>" +
@@ -1518,7 +1518,7 @@
   /* ---------- Perfil público ---------- */
   function vhex(c) { return (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)) ? c : "#6b8cff"; }
   function badgeList(p) { let arr = Array.isArray(p.badges) ? p.badges : null; if (!arr) { arr = []; if (p.admin) arr.push({ t: "verificado", c: "#6b8cff" }); if (p.founder) arr.push({ t: "fundador", c: "#e2b23c" }); } return arr; }
-  function badges(p) { return badgeList(p).slice(0, 6).map((b) => '<span class="pf-tag" style="background:' + vhex(b.c) + ';color:#06070d">' + esc(b.t) + "</span>").join(""); }
+  function badges(p) { return badgeList(p).slice(0, 6).map((b) => '<span class="pf-tag pf-tagg">' + esc(b.t) + "</span>").join(""); }
   async function viewUser(nick) {
     clearView(); cur = "user";
     setUrl("/demon/" + encodeURIComponent(nick));
@@ -1529,7 +1529,7 @@
     if (!r.ok || !d || !d.ok) { body().innerHTML = '<p class="pf-empty">No se encontró ese perfil.</p>'; return; }
     const p = d.perfil, acc = (typeof p.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(p.accent)) ? p.accent : "var(--pf-acc)";
     const desde = p.desde ? new Date(p.desde).toLocaleDateString("es-AR", { month: "long", year: "numeric" }) : "";
-    const banner = p.banner ? '<div class="pf-banner" style="background-image:url(\'' + esc(p.banner) + '\')"></div>' : '<div class="pf-banner" style="background:linear-gradient(120deg,' + acc + '33,#0a0a0d)"></div>';
+    const banner = p.banner ? '<div class="pf-banner" style="background-image:url(\'' + esc(p.banner) + '\')"></div>' : '<div class="pf-banner" style="background:linear-gradient(120deg,#15151a,#0a0a0d)"></div>';
     const links = (Array.isArray(p.links) ? p.links : []).map((l) => { const pl = platOf(l.url); return '<a class="pf-link" href="' + esc(l.url) + '" target="_blank" rel="noopener"><span class="pf-link-i" style="color:' + acc + '">' + linkSvg(pl[2]) + '</span><span class="pf-link-t">' + esc(l.title) + "</span></a>"; }).join("");
     let action = "";
     if (p.rel === "me") action = '<button class="pf-btn" id="pu-edit">Editar perfil</button>';
@@ -1612,8 +1612,7 @@
     const vips = todos.filter((e) => !e.founder && !e.admin && !tiene(e, "staff") && (tiene(e, "vip") || tiene(e, "mvp")));
     const resto = todos.filter((e) => !fundador.includes(e) && !staff.includes(e) && !vips.includes(e));
     const tarjeta = (e) => {
-      const acc = (typeof e.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(e.accent)) ? e.accent : "#6b8cff";
-      const fondo = e.banner ? 'background-image:url(\'' + esc(e.banner) + '\')' : "background:linear-gradient(135deg," + acc + "33,#0b0b0e)";
+      const fondo = e.banner ? 'background-image:url(\'' + esc(e.banner) + '\')' : "background:linear-gradient(135deg,#16161b,#0b0b0e)";
       return '<button class="pf-eskc" data-esk="' + esc(e.nick) + '" type="button" style="' + fondo + '">' +
         '<span class="pf-eskv">' + (e.adentro > 0 ? '<i class="pf-eskon"></i>' + e.adentro + " adentro" : fmt.format(e.visitas) + " visitas") + "</span>" +
         '<span class="pf-eskb"><span class="pf-ava pf-ava-sm">' + avaPic(e.avatar, headFor(e.nick)) + "</span><b>" + esc(e.nick) + "</b></span>" +

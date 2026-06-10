@@ -1,5 +1,5 @@
 /* ====== Red social — layout 3 columnas (twitter-ish, en nuestra clave) ====== */
-:root { --pf-acc: #6b8cff; --pf-card: rgba(18,18,20,.95); }
+:root { --pf-acc: #8b7cff; --pf-card: rgba(18,18,20,.95); }
 
 #pf-root { min-height: 100svh; padding: 14px; }
 .pf-loading { color: #6c6c72; text-align: center; padding: 80px 0; font-family: "Montserrat", sans-serif; }
@@ -20,9 +20,9 @@
 }
 .pf-nav button:hover, .pf-nav a:hover { background: rgba(255,255,255,.06); color: #fff; }
 .pf-nav .on { color: #fff; font-weight: 800; }
-.pf-nav .on .pf-ic { color: var(--pf-acc); }
+.pf-nav .on .pf-ic { color: #fff; }
 .pf-ic { width: 22px; height: 22px; flex: none; color: #9a9aa2; }
-.pf-badge { margin-left: auto; background: var(--pf-acc); color: #06070d; font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 999px; }
+.pf-badge { margin-left: auto; background: transparent; border: 1px solid rgba(255,255,255,.2); color: #9aa0a8; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; }
 .pf-postbtn { margin: 10px 6px 0; background: #f5f5f7; color: #060606; border: 0; border-radius: 999px; padding: 13px; font: 800 14px "Montserrat", sans-serif; text-transform: uppercase; letter-spacing: .04em; cursor: pointer; }
 .pf-postbtn:hover { background: #d9d9de; }
 .pf-me { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 8px 10px; border-radius: 12px; cursor: pointer; }
@@ -57,16 +57,14 @@
 .pf-link-i { display: flex; }
 .pf-link-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pf-link-x { color: #6c6c72; }
-.pf-pinlbl { font-size: 11px; color: #e2b23c; font-weight: 700; padding: 8px 18px 0; }
+.pf-pinlbl { font-size: 11px; color: #9aa0a8; font-weight: 700; padding: 8px 18px 0; }
 .pf-pinrow { padding: 2px 18px 8px; }
-.pf-pinrow a { color: #6b8cff; font-size: 12px; font-weight: 700; cursor: pointer; }
+.pf-pinrow a { color: #c6c9cf; font-size: 12px; font-weight: 700; cursor: pointer; }
 
 /* ---- Carrusel de novedades ---- */
 .pf-carousel { margin: 0 0 14px; }
 .pf-cslide { display: block; border-radius: 14px; padding: 18px; text-decoration: none; color: #fff; border: 1px solid rgba(255,255,255,.12); }
-.pf-cslide.s-remera { background: linear-gradient(120deg, #6b8cff40, #0a0a0d); }
-.pf-cslide.s-video { background: linear-gradient(120deg, #D23B4740, #0a0a0d); }
-.pf-cslide.s-tristo { background: linear-gradient(120deg, #e2b23c40, #0a0a0d); }
+.pf-cslide.s-remera, .pf-cslide.s-video, .pf-cslide.s-tristo { background: linear-gradient(120deg, #1a1a2040, #0a0a0d); }
 .pf-cs-k { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #cfcfd6; margin-bottom: 4px; }
 .pf-cs-t { font-size: 17px; font-weight: 700; line-height: 1.3; }
 .pf-cs-t b { font-weight: 800; }
@@ -83,7 +81,7 @@
 .pf-ctitle { font-size: 18px; font-weight: 800; padding: 14px 18px 10px; }
 .pf-tabs2 { display: flex; }
 .pf-tabs2 button { flex: 1; background: none; border: 0; border-bottom: 2px solid transparent; color: #9a9aa2; font: 700 13px "Montserrat", sans-serif; padding: 12px; cursor: pointer; }
-.pf-tabs2 button.on { color: #fff; border-bottom-color: var(--pf-acc); }
+.pf-tabs2 button.on { color: #fff; border-bottom-color: #fff; }
 .pf-body { padding: 14px 18px 22px; }
 
 .pf-comp { display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,.08); }
@@ -92,7 +90,7 @@
 .pf-comp textarea { width: 100%; background: none; border: 0; color: #fff; font: 400 17px "Montserrat", sans-serif; outline: none; resize: none; min-height: 44px; }
 .pf-comp textarea::placeholder { color: #5f5f66; }
 .pf-comp .pf-crow { display: flex; align-items: center; justify-content: flex-end; margin-top: 6px; }
-.pf-cbtn { background: var(--pf-acc); color: #06070d; border: 0; border-radius: 999px; padding: 9px 20px; font: 800 13px "Montserrat", sans-serif; cursor: pointer; }
+.pf-cbtn { background: #ededf0; color: #0b0b0e; border: 0; border-radius: 10px; padding: 9px 20px; font: 700 13px "Montserrat", sans-serif; cursor: pointer; }
 .pf-cbtn:disabled { opacity: .5; cursor: default; }
 
 .pf-post { display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,.07); }
@@ -106,7 +104,7 @@
 /* ---- Buscar / filas (amigos) ---- */
 .pf-row { display: flex; gap: 8px; align-items: center; }
 .pf-row input, .pf-input { flex: 1; min-width: 0; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 11px 16px; color: #fff; font: inherit; outline: none; }
-.pf-row input:focus, .pf-input:focus { border-color: var(--pf-acc); }
+.pf-row input:focus, .pf-input:focus { border-color: rgba(255,255,255,.35); }
 .pf-btn { background: #f5f5f7; color: #060606; border: 0; border-radius: 999px; padding: 10px 16px; font: 800 12px "Montserrat", sans-serif; text-transform: uppercase; cursor: pointer; }
 .pf-btn.ghost { background: transparent; color: #f5f5f7; border: 1px solid rgba(255,255,255,.25); }
 .pf-mini { padding: 7px 13px; font-size: 11px; }
@@ -120,12 +118,12 @@
 .pf-dm { display: grid; grid-template-columns: 150px minmax(0,1fr); gap: 12px; }
 .pf-dml { display: flex; flex-direction: column; gap: 6px; }
 .pf-dmf { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.14); border-radius: 10px; color: #cfcfd6; font: 700 12px "Montserrat", sans-serif; padding: 10px; cursor: pointer; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pf-dmf.on { color: #fff; border-color: var(--pf-acc); }
+.pf-dmf.on { color: #fff; border-color: rgba(255,255,255,.4); }
 .pf-dmh { font-size: 12px; color: #9a9aa2; margin-bottom: 8px; }
 .pf-dmh a { color: #cfcfd6; border-bottom: 1px solid rgba(255,255,255,.25); font-size: 11px; }
 .pf-dmlog { height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.1); border-radius: 12px; }
 .pf-m { max-width: 82%; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 7px 11px; font-size: 13px; align-self: flex-start; overflow-wrap: anywhere; }
-.pf-m.mio { align-self: flex-end; background: var(--pf-acc); color: #06070d; border-color: transparent; }
+.pf-m.mio { align-self: flex-end; background: #ededf0; color: #0b0b0e; border-color: transparent; }
 .pf-mn { display: block; font-size: 10px; color: #9a9aa2; margin-bottom: 2px; }
 .pf-m.mio .pf-mn { color: rgba(6,7,13,.7); }
 
@@ -140,7 +138,7 @@
 .pf-gcm b { color: #fff; margin-right: 4px; } .pf-gcm span { color: #c9c9d0; }
 .pf-gcform { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid rgba(255,255,255,.08); }
 .pf-gcform input { flex: 1; min-width: 0; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 9px 13px; color: #fff; font: inherit; outline: none; }
-.pf-wlink { display: block; padding: 11px 16px; text-align: center; font: 700 12px "Montserrat", sans-serif; color: var(--pf-acc); text-decoration: none; border-top: 1px solid rgba(255,255,255,.08); cursor: pointer; }
+.pf-wlink { display: block; padding: 11px 16px; text-align: center; font: 700 12px "Montserrat", sans-serif; color: #d7dae1; text-decoration: none; border-top: 1px solid rgba(255,255,255,.08); cursor: pointer; }
 .pf-prev { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; }
 .pf-prev:hover { background: rgba(255,255,255,.05); }
 .pf-prev .pf-ava { width: 34px; height: 40px; }
@@ -257,10 +255,8 @@
 
 /* Carrusel: gris con filo de color (atención mínima) */
 .pf-carousel { margin: 0 0 22px; }
-.pf-cslide { background: rgba(255,255,255,.045) !important; border: 1px solid rgba(255,255,255,.1); border-left: 3px solid #6b8cff; padding: 18px 20px; border-radius: 14px; }
-.pf-cslide.s-remera { border-left-color: #6b8cff; }
-.pf-cslide.s-video { border-left-color: #d23b47; }
-.pf-cslide.s-tristo { border-left-color: #e2b23c; }
+.pf-cslide { background: rgba(255,255,255,.045) !important; border: 1px solid rgba(255,255,255,.1); border-left: 3px solid rgba(255,255,255,.3); padding: 18px 20px; border-radius: 14px; }
+.pf-cslide.s-remera, .pf-cslide.s-video, .pf-cslide.s-tristo { border-left-color: rgba(255,255,255,.3); }
 .pf-cs-k { color: #9aa0a8; }
 .pf-cs-t { color: #f1f2f5; }
 .pf-cs-t b { color: #fff; }
@@ -306,12 +302,12 @@
 .pf-topbar, .pf-tabbar, .pf-sheet { display: none; }
 
 #pf-navnotif { position: relative; }
-.pf-ndot { display: none; position: absolute; top: 7px; left: 26px; min-width: 16px; height: 16px; background: #d23b47; color: #fff; font: 800 10px "Montserrat", sans-serif; border-radius: 999px; align-items: center; justify-content: center; padding: 0 4px; }
+.pf-ndot { display: none; position: absolute; top: 7px; left: 26px; min-width: 16px; height: 16px; background: var(--pf-acc); color: #0b0b0e; font: 800 10px "Montserrat", sans-serif; border-radius: 999px; align-items: center; justify-content: center; padding: 0 4px; }
 .pf-ndot.on { display: flex; }
 
 .pf-nrow { display: flex; gap: 12px; align-items: flex-start; padding: 13px 8px; border-bottom: 1px solid rgba(255,255,255,.07); cursor: pointer; border-radius: 10px; }
 .pf-nrow:hover { background: rgba(255,255,255,.04); }
-.pf-nrow.unread { background: rgba(107,140,255,.08); }
+.pf-nrow.unread { background: color-mix(in srgb, var(--pf-acc) 9%, transparent); }
 .pf-nic { width: 34px; height: 34px; flex: none; display: flex; align-items: center; justify-content: center; color: #c2c6d0; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; }
 .pf-nic .pf-ic, .pf-nic svg { width: 18px; height: 18px; }
 .pf-ntext { font-size: 14px; color: #dfe1e7; line-height: 1.45; }
@@ -329,12 +325,12 @@
   .pf-tb-brand { font: 800 12px "Montserrat", sans-serif; letter-spacing: .16em; text-transform: uppercase; color: #fff; text-decoration: none; }
   .pf-tbell { position: relative; background: none; border: 0; color: #cfcfd6; cursor: pointer; padding: 6px; }
   .pf-tbell .pf-ic { width: 24px; height: 24px; }
-  .pf-tb-badge { position: absolute; top: 0; right: 2px; background: #d23b47; color: #fff; font: 800 10px "Montserrat", sans-serif; min-width: 16px; height: 16px; border-radius: 999px; align-items: center; justify-content: center; padding: 0 4px; }
+  .pf-tb-badge { position: absolute; top: 0; right: 2px; background: var(--pf-acc); color: #0b0b0e; font: 800 10px "Montserrat", sans-serif; min-width: 16px; height: 16px; border-radius: 999px; align-items: center; justify-content: center; padding: 0 4px; }
 
   .pf-tabbar { display: grid; grid-template-columns: repeat(5,1fr); align-items: end; position: fixed; left: 0; right: 0; bottom: 0; padding: 9px 4px calc(11px + env(safe-area-inset-bottom)); background: rgba(16,16,19,.98); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border-top: 1px solid rgba(255,255,255,.12); z-index: 50; }
   .pf-tab { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; color: #8a8f98; cursor: pointer; font: 700 10px "Montserrat", sans-serif; padding: 2px 0; }
   .pf-tab .pf-ic { width: 24px; height: 24px; }
-  .pf-tab.on { color: #6b8cff; }
+  .pf-tab.on { color: #fff; }
   .pf-tab-mas { color: #06070d; padding: 0; }
   .pf-tab-mas img { width: 58px; height: 58px; display: block; margin-top: -24px; border-radius: 50%; background: #f5f5f7; object-fit: contain; padding: 9px; box-sizing: border-box; border: 3px solid #101013; }
 
@@ -350,7 +346,7 @@
 
 /* ===== Perfil compartible: estado, bio, chips, badges ===== */
 .pf-uava { transition: border-color .12s; }
-.pf-estado { display: inline-block; margin: 8px 0 0; padding: 6px 12px; border: 1px solid rgba(107,140,255,.4); border-radius: 999px; color: #e9ebf0; font-size: 13px; font-weight: 700; }
+.pf-estado { display: inline-block; margin: 8px 0 0; padding: 6px 12px; border: 1px solid rgba(255,255,255,.2); border-radius: 999px; color: #e9ebf0; font-size: 13px; font-weight: 700; }
 .pf-ubio { margin: 10px 0 0; white-space: pre-wrap; color: #d7dae1; line-height: 1.55; }
 .pf-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0 4px; }
 .pf-chip { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); border-radius: 12px; padding: 10px 12px; text-align: center; }
@@ -359,13 +355,13 @@
 .pf-bdedit { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
 .pf-bdedit .pf-tag a { cursor: pointer; margin-left: 4px; opacity: .85; }
 .pf-bdpre { display: flex; flex-wrap: wrap; gap: 6px; }
-.pf-newpill { display: block; width: 100%; margin: 0 0 16px; background: var(--pf-acc); color: #06070d; border: 0; border-radius: 999px; padding: 11px; font: 800 13px "Montserrat", sans-serif; letter-spacing: .02em; cursor: pointer; transition: filter .12s; }
+.pf-newpill { display: block; width: 100%; margin: 0 0 16px; background: #ededf0; color: #0b0b0e; border: 0; border-radius: 999px; padding: 11px; font: 700 13px "Montserrat", sans-serif; letter-spacing: .02em; cursor: pointer; transition: filter .12s; }
 .pf-newpill:hover { filter: brightness(1.08); }
 @media (max-width: 680px) { .pf-chips { grid-template-columns: repeat(2, 1fr); } }
 
 /* ---- Tandas 1-4: compartir, orden, fotos, encuestas ---- */
-.pf-topic { margin-left: auto; margin-right: 8px; padding: 2px 9px; border: 1px solid rgba(107,140,255,.35); border-radius: 999px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #aab7ff; cursor: pointer; white-space: nowrap; }
-.pf-topic:hover { background: rgba(107,140,255,.12); }
+.pf-topic { margin-left: auto; margin-right: 8px; padding: 2px 9px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #9aa0a8; cursor: pointer; white-space: nowrap; }
+.pf-topic:hover { background: rgba(255,255,255,.07); }
 .pf-post-h .pf-topic + .pf-code { margin-left: 0; }
 .pf-shr { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; color: #8a8f98; font: 600 12px "Montserrat", sans-serif; cursor: pointer; padding: 4px 6px; border-radius: 8px; transition: color .12s, background .12s; }
 .pf-shr:hover { color: #e9ebf0; background: rgba(255,255,255,.06); }
@@ -383,22 +379,22 @@
 .pf-lbx img { max-width: 94vw; max-height: 92vh; border-radius: 8px; }
 .pf-poll { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
 .pf-pop { position: relative; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 9px 12px; overflow: hidden; color: #e9ebf0; font: 600 13px "Montserrat", sans-serif; }
-.pf-pop i { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(107,140,255,.22); border-radius: 0; transition: width .35s cubic-bezier(.2,.7,.2,1); }
+.pf-pop i { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(255,255,255,.07); border-radius: 0; transition: width .35s cubic-bezier(.2,.7,.2,1); }
 .pf-pop span { position: relative; flex: 1; text-align: left; }
-.pf-pop b { position: relative; color: #aab7ff; }
-.pf-pop.mia { border-color: rgba(107,140,255,.6); }
+.pf-pop b { position: relative; color: #e8eaee; }
+.pf-pop.mia { border-color: rgba(255,255,255,.34); }
 .pf-pop.mia b::after { content: " ✓"; }
 .pf-pop-btn { background: rgba(255,255,255,.03); cursor: pointer; transition: border-color .12s, background .12s; }
-.pf-pop-btn:hover { border-color: rgba(107,140,255,.6); background: rgba(107,140,255,.08); }
+.pf-pop-btn:hover { border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.05); }
 .pf-poll-n { font-size: 11px; color: #8a8f98; padding: 2px 2px 0; }
 .pf-tchips, .pf-fchips { display: flex; flex-wrap: wrap; gap: 6px; }
 .pf-tchips { margin: 8px 0 0; }
 .pf-fchips { margin: 0 0 14px; }
 .pf-tchip { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12); border-radius: 999px; padding: 5px 12px; color: #b9bdc7; font: 600 12px "Montserrat", sans-serif; cursor: pointer; transition: all .12s; text-transform: lowercase; }
-.pf-tchip:hover { border-color: rgba(107,140,255,.5); color: #e9ebf0; }
-.pf-tchip.on { background: var(--pf-acc); border-color: var(--pf-acc); color: #06070d; }
+.pf-tchip:hover { border-color: rgba(255,255,255,.3); color: #e9ebf0; }
+.pf-tchip.on { background: #ededf0; border-color: #ededf0; color: #0b0b0e; }
 .pf-ctool { background: none; border: 1px dashed rgba(255,255,255,.22); border-radius: 999px; padding: 6px 12px; color: #b9bdc7; font: 600 12px "Montserrat", sans-serif; cursor: pointer; transition: all .12s; }
-.pf-ctool:hover { border-color: rgba(107,140,255,.6); color: #e9ebf0; }
+.pf-ctool:hover { border-color: rgba(255,255,255,.3); color: #e9ebf0; }
 .pf-pollc { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .pf-popin { width: 100%; }
 .pf-attach { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -409,8 +405,8 @@
 .pf-ath button { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%; border: 0; background: rgba(6,7,10,.8); color: #fff; cursor: pointer; font-size: 12px; line-height: 1; }
 .pf-srch { display: flex; gap: 8px; margin: 0 0 14px; }
 .pf-srch input { flex: 1; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12); border-radius: 999px; padding: 10px 16px; color: #f1f2f5; font: 500 13px "Montserrat", sans-serif; outline: none; transition: border-color .12s; }
-.pf-srch input:focus { border-color: rgba(107,140,255,.55); }
-.pf-pddlbl { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #e2b23c; font-weight: 800; margin: 2px 0 6px; }
+.pf-srch input:focus { border-color: rgba(255,255,255,.35); }
+.pf-pddlbl { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #9aa0a8; font-weight: 700; margin: 2px 0 6px; }
 .pf-pdd { border: 1px solid rgba(226,178,60,.4); border-radius: 14px; margin: 0 0 18px; overflow: hidden; box-shadow: 0 0 24px rgba(226,178,60,.07); }
 .pf-pdd .pf-post { margin: 0; border: 0; border-radius: 0; }
 .pf-trow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 14px; color: #c7cbd4; font: 600 13px "Montserrat", sans-serif; cursor: pointer; transition: background .12s, color .12s; text-decoration: none; }
@@ -572,16 +568,16 @@
 /* ---- D7: nav nueva, escritorios, online ---- */
 .pf-chatabajo { margin-top: 6px; opacity: .85; }
 .pf-online { display: flex; align-items: center; gap: 7px; padding: 8px 14px 4px; font: 600 11px "Montserrat", sans-serif; color: #8a8f98; }
-.pf-online i { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 8px #22c55e99; flex: none; animation: pf-resp 2.4s infinite; }
+.pf-online i { width: 7px; height: 7px; border-radius: 50%; background: var(--pf-acc); box-shadow: 0 0 8px var(--pf-acc); flex: none; animation: pf-resp 2.4s infinite; }
 @keyframes pf-resp { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 .pf-eskgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 0 0 14px; }
 .pf-eskc { position: relative; aspect-ratio: 16 / 9; border: 1px solid rgba(255,255,255,.14); border-radius: 12px; background-size: cover; background-position: center; cursor: pointer; overflow: hidden; padding: 0; transition: transform .12s, border-color .12s; }
-.pf-eskc:hover { transform: translateY(-2px); border-color: rgba(107,140,255,.6); }
+.pf-eskc:hover { transform: translateY(-2px); border-color: rgba(255,255,255,.3); }
 .pf-eskc::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,5,8,.15), rgba(5,5,8,.72)); }
 .pf-eskb { position: absolute; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 7px; }
 .pf-eskb b { color: #fff; font: 800 13px "Montserrat", sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
 .pf-eskv { position: absolute; top: 8px; right: 8px; background: rgba(8,8,11,.75); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 3px 9px; font: 700 10.5px "Montserrat", sans-serif; color: #d7dae1; display: flex; align-items: center; gap: 5px; }
-.pf-eskon { width: 7px; height: 7px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 8px #ef4444; display: inline-block; }
+.pf-eskon { width: 7px; height: 7px; border-radius: 50%; background: var(--pf-acc); box-shadow: 0 0 8px var(--pf-acc); display: inline-block; }
 @media (max-width: 680px) { .pf-eskgrid { grid-template-columns: repeat(2, 1fr); } }
 
 /* ---- D8: UX de urgencia — menú ⋯, notifs accionables, micro-motion ---- */
@@ -591,11 +587,11 @@
 .pf-menu { position: fixed; z-index: 700; min-width: 175px; background: #131318; border: 1px solid rgba(255,255,255,.16); border-radius: 12px; padding: 5px; box-shadow: 0 14px 44px rgba(0,0,0,.6); animation: pf-menuin .14s cubic-bezier(.2,.7,.2,1); }
 @keyframes pf-menuin { from { opacity: 0; transform: translateY(-5px) scale(.97); } to { opacity: 1; transform: none; } }
 .pf-menu button { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 9px 12px; color: #e9ebf0; font: 600 13px "Montserrat", sans-serif; cursor: pointer; transition: background .1s; }
-.pf-menu button:hover { background: rgba(107,140,255,.16); }
+.pf-menu button:hover { background: rgba(255,255,255,.08); }
 .pf-menu button.rojo { color: #ff7b84; }
 .pf-menu button.rojo:hover { background: rgba(210,59,71,.18); }
 .pf-nact { display: inline-flex; gap: 6px; margin-left: 10px; vertical-align: middle; }
-.pf-nok { color: #4ade80; font-size: 12.5px; margin-left: 8px; }
+.pf-nok { color: #9aa0a8; font-size: 12.5px; margin-left: 8px; }
 .pf-post { transition: transform .14s cubic-bezier(.2,.7,.2,1), border-color .14s, box-shadow .14s; }
 .pf-post:hover { transform: translateY(-1px); border-color: rgba(255,255,255,.22); box-shadow: 0 6px 22px rgba(0,0,0,.35); }
 .pf-btn, .pf-tchip, .pf-ctool, .dk-mit, .pf-tab { transition: transform .1s, filter .12s, background .12s, border-color .12s, color .12s; }
@@ -605,7 +601,7 @@
 @keyframes pf-cala { 0% { transform: scale(1); } 50% { transform: scale(1.35) rotate(-7deg); } 100% { transform: scale(1); } }
 .pf-nrow { transition: background .12s; border-radius: 10px; }
 .pf-nrow:hover { background: rgba(255,255,255,.05); }
-:focus-visible { outline: 2px solid rgba(107,140,255,.7); outline-offset: 2px; border-radius: 6px; }
+:focus-visible { outline: 2px solid rgba(255,255,255,.55); outline-offset: 2px; border-radius: 6px; }
 @media (prefers-reduced-motion: reduce) { .pf-post, .pf-btn, .pf-like { transition: none; animation: none; } }
 .dk-refull { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 700; background: rgba(10,10,14,.85); border: 1px solid rgba(107,140,255,.6); border-radius: 999px; padding: 9px 18px; color: #cdd6ff; font: 700 12.5px "Montserrat", sans-serif; cursor: pointer; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: pf-menuin .18s cubic-bezier(.2,.7,.2,1); box-shadow: 0 8px 28px rgba(0,0,0,.5); }
 .dk-refull:hover { background: rgba(107,140,255,.25); color: #fff; }
@@ -637,7 +633,7 @@
 .pf-cmt-kids { margin-left: 13px; padding-left: 13px; border-left: 2px solid rgba(255,255,255,.1); }
 .pf-cmt-kids .pf-cmt-kids .pf-cmt-kids .pf-cmt-kids .pf-cmt-kids .pf-cmt-kids { margin-left: 0; padding-left: 0; border-left: 0; }
 .pf-vermas { display: block; width: 100%; margin: 10px 0 4px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 11px; color: #b9bdc7; font: 700 13px "Montserrat", sans-serif; cursor: pointer; transition: border-color .12s, color .12s; }
-.pf-vermas:hover { border-color: rgba(107,140,255,.5); color: #fff; }
+.pf-vermas:hover { border-color: rgba(255,255,255,.3); color: #fff; }
 
 /* ---- UX1: skeletons ---- */
 .pf-sk { display: block; background: rgba(255,255,255,.055); border-radius: 8px; position: relative; overflow: hidden; }
@@ -677,3 +673,12 @@
 /* rail "Tus mensajes": nick arriba, hint abajo */
 .pf-prev > div { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .pf-prev > div > span { font-size: 11px; color: #7c8089; }
+
+/* ---- Gris insomnio disciplinado (aprobado por Mati): extras ----
+   El acento (--pf-acc) vive SOLO en: like activo, no-leído (ndot/badge/unread), vivos (online/adentro),
+   y por-usuario inline en ring/estado/íconos de links del perfil. Rojo solo destructivo. */
+.pf-tagg { background: transparent; border: 1px solid rgba(255,255,255,.18); color: #9aa0a8; }
+.pf-nav .on { background: rgba(255,255,255,.07); color: #fff; border-radius: 10px; }
+.pf-wlink2 { color: #d7dae1; }
+.pf-like.on { color: var(--pf-acc); }
+.pf-like.on svg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--pf-acc) 55%, transparent)); }
