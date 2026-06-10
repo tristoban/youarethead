@@ -30,7 +30,8 @@ const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID ?? '';
 const R2_ACCESS_KEY = process.env.R2_ACCESS_KEY ?? '';
 const R2_SECRET = process.env.R2_SECRET ?? '';
 const R2_BUCKET = process.env.R2_BUCKET ?? '';
-const R2_PUBLIC_BASE = (process.env.R2_PUBLIC_BASE ?? '').replace(/\/+$/, '');
+const R2_PUBLIC_BASE_RAW = (process.env.R2_PUBLIC_BASE ?? '').replace(/\/+$/, '');
+const R2_PUBLIC_BASE = R2_PUBLIC_BASE_RAW && !/^https?:\/\//.test(R2_PUBLIC_BASE_RAW) ? 'https://' + R2_PUBLIC_BASE_RAW : R2_PUBLIC_BASE_RAW; // normaliza: si falta el esquema, lo agrega
 const R2_ENABLED = !!(R2_ACCOUNT_ID && R2_ACCESS_KEY && R2_SECRET && R2_BUCKET && R2_PUBLIC_BASE);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
