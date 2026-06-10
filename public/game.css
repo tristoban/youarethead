@@ -39,7 +39,8 @@
 .yg-title { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; color: #fff; }
 .yg-stat { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: #9a9aa2; }
 .yg-stat b { display: block; font-size: 22px; font-weight: 800; color: #fff; margin-top: 3px; letter-spacing: 0; }
-#yg-next, #yg-hold { display: block; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 6px; }
+#yg-next, #yg-hold { display: block; width: 96px; height: 96px; align-self: flex-start; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 6px; }
+@media (max-height: 700px) { #yg-next, #yg-hold { width: 64px; height: 64px; } .yg-side { gap: 9px; } .yg-shell { padding: 14px; } }
 #yg-hold { cursor: pointer; transition: border-color .15s; }
 #yg-hold:hover { border-color: rgba(255, 255, 255, 0.4); }
 .yg-hint { font-size: 11px; color: #6c6c72; line-height: 1.7; }
