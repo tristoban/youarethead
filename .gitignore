@@ -1,5 +1,7 @@
 node_modules
 dist
+# docs internos de trabajo con IA — el repo es publico, mejor afuera (sacalo si queres versionarlos)
+docs/
 .env
 .env.local
 *.log
