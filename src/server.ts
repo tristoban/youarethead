@@ -615,7 +615,7 @@ export function buildApp(db: Db): FastifyInstance {
   const imgRate = new Map<number, number[]>();
 
   // ---- El Escritorio: catálogo, stats vivas, presencia, trofeos y helpers ----
-  const DESK_APPS: readonly string[] = ['tetristo', 'parpadeo', 'laberinto', 'chat', 'boton', 'mural', 'pueblo', 'feed', 'msn'];
+  const DESK_APPS: readonly string[] = ['tetristo', 'parpadeo', 'laberinto', 'chat', 'boton', 'mural', 'pueblo', 'feed', 'msn', 'consola'];
   const DESK_TYPES: readonly string[] = ['folder', 'note', 'shortcut', 'trophy', 'photo', 'widget', 'tv', 'deco', 'marquee'];
   const DESK_WIDGETS: readonly string[] = ['reloj', 'karma', 'racha', 'top', 'visitas', 'count', 'post'];
   const DESK_SKINS: readonly string[] = ['crt', 'win95', 'fosforo', 'vapor'];
@@ -2390,6 +2390,10 @@ export function buildApp(db: Db): FastifyInstance {
   app.get('/pueblo', async (_req, reply) => {
     reply.header('cache-control', 'no-store');
     return reply.sendFile('pueblo.html');
+  });
+  app.get('/consola', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return reply.sendFile('consola.html');
   });
 
   app.get('/tristos', async (_req, reply) => {

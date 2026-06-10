@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>La Consola · YATA</title>
+  <meta name="robots" content="noindex" />
+  <style>
+    html, body { margin: 0; min-height: 100%; background: #060606; color: #f2f2f3; font-family: Montserrat, system-ui, sans-serif; }
+    .cw { max-width: 980px; margin: 0 auto; padding: 18px 16px 40px; }
+    h1 { font-size: 20px; letter-spacing: .08em; text-transform: uppercase; margin: 6px 0 2px; }
+    h1 span { color: #4ade80; }
+    .dim { color: #a1a1aa; font-size: 13px; line-height: 1.5; margin: 4px 0 14px; }
+    .aviso { border: 1px solid rgba(250,204,21,.35); background: rgba(250,204,21,.06); border-radius: 10px; padding: 10px 14px; font-size: 12.5px; color: #e8dfb8; margin: 0 0 16px; }
+    .drop { border: 2px dashed rgba(255,255,255,.25); border-radius: 14px; padding: 34px 18px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+    .drop:hover, .drop.over { border-color: #4ade80; background: rgba(74,222,128,.05); }
+    .drop b { display: block; font-size: 16px; margin-bottom: 6px; }
+    .drop small { color: #8a8f98; }
+    #game { width: 100%; aspect-ratio: 4 / 3; max-height: 78vh; background: #000; border-radius: 10px; overflow: hidden; margin-top: 14px; }
+    .fila { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; font-size: 12.5px; color: #8a8f98; }
+    input[type=file] { display: none; }
+  </style>
+</head>
+<body>
+  <div class="cw">
+    <h1>La Consola <span>· YATA</span></h1>
+    <p class="dim">Emulador retro en tu navegador. La rom se carga <b>desde tu compu</b> y no se sube a ningún lado: jugás local, los saves quedan en tu navegador.</p>
+    <div class="aviso">Usá solo roms de juegos que te pertenezcan o que sean homebrew/libres. YATA no aloja ni distribuye roms — la consola la ponemos nosotros, los cartuchos son tuyos.</div>
+    <label class="drop" id="drop" for="rom">
+      <b>Tirá tu rom acá (o tocá para elegir)</b>
+      <small>NES (.nes) · SNES (.sfc/.smc) · Game Boy (.gb/.gbc) · GBA (.gba) · Sega Genesis (.md/.gen/.bin) · N64 (.n64/.z64/.v64)</small>
+    </label>
+    <input type="file" id="rom" accept=".nes,.sfc,.smc,.gb,.gbc,.gba,.md,.gen,.bin,.n64,.z64,.v64" />
+    <div id="game"></div>
+    <div class="fila"><span>F11 / botón del emulador = pantalla completa · Los controles se configuran desde el menú del emulador.</span></div>
+  </div>
+  <script>
+    (function () {
+      var drop = document.getElementById("drop"), inp = document.getElementById("rom");
+      function core(name) {
+        var e = name.toLowerCase().split(".").pop();
+        if (e === "nes") return "nes";
+        if (e === "sfc" || e === "smc") return "snes";
+        if (e === "gb" || e === "gbc") return "gb";
+        if (e === "gba") return "gba";
+        if (e === "md" || e === "gen" || e === "bin") return "segaMD";
+        if (e === "n64" || e === "z64" || e === "v64") return "n64";
+        return "";
+      }
+      function arrancar(f) {
+        var c = core(f.name);
+        if (!c) { drop.querySelector("b").textContent = "Ese formato no lo conozco. Probá con otro."; return; }
+        drop.style.display = "none";
+        window.EJS_player = "#game";
+        window.EJS_core = c;
+        window.EJS_gameName = f.name.replace(/\.[^.]+$/, "");
+        window.EJS_gameUrl = URL.createObjectURL(f);
+        window.EJS_pathtodata = "https://cdn.emulatorjs.org/stable/data/";
+        window.EJS_startOnLoaded = true;
+        window.EJS_language = "es-ES";
+        var s = document.createElement("script");
+        s.src = "https://cdn.emulatorjs.org/stable/data/loader.js";
+        document.body.appendChild(s);
+      }
+      inp.addEventListener("change", function () { if (inp.files && inp.files[0]) arrancar(inp.files[0]); });
+      drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("over"); });
+      drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
+      drop.addEventListener("drop", function (e) { e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files && e.dataTransfer.files[0]) arrancar(e.dataTransfer.files[0]); });
+    })();
+  </script>
+</body>
+</html>

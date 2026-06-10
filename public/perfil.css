@@ -547,3 +547,12 @@
 .dk-mit span { width: 20px; text-align: center; }
 .dk-mit b { margin-left: auto; color: #8a8f98; font-size: 11px; }
 .dk-msep { height: 1px; background: rgba(255,255,255,.12); margin: 5px 8px; }
+
+/* ---- D6: lienzo lógico fijo (1040×585 escalado: todos ven lo mismo) + apps maximizadas ---- */
+.dk-surface { min-height: 0 !important; }
+.dk-canvas { position: absolute; left: 0; top: 0; width: 1040px; height: 585px; transform-origin: 0 0; }
+.dk-surface:fullscreen { background-color: #000; }
+.dk-appwin { position: fixed !important; left: 3vw; right: 3vw; top: 4vh; bottom: 4vh; width: auto !important; z-index: 600; }
+.dk-appwin .dk-body { max-height: none; height: calc(100% - 38px); display: flex; flex-direction: column; box-sizing: border-box; }
+.dk-appwin .dk-appf { flex: 1; height: auto; min-height: 0; }
+@media (max-width: 680px) { .dk-appwin { left: 1vw; right: 1vw; top: 2vh; bottom: 2vh; } }

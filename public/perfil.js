@@ -632,6 +632,7 @@
     pueblo: { l: "Pueblo", go: "/pueblo" },
     feed: { l: "Feed", v: "feed" },
     msn: { l: "Mensajes", msn: true },
+    consola: { l: "La Consola", go: "/consola", emb: "/consola?embed=1" },
   };
   const DK_GLYPH = {
     folder: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
@@ -647,6 +648,7 @@
     feed: '<path d="M4 7h16M4 12h16M4 17h10"/>',
     tv: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 3l4 4 4-4"/><circle cx="17.5" cy="11" r="1" fill="currentColor" stroke="none"/>',
     msn: '<path d="M4 5h16v11H10l-5 4z"/><path d="M8 9h8M8 12h5"/>',
+    consola: '<rect x="2.5" y="8" width="19" height="9" rx="4.5"/><path d="M7.5 11v3M6 12.5h3"/><circle cx="15.5" cy="11.5" r=".8" fill="currentColor" stroke="none"/><circle cx="18" cy="13.5" r=".8" fill="currentColor" stroke="none"/>',
   };
   function dkSvg(g, color) { return '<svg viewBox="0 0 24 24" fill="none" stroke="' + (color || "currentColor") + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (DK_GLYPH[g] || DK_GLYPH.note) + "</svg>"; }
   async function viewDesktop(nick) {
@@ -657,15 +659,17 @@
     body().innerHTML = '<p class="pf-dimc">Prendiendo el monitor…</p>';
     const { r, d } = await api("/api/desktop?nick=" + encodeURIComponent(nick), AH);
     if (!r.ok || !d || !d.ok) { body().innerHTML = '<p class="pf-empty">No se pudo cargar este escritorio.</p>'; return; }
-    const D = d, own = !!d.own, CELL = (root.offsetWidth || 600) <= 680 ? 80 : 100;
+    const D = d, own = !!d.own, CELL = 100;
     let zTop = 10, dragging = false, STATS = d.stats || {}, MIR = d.mirando || 1, CFG = d.config || {}, POSTW = d.post || null, MIRONES = d.mirones || null, lastReact = 0;
     const acc = (D.perfil && typeof D.perfil.accent === "string" && /^#[0-9a-fA-F]{6}$/.test(D.perfil.accent)) ? D.perfil.accent : "#6b8cff";
     D.papelera = d.papelera || []; D.firmas = d.firmas || []; D.mascota = d.mascota || null;
     body().innerHTML =
       '<a class="pf-back2" id="dk-back">&#8592; Perfil de ' + esc(nick) + "</a>" +
       (own ? '<div class="dk-bar"><button class="pf-btn pf-mini" id="dk-crear">+ Crear</button><button class="pf-btn ghost pf-mini" id="dk-caja">Caja <b id="dk-cajan"></b></button><input type="file" id="dk-stkf" accept="image/*" style="display:none" /><span class="pf-dimc" id="dk-msg" style="margin-left:auto">clic derecho en el escritorio = menú</span></div>' : "") +
-      '<div class="dk-surface" id="dk-s"><div class="dk-scan" id="dk-scan"></div><button class="dk-fsbtn" id="dk-fs" type="button" title="Pantalla completa">⛶</button><button class="dk-fsbtn dk-chatbtn" id="dk-dchat" type="button" title="Chat del escritorio">💬</button><button class="dk-fsbtn dk-firbtn" id="dk-fir" type="button" title="Libro de firmas">✒</button><span class="dk-pres" id="dk-pres" style="display:none"></span><div class="dk-reactbar" id="dk-rbar"></div></div>';
+      '<div class="dk-surface" id="dk-s"><div class="dk-canvas" id="dk-c"></div><div class="dk-scan" id="dk-scan"></div><button class="dk-fsbtn" id="dk-fs" type="button" title="Pantalla completa">⛶</button><button class="dk-fsbtn dk-chatbtn" id="dk-dchat" type="button" title="Chat del escritorio">💬</button><button class="dk-fsbtn dk-firbtn" id="dk-fir" type="button" title="Libro de firmas">✒</button><span class="dk-pres" id="dk-pres" style="display:none"></span><div class="dk-reactbar" id="dk-rbar"></div></div>';
     body().querySelector("#dk-back").onclick = () => viewUser(nick);
+    const LW = 1040, LH = 585;
+    let SCALE = 1;
     function applyCfg() {
       const wp = String(CFG.wallpaper || "");
       if (wp) { S.style.background = ""; S.style.backgroundImage = "url('" + wp + "')"; }
@@ -677,14 +681,36 @@
       S.style.cursor = CFG.cursor ? "url('" + CFG.cursor + "') 4 4, auto" : "";
     }
     const S = body().querySelector("#dk-s");
-    const colsN = () => Math.max(3, Math.floor(S.clientWidth / CELL));
-    const rowsN = () => Math.max(4, Math.floor(S.clientHeight / CELL));
+    const C = S.querySelector("#dk-c");
+    const colsN = () => Math.floor(LW / CELL);
+    const rowsN = () => Math.floor(LH / CELL);
+    function applyScale() {
+      const fs = document.fullscreenElement === S || S.classList.contains("dk-full");
+      if (fs) {
+        SCALE = Math.min(window.innerWidth / LW, window.innerHeight / LH);
+        C.style.left = Math.max(0, (window.innerWidth - LW * SCALE) / 2) + "px";
+        C.style.top = Math.max(0, (window.innerHeight - LH * SCALE) / 2) + "px";
+        S.style.height = "";
+      } else {
+        SCALE = Math.max(0.2, S.clientWidth / LW);
+        C.style.left = "0px"; C.style.top = "0px";
+        S.style.height = Math.round(LH * SCALE) + "px";
+      }
+      C.style.transform = "scale(" + SCALE + ")";
+    }
+    if (!window.__dkScaleWired) {
+      window.__dkScaleWired = true;
+      const reEsc = () => { if (cur !== "desk") return; const S2 = document.getElementById("dk-s"); if (S2 && window.__dkScale) window.__dkScale(); };
+      window.addEventListener("resize", reEsc);
+      document.addEventListener("fullscreenchange", reEsc);
+    }
+    window.__dkScale = applyScale;
     function rootItems() { return D.items.filter((i) => !i.parent && !i.hidden); }
     function cajaItems() { return D.items.filter((i) => i.hidden); }
     function trofeosSinPoner() { const puestos = new Set(D.items.filter((i) => i.type === "trophy").map((i) => String(i.data.kind))); return (D.trofeos || []).filter((t) => !puestos.has(t.kind)); }
     function gridItems() { return rootItems().filter((i) => i.type !== "deco" && i.type !== "marquee"); }
     function ocupado() { const m = {}; gridItems().forEach((i) => { m[i.x + "_" + i.y] = i.id; }); return m; }
-    function freeCell() { const m = ocupado(); m["0_0"] = "sys"; const C = colsN(); for (let y = 0; y < 40; y++) for (let x = 0; x < C; x++) if (!m[x + "_" + y]) return { x: x, y: y }; return { x: 0, y: 0 }; }
+    function freeCell() { const m = ocupado(); m["0_0"] = "sys"; const nc = colsN(), nr = rowsN(); for (let y = 0; y < nr; y++) for (let x = 0; x < nc; x++) if (!m[x + "_" + y]) return { x: x, y: y }; return { x: 0, y: 0 }; }
     function setCajaN() { const el = body().querySelector("#dk-cajan"); if (el) el.textContent = String(cajaItems().length + trofeosSinPoner().length || ""); }
     function navShortcut(app2) {
       const a = DK_APPS[app2];
@@ -969,13 +995,13 @@
           el.addEventListener("pointerdown", (e) => {
             const sx = e.clientX, sy = e.clientY, ox = el.offsetLeft, oy = el.offsetTop;
             let mv2 = false;
-            const mv = (ev) => { const dx = ev.clientX - sx, dy = ev.clientY - sy; if (!mv2 && Math.abs(dx) + Math.abs(dy) < 6) return; mv2 = true; dragging = true; el.style.left = Math.max(0, ox + dx) + "px"; el.style.top = Math.max(0, oy + dy) + "px"; };
+            const mv = (ev) => { const dx = (ev.clientX - sx) / SCALE, dy = (ev.clientY - sy) / SCALE; if (!mv2 && Math.abs(dx) + Math.abs(dy) < 6) return; mv2 = true; dragging = true; el.style.left = Math.max(0, ox + dx) + "px"; el.style.top = Math.max(0, oy + dy) + "px"; };
             const up = async () => {
               document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up);
               setTimeout(() => { dragging = false; }, 0);
               if (!mv2) return;
-              const nx = Math.max(0, Math.min(960, Math.round(el.offsetLeft / S.clientWidth * 1000)));
-              const ny = Math.max(0, Math.min(960, Math.round(el.offsetTop / S.clientHeight * 1000)));
+              const nx = Math.max(0, Math.min(960, Math.round(el.offsetLeft / LW * 1000)));
+              const ny = Math.max(0, Math.min(960, Math.round(el.offsetTop / LH * 1000)));
               const { r: rr } = await api("/api/desktop/mover", { method: "POST", headers: JH, body: JSON.stringify({ id: it.id, x: nx, y: ny }) });
               if (rr.ok) { it.x = nx; it.y = ny; }
               renderDecos();
@@ -984,7 +1010,7 @@
             e.preventDefault();
           });
         }
-        S.appendChild(el);
+        C.appendChild(el);
       });
       rootItems().filter((i) => i.type === "marquee").forEach((it) => {
         const el = document.createElement("div");
@@ -992,7 +1018,7 @@
         el.innerHTML = '<span>' + esc(String(it.data.text || "")) + "</span>";
         el.setAttribute("data-id", String(it.id));
         if (own) el.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); const r2 = S.getBoundingClientRect(); ctxMenu(it, e.clientX - r2.left, e.clientY - r2.top); });
-        S.appendChild(el);
+        C.appendChild(el);
       });
       const vieja = S.querySelector(".dk-masco"); if (vieja) vieja.remove();
       if (D.mascota) {
@@ -1000,7 +1026,7 @@
         mc.className = "dk-masco";
         mc.innerHTML = avatar(D.mascota.head);
         mc.title = esc(nick) + " del Pueblo · vida " + D.mascota.vida + " · hambre " + D.mascota.hambre + " · sueño " + D.mascota.sueno;
-        S.appendChild(mc);
+        C.appendChild(mc);
       }
     }
     function refresh() {
@@ -1013,7 +1039,7 @@
         el.setAttribute("data-id", it.sys ? "sys" : String(it.id));
         el.innerHTML = iconHTML(it);
         place(el, it.x, it.y);
-        S.appendChild(el);
+        C.appendChild(el);
         let moved = false;
         if (own && !it.sys) {
           el.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); const r2 = S.getBoundingClientRect(); ctxMenu(it, e.clientX - r2.left, e.clientY - r2.top); });
@@ -1022,11 +1048,11 @@
             const sx = e.clientX, sy = e.clientY, ox = el.offsetLeft, oy = el.offsetTop;
             moved = false; dragging = false;
             const mv = (ev) => {
-              const dx = ev.clientX - sx, dy = ev.clientY - sy;
+              const dx = (ev.clientX - sx) / SCALE, dy = (ev.clientY - sy) / SCALE;
               if (!moved && Math.abs(dx) + Math.abs(dy) < 7) return;
               moved = true; dragging = true; el.classList.add("drag"); el.style.zIndex = ++zTop;
-              el.style.left = Math.max(0, Math.min(S.clientWidth - 70, ox + dx)) + "px";
-              el.style.top = Math.max(0, Math.min(S.clientHeight - 70, oy + dy)) + "px";
+              el.style.left = Math.max(0, Math.min(LW - 90, ox + dx)) + "px";
+              el.style.top = Math.max(0, Math.min(LH - 90, oy + dy)) + "px";
             };
             const up = async () => {
               document.removeEventListener("pointermove", mv); document.removeEventListener("pointerup", up);
@@ -1034,7 +1060,7 @@
               setTimeout(() => { dragging = false; }, 0);
               if (!moved) return;
               let nx = Math.max(0, Math.min(colsN() - 1, Math.round((el.offsetLeft - 6) / CELL)));
-              let ny = Math.max(0, Math.min(39, Math.round((el.offsetTop - 6) / CELL)));
+              let ny = Math.max(0, Math.min(rowsN() - 1, Math.round((el.offsetTop - 6) / CELL)));
               const m = ocupado(); m["0_0"] = m["0_0"] || "sys";
               const sobre = m[nx + "_" + ny];
               const target = D.items.find((i) => i.id === sobre);
@@ -1142,6 +1168,7 @@
     }
     refresh();
     applyCfg();
+    applyScale();
     if (D.reacts) D.reacts.forEach((rx) => { if (rx.id > lastReact) lastReact = rx.id; });
     const rbar = S.querySelector("#dk-rbar");
     if (rbar && me) {
@@ -1166,7 +1193,7 @@
         kseq.push(e.key); if (kseq.length > 10) kseq.shift();
         if (kseq.join(",") === KONAMI) {
           kseq = [];
-          for (let i2 = 0; i2 < 24; i2++) setTimeout(() => { const sk = document.createElement("div"); sk.className = "dk-lluvia"; sk.textContent = "💀"; sk.style.left = Math.random() * 96 + "%"; sk.style.animationDuration = (1.2 + Math.random() * 1.6) + "s"; S2.appendChild(sk); setTimeout(() => sk.remove(), 3000); }, i2 * 90);
+          for (let i2 = 0; i2 < 24; i2++) setTimeout(() => { const sk = document.createElement("div"); sk.className = "dk-lluvia"; sk.textContent = "💀"; sk.style.left = Math.random() * 96 + "%"; sk.style.animationDuration = (1.2 + Math.random() * 1.6) + "s"; (S2.querySelector("#dk-c") || S2).appendChild(sk); setTimeout(() => sk.remove(), 3000); }, i2 * 90);
           toast("Modo insomnio total.");
         }
       });
