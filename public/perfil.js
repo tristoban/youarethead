@@ -717,7 +717,8 @@
       if (!a) return;
       if (a.msn) { winMsn(); return; }
       if (a.v) { setView(a.v); return; }
-      const w = openWin("app" + app2, esc(a.l), '<div class="dk-appf"><iframe src="' + esc(a.emb || a.go) + '" title="' + esc(a.l) + '"></iframe></div><div class="dk-fbar" style="margin-top:8px"><a class="pf-btn ghost pf-mini" href="' + esc(a.go) + '">Abrir afuera ↗</a></div>');
+      const src = (a.emb || a.go) + ((a.emb || a.go).indexOf("?") >= 0 ? "&" : "?") + "cb=" + Date.now();
+      const w = openWin("app" + app2, esc(a.l), '<div class="dk-appf"><iframe src="' + esc(src) + '" title="' + esc(a.l) + '"></iframe></div><div class="dk-fbar" style="margin-top:8px"><a class="pf-btn ghost pf-mini" href="' + esc(a.go) + '">Abrir afuera ↗</a></div>');
       w.classList.add("dk-appwin");
     }
     function winMsn() {
@@ -1346,7 +1347,7 @@
       body().querySelector("#dk-crear").onclick = () => menuCrear();
       body().querySelector("#dk-caja").onclick = () => winCaja();
       S.addEventListener("contextmenu", (e) => {
-        if (e.target !== S) return;
+        if (e.target !== S && e.target !== C) return;
         e.preventDefault();
         const r2 = S.getBoundingClientRect();
         menuCrear(e.clientX - r2.left, e.clientY - r2.top);

@@ -275,6 +275,14 @@
     if (j === "boton") viewBoton();
     else if (j === "parpadeo") viewParpadeo();
     else if (j === "mural") viewMural();
-    else if (j === "tetristo") { let n = 0; const t = setInterval(() => { n++; if (window.clickeame) { clearInterval(t); window.clickeame(); } else if (n > 40) clearInterval(t); }, 150); }
+    else if (j === "tetristo") {
+      let n = 0;
+      const t = setInterval(() => {
+        n++;
+        const card = viewEl && viewEl.querySelector('.th-card[data-g="tetristo"]');
+        if (window.clickeame || (card && n > 3)) { clearInterval(t); if (card) card.click(); else if (window.clickeame) window.clickeame(); }
+        else if (n > 50) clearInterval(t);
+      }, 150);
+    }
   } catch (_) {}
 })();
