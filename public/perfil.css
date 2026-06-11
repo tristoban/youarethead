@@ -719,3 +719,19 @@
 .pf-fold .pf-foldrow { display: flex; }
 .pf-foldava { width: 38px !important; height: 38px !important; flex: none; }
 .pf-foldline { flex: 1; padding: 2px 0; }
+
+/* ---- Tristónicos ---- */
+.pf-lockico { width: 13px; height: 13px; margin-left: auto; color: #6d7077; flex: none; }
+.pf-ttgate { text-align: center; padding: 36px 20px 32px; }
+.pf-ttgate .pf-ttghost { width: 64px; height: 72px; margin: 0 auto 10px; display: inline-flex; }
+.pf-ttgate h3 { font-size: 17px; font-weight: 800; margin: 8px 0 2px; }
+.pf-ttgate .pf-btn { display: inline-flex; }
+.pf-ttpodio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 16px; }
+.pf-ttp { background: #0e0e12; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pf-ttp b { font-size: 15px; color: #c6c9cf; }
+.pf-ttp.p1 { border-color: rgba(255,255,255,.35); background: #14141a; }
+.pf-ttp.p1 b { font-size: 18px; color: #fff; }
+.pf-ttp span { font-size: 12.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-ttp i { font-style: normal; font-size: 11px; color: #8a8f98; }
+.pf-ttvote.on { color: var(--pf-acc); border-color: color-mix(in srgb, var(--pf-acc) 45%, transparent); }
+@media (max-width: 680px) { .pf-ttpodio { grid-template-columns: 1fr; } }

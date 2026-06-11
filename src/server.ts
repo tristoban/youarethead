@@ -309,6 +309,26 @@ export async function initDb(db: Db): Promise<void> {
     );
   `);
   await db.query(`CREATE INDEX IF NOT EXISTS desk_firmas_idx ON desk_firmas (desk_uid, id DESC);`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS tristonico TIMESTAMPTZ;`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS tristo_props (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      deleted_at TIMESTAMPTZ
+    );
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS tristo_props_idx ON tristo_props (created_at DESC);`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS tristo_votes (
+      prop_id BIGINT NOT NULL,
+      user_id BIGINT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (prop_id, user_id)
+    );
+  `);
   const mp = await db.query('SELECT x, y, v FROM mural_px');
   for (const r of mp.rows) {
     const x = Number(r.x), y = Number(r.y), v = Number(r.v);
@@ -1372,7 +1392,7 @@ export function buildApp(db: Db): FastifyInstance {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
     if (!u) return { ok: true, logged: false, nick: null };
-    const det = await db.query('SELECT email, bio, created_at, pin_hash, avatar, banner, accent, estado, location, links, pinned, admin, badges, nick_changed FROM hub_users WHERE id = $1', [u.id]);
+    const det = await db.query('SELECT email, bio, created_at, pin_hash, avatar, banner, accent, estado, location, links, pinned, admin, badges, nick_changed, tristonico FROM hub_users WHERE id = $1', [u.id]);
     const r = det.rows[0] ?? {};
     const sres = await db.query("UPDATE hub_users SET streak = CASE WHEN streak_day = CURRENT_DATE THEN streak WHEN streak_day = CURRENT_DATE - 1 THEN streak + 1 ELSE 1 END, streak_day = CURRENT_DATE WHERE id = $1 RETURNING streak", [u.id]);
     const streak = Number(sres.rows[0]?.streak ?? 1) || 1;
@@ -1395,7 +1415,7 @@ export function buildApp(db: Db): FastifyInstance {
       banner: (r.banner as string | null) ?? null, accent: (r.accent as string | null) ?? null, estado: (r.estado as string | null) ?? '', location: (r.location as string | null) ?? '', links: (r.links as unknown) ?? [], pinned: r.pinned ? Number(r.pinned) : null, founder: (u.nick || '').toLowerCase() === 'tristoban',
       bio: (r.bio as string | null) ?? '', desde: r.created_at ?? null, caido,
       best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0, laberinto: Number(bl.rows[0]?.s ?? 0) || 0 },
-      badges: (r.badges as unknown) ?? null, streak, karma, nickDays,
+      badges: (r.badges as unknown) ?? null, streak, karma, nickDays, tristonico: !!r.tristonico,
       char: cr ? { head: String(cr.head ?? 'o'), vida: Math.round(Number(cr.vida ?? 0)), hambre: Math.round(Number(cr.hambre ?? 0)), sueno: Math.round(Number(cr.sueno ?? 0)) } : null,
     };
   });
@@ -1583,11 +1603,114 @@ export function buildApp(db: Db): FastifyInstance {
     return { ok: true, pdd: Number.isInteger(id) && id > 0 ? id : null };
   });
 
+  // ---- Tristónicos: membresía por llave, propuestas y podio semanal ----
+  const tristoRate = new Map<number, number>();
+  async function esTristonico(id: number): Promise<boolean> {
+    const { rows } = await db.query('SELECT tristonico FROM hub_users WHERE id = $1', [id]);
+    return !!rows[0]?.tristonico;
+  }
+  app.post('/api/tristonicos/entrar', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'no_auth' });
+    const llave = String(((req.body ?? {}) as { llave?: unknown }).llave ?? '').trim();
+    if (!llave || llave.length > 80) return reply.code(400).send({ ok: false, error: 'bad' });
+    const { rows } = await db.query("SELECT value FROM site_config WHERE key = 'tristollave'");
+    const real = String(rows[0]?.value ?? '').trim();
+    if (!real || llave !== real) return reply.code(403).send({ ok: false, error: 'llave', message: 'Esa llave no abre nada. La posta aparece en el canal.' });
+    await db.query('UPDATE hub_users SET tristonico = COALESCE(tristonico, now()) WHERE id = $1', [u.id]);
+    return { ok: true, member: true };
+  });
+  app.get('/api/tristonicos', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'no_auth' });
+    if (!(await esTristonico(u.id))) return { ok: true, member: false };
+    const props = await db.query(
+      `SELECT p.id, p.title, p.body, p.created_at AS t, h.nick, h.avatar,
+              (SELECT count(*) FROM tristo_votes v WHERE v.prop_id = p.id) AS nv,
+              EXISTS(SELECT 1 FROM tristo_votes v2 WHERE v2.prop_id = p.id AND v2.user_id = $1) AS mio
+       FROM tristo_props p JOIN hub_users h ON h.id = p.user_id
+       WHERE p.deleted_at IS NULL
+       ORDER BY p.id DESC LIMIT 100`, [u.id]);
+    const podio = await db.query(
+      `SELECT p.id, p.title, h.nick,
+              (SELECT count(*) FROM tristo_votes v WHERE v.prop_id = p.id AND v.created_at > now() - interval '7 days') AS nv
+       FROM tristo_props p JOIN hub_users h ON h.id = p.user_id
+       WHERE p.deleted_at IS NULL AND p.created_at > now() - interval '14 days'
+       ORDER BY nv DESC, p.id DESC LIMIT 3`);
+    return {
+      ok: true, member: true,
+      podio: podio.rows.filter((r) => Number(r.nv) > 0).map((r) => ({ id: Number(r.id), title: String(r.title), nick: String(r.nick ?? ''), nv: Number(r.nv) })),
+      props: props.rows.map((r) => ({ id: Number(r.id), title: String(r.title), body: (r.body as string | null) ?? '', t: r.t, nick: String(r.nick ?? ''), avatar: (r.avatar as string | null) ?? null, nv: Number(r.nv), mio: r.mio === true })),
+    };
+  });
+  app.post('/api/tristonicos/proponer', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'no_auth' });
+    if (u.muted) return reply.code(403).send({ ok: false, error: 'muted', message: 'Estás muteado.' });
+    if (!(await esTristonico(u.id))) return reply.code(403).send({ ok: false, error: 'no_member' });
+    const now = Date.now();
+    if (now - (tristoRate.get(u.id) ?? 0) < 60000) return reply.code(429).send({ ok: false, error: 'slow', message: 'Una propuesta por minuto. Pensala bien.' });
+    const b = (req.body ?? {}) as { title?: unknown; body?: unknown };
+    const title = String(b.title ?? '').trim().slice(0, 120);
+    const body = String(b.body ?? '').trim().slice(0, 1000);
+    if (title.length < 4) return reply.code(400).send({ ok: false, error: 'bad', message: 'Ponele un título (4 letras mínimo).' });
+    tristoRate.set(u.id, now);
+    const ins = await db.query('INSERT INTO tristo_props (user_id, title, body) VALUES ($1, $2, $3) RETURNING id', [u.id, title, body || null]);
+    return { ok: true, id: Number(ins.rows[0]?.id ?? 0) };
+  });
+  app.post('/api/tristonicos/votar', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'no_auth' });
+    if (!(await esTristonico(u.id))) return reply.code(403).send({ ok: false, error: 'no_member' });
+    const id = Math.floor(Number(((req.body ?? {}) as { id?: unknown }).id));
+    if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
+    const ex = await db.query('SELECT 1 FROM tristo_props WHERE id = $1 AND deleted_at IS NULL', [id]);
+    if (!ex.rows.length) return reply.code(404).send({ ok: false, error: 'no_prop' });
+    const del = await db.query('DELETE FROM tristo_votes WHERE prop_id = $1 AND user_id = $2 RETURNING prop_id', [id, u.id]);
+    let voto = false;
+    if (!del.rows.length) { await db.query('INSERT INTO tristo_votes (prop_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, u.id]); voto = true; }
+    const n = await db.query('SELECT count(*) AS c FROM tristo_votes WHERE prop_id = $1', [id]);
+    return { ok: true, voto, n: Number(n.rows[0]?.c ?? 0) };
+  });
+  app.post('/api/tristonicos/borrar', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'no_auth' });
+    const id = Math.floor(Number(((req.body ?? {}) as { id?: unknown }).id));
+    if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ ok: false, error: 'bad' });
+    const pr = await db.query('SELECT user_id FROM tristo_props WHERE id = $1 AND deleted_at IS NULL', [id]);
+    if (!pr.rows.length) return reply.code(404).send({ ok: false, error: 'no_prop' });
+    if (Number(pr.rows[0]?.user_id ?? 0) !== u.id) {
+      const adm = await adminUser(db, req);
+      if (!adm) return reply.code(403).send({ ok: false, error: 'forbidden' });
+    }
+    await db.query('UPDATE tristo_props SET deleted_at = now() WHERE id = $1', [id]);
+    return { ok: true };
+  });
+  app.post('/api/admin/tristollave', async (req, reply) => {
+    const a = await adminUser(db, req);
+    if (!a) return reply.code(403).send({ ok: false, error: 'forbidden' });
+    const llave = String(((req.body ?? {}) as { llave?: unknown }).llave ?? '').trim().slice(0, 80);
+    if (!llave) {
+      await db.query("INSERT INTO site_config (key, value) VALUES ('tristollave', NULL) ON CONFLICT (key) DO UPDATE SET value = NULL");
+      return { ok: true, llave: null };
+    }
+    await db.query("INSERT INTO site_config (key, value) VALUES ('tristollave', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [llave]);
+    return { ok: true, llave };
+  });
+  app.get('/api/admin/tristollave', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const a = await adminUser(db, req);
+    if (!a) return reply.code(403).send({ ok: false, error: 'forbidden' });
+    const { rows } = await db.query("SELECT value FROM site_config WHERE key = 'tristollave'");
+    return { ok: true, llave: (rows[0]?.value as string | null) ?? null };
+  });
+
   app.get('/api/social/perfil', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     const nick = String(((req.query ?? {}) as { nick?: unknown }).nick ?? '').trim();
     if (!nick) return reply.code(400).send({ ok: false, error: 'bad' });
-    const { rows } = await db.query('SELECT id, nick, avatar, banner, accent, bio, estado, location, links, pinned, created_at, badges, streak FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()]);
+    const { rows } = await db.query('SELECT id, nick, avatar, banner, accent, bio, estado, location, links, pinned, created_at, badges, streak, tristonico FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()]);
     const r = rows[0];
     if (!r) return reply.code(404).send({ ok: false, error: 'not_found', message: 'No existe ese perfil.' });
     const uid = Number(r.id);
@@ -1619,7 +1742,7 @@ export function buildApp(db: Db): FastifyInstance {
       desde: r.created_at ?? null, founder: nl === 'tristoban', admin: isAdminNick(r.nick as string),
       best: { tetristo: Number(bt.rows[0]?.s ?? 0) || 0, parpadeo: Number(bp.rows[0]?.s ?? 0) || 0, laberinto: Number(bl.rows[0]?.s ?? 0) || 0 },
       amigos: Number(fc.rows[0]?.c ?? 0) || 0, caido: ca.rows[0] ? Number(ca.rows[0].n ?? 0) : 0, nposts: Number(np.rows[0]?.c ?? 0) || 0,
-      badges: (r.badges as unknown) ?? null, streak: Number(r.streak ?? 0) || 0, karma,
+      badges: (r.badges as unknown) ?? null, streak: Number(r.streak ?? 0) || 0, karma, tristonico: !!r.tristonico,
       posts, pinned, rel,
     } };
   });
@@ -2333,6 +2456,10 @@ export function buildApp(db: Db): FastifyInstance {
   });
 
   app.get('/yata', async (_req, reply) => {
+    reply.header('cache-control', 'no-store');
+    return reply.sendFile('perfil.html');
+  });
+  app.get('/tristonicos', async (_req, reply) => {
     reply.header('cache-control', 'no-store');
     return reply.sendFile('perfil.html');
   });

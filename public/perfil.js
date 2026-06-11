@@ -170,14 +170,17 @@
     tienda: '<path d="M5 8h14l-1 11H6z"/><path d="M9 8a3 3 0 016 0"/>',
     salir: '<path d="M14 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2v-2"/><path d="M10 12h10m0 0l-3-3m3 3l-3 3"/>',
     share: '<path d="M12 4v11"/><path d="M8.5 7.5L12 4l3.5 3.5"/><path d="M5 12v6a2 2 0 002 2h10a2 2 0 002-2v-6"/>',
+    tristonicos: '<path d="M12 5.5C10.5 4 8.5 3.5 6 3.5c-.8 0-1.5.1-2 .2V18c.5-.1 1.2-.2 2-.2 2.5 0 4.5.5 6 2 1.5-1.5 3.5-2 6-2 .8 0 1.5.1 2 .2V3.7c-.5-.1-1.2-.2-2-.2-2.5 0-4.5.5-6 2z"/><path d="M12 5.5v14.3"/>',
   };
   function ic(n) { return '<svg class="pf-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + IC[n] + "</svg>"; }
+  const LOCK_SVG = '<svg class="pf-lockico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="6" y="11" width="12" height="9" rx="2"/><path d="M9 11V8a3 3 0 016 0v3"/></svg>';
 
   let me = null, vt = [], rt = [], cur = "inicio";
   function clearView() { vt.forEach((t) => clearInterval(t)); vt = []; window.YATH_CONV = null; }
   function setUrl(path) { try { if (location.pathname !== path) history.pushState({}, "", path); } catch (_) {} }
   function rutear() {
     const p = location.pathname;
+    if (p === "/tristonicos") { setView("tristonicos"); return; }
     let m = p.match(/^\/(?:u|demon)\/([^/]+)\/escritorio$/);
     if (m) { viewDesktop(decodeURIComponent(m[1])); return; }
     m = p.match(/^\/(?:u|demon)\/([^/]+)$/);
@@ -191,6 +194,9 @@
     const params = new URLSearchParams(location.search);
     const oauth = params.get("oauth");
     if (oauth) history.replaceState(null, "", location.pathname);
+    const llaveT = params.get("llave");
+    if (llaveT) { try { localStorage.setItem("yath_tllave", llaveT); } catch (_) {} history.replaceState(null, "", location.pathname); }
+    const wantTristo = location.pathname === "/tristonicos";
     if (oauth === "setup") { setupScreen(); return; }
     const um = location.pathname.match(/^\/(?:u|demon)\/([^/]+)$/);
     const wantUser = um ? decodeURIComponent(um[1]) : null;
@@ -212,6 +218,7 @@
     if (wantDesk) viewDesktop(wantDesk);
     else if (wantUser) viewUser(wantUser);
     else if (wantPost) viewPost(wantPost);
+    else if (wantTristo) setView("tristonicos");
   }
   async function guestPost(id) {
     const { r, d } = await apiQ("/api/social/post?id=" + id);
@@ -306,7 +313,7 @@
         '<aside class="pf-left"><a href="/" class="pf-brand">youarethead.com.ar</a><nav class="pf-nav" id="pf-nav">' +
           '<a href="/">' + ic("tienda") + '<span>La remera</span></a>' + navItem("feed", "Feed") +
           '<button data-v="notifs" id="pf-navnotif">' + ic("notifs") + '<span>Notificaciones</span><i class="pf-ndot" id="pf-nb"></i></button>' +
-          navItem("mensajes", "Mensajes") + navItem("amigos", "Amigos") + navItem("escritorios", "Escritorios") +
+          navItem("mensajes", "Mensajes") + navItem("amigos", "Amigos") + navItem("escritorios", "Escritorios") + navItem("tristonicos", "Tristónicos") +
           navItem("juegos", "Juegos") + navItem("tienda", "Tienda") + navItem("canal", "Insomnio Crónico") +
           navItem("perfil", "My Hell") + (me.admin ? navItem("admin", "Admin") : "") +
           '<div class="pf-me" id="pf-me"><span class="pf-ava">' + avaPic(me.avatar, myHead) + '</span><div><b>' + esc(me.nick) + '</b><span>@' + esc(me.nick) + '</span></div></div>' +
@@ -361,10 +368,23 @@
     pollNotifs(); rt.push(setInterval(pollNotifs, 25000));
     api("/api/img/cfg", AH).then(({ d }) => { IMG_ON = !!(d && d.on); }).catch(() => {});
     if (!window.__popWired) { window.__popWired = true; window.addEventListener("popstate", () => { if (me) rutear(); }); }
+    const tll = (() => { try { return localStorage.getItem("yath_tllave"); } catch (_) { return null; } })();
+    if (tll) {
+      try { localStorage.removeItem("yath_tllave"); } catch (_) {}
+      api("/api/tristonicos/entrar", { method: "POST", headers: JH, body: JSON.stringify({ llave: tll }) }).then(({ r, d }) => {
+        if (r.ok && d && d.member) {
+          me.tristonico = true;
+          const lk = root.querySelector('#pf-nav [data-v="tristonicos"] .pf-lockico'); if (lk) lk.remove();
+          toast("Bienvenido, tristónico. Ya sos de los nuestros.");
+          setView("tristonicos");
+        } else toast((d && d.message) || "Esa llave no abre nada.");
+      }).catch(() => {});
+    }
     rightRail();
     setView("feed");
   }
   function navItem(v, label) {
+    if (v === "tristonicos") return '<button data-v="tristonicos">' + ic("tristonicos") + "<span>" + label + "</span>" + (me && me.tristonico ? "" : LOCK_SVG) + "</button>";
     if (v === "juegos") return '<a href="/tristos">' + ic("juegos") + "<span>" + label + "</span></a>";
     if (v === "canal") return '<a href="https://www.youtube.com/@tristoban" target="_blank" rel="noopener">' + ic("canal") + "<span>" + label + "</span></a>";
     if (v === "tienda") return '<button class="pf-soon" disabled>' + ic("tienda") + "<span>" + label + '</span><span class="pf-badge">pronto</span></button>';
@@ -378,6 +398,7 @@
     root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === v));
     root.querySelectorAll(".pf-tabbar [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === v));
     if (v === "feed") viewFeed();
+    else if (v === "tristonicos") viewTristonicos();
     else if (v === "escritorios") viewEscritorios();
     else if (v === "amigos") viewAmigos();
     else if (v === "mensajes") viewMsgs();
@@ -1453,6 +1474,9 @@
       '<div class="pf-h">Pregunta del día</div>' +
       '<div class="pf-row"><input class="pf-input" id="ad-pdd" inputmode="numeric" placeholder="ID del posteo (el $número)" /><button class="pf-btn" id="ad-pddsave">Fijar</button><button class="pf-btn ghost" id="ad-pddoff">Sacar</button></div>' +
       '<p class="pf-msg" id="ad-pddmsg" style="min-height:1em"></p>' +
+      '<div class="pf-h">Llave tristónica</div>' +
+      '<div class="pf-row"><input class="pf-input" id="ad-tll" maxlength="80" placeholder="la llave del link (rotala si se filtra)" autocomplete="off" /><button class="pf-btn" id="ad-tllsave">Guardar</button></div>' +
+      '<p class="pf-msg" id="ad-tllmsg" style="min-height:1em;user-select:all"></p>' +
       '<div class="pf-h">Usuarios</div>' +
       '<div class="pf-row"><input class="pf-input" id="ad-q" maxlength="20" placeholder="buscar por nick…" /><button class="pf-btn" id="ad-go">Buscar</button></div>' +
       '<p class="pf-msg" id="ad-msg" style="min-height:1em"></p>' +
@@ -1463,6 +1487,13 @@
     (async () => { try { const { d } = await api("/api/admin/pdd", AH); if (d && d.ok && d.pdd) body().querySelector("#ad-pdd").value = d.pdd; } catch (_) {} })();
     body().querySelector("#ad-pddsave").onclick = async () => { const m2 = body().querySelector("#ad-pddmsg"); m2.textContent = "..."; const { r, d } = await api("/api/admin/pdd", { method: "POST", headers: JH, body: JSON.stringify({ id: Number(body().querySelector("#ad-pdd").value) || 0 }) }); m2.textContent = r.ok ? "Fijada arriba del feed." : ((d && d.message) || "No se pudo."); };
     body().querySelector("#ad-pddoff").onclick = async () => { const m2 = body().querySelector("#ad-pddmsg"); m2.textContent = "..."; const { r } = await api("/api/admin/pdd", { method: "POST", headers: JH, body: JSON.stringify({ id: null }) }); m2.textContent = r.ok ? "Sacada." : "No se pudo."; body().querySelector("#ad-pdd").value = ""; };
+    (async () => { try { const { d } = await api("/api/admin/tristollave", AH); if (d && d.ok && d.llave) body().querySelector("#ad-tll").value = d.llave; } catch (_) {} })();
+    body().querySelector("#ad-tllsave").onclick = async () => {
+      const m3 = body().querySelector("#ad-tllmsg"); m3.textContent = "...";
+      const v = body().querySelector("#ad-tll").value.trim();
+      let res = null; try { res = await api("/api/admin/tristollave", { method: "POST", headers: JH, body: JSON.stringify({ llave: v }) }); } catch (_) {}
+      m3.textContent = (res && res.r.ok) ? (v ? "Link para compartir: " + location.origin + "/tristonicos?llave=" + encodeURIComponent(v) : "Llave apagada: nadie nuevo puede entrar.") : "No se pudo.";
+    };
     async function load() {
       const q = qEl.value.trim();
       const { d } = await api("/api/admin/users" + (q ? "?q=" + encodeURIComponent(q) : ""), AH);
@@ -1517,7 +1548,7 @@
 
   /* ---------- Perfil público ---------- */
   function vhex(c) { return (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)) ? c : "#6b8cff"; }
-  function badgeList(p) { let arr = Array.isArray(p.badges) ? p.badges : null; if (!arr) { arr = []; if (p.admin) arr.push({ t: "verificado", c: "#6b8cff" }); if (p.founder) arr.push({ t: "fundador", c: "#e2b23c" }); } return arr; }
+  function badgeList(p) { let arr = Array.isArray(p.badges) ? p.badges.slice() : null; if (!arr) { arr = []; if (p.admin) arr.push({ t: "verificado", c: "#6b8cff" }); if (p.founder) arr.push({ t: "fundador", c: "#e2b23c" }); } if (p.tristonico && !arr.some((b) => /trist[oó]nico/i.test(String(b.t || "")))) arr.push({ t: "tristónico", c: "#8b7cff" }); return arr; }
   function badges(p) { return badgeList(p).slice(0, 6).map((b) => '<span class="pf-tag pf-tagg">' + esc(b.t) + "</span>").join(""); }
   async function viewUser(nick) {
     clearView(); cur = "user";
@@ -1626,6 +1657,89 @@
       seccion("Demonios", resto) +
       (todos.length ? "" : '<p class="pf-empty">Ni un escritorio todavía. Armá el tuyo y estrenás el barrio.</p>');
     body().querySelectorAll("[data-esk]").forEach((b) => b.onclick = () => viewDesktop(b.getAttribute("data-esk")));
+  }
+
+  /* ---------- Tristónicos ---------- */
+  async function viewTristonicos() {
+    clearView(); cur = "tristonicos";
+    setUrl("/tristonicos");
+    root.querySelectorAll("#pf-nav [data-v]").forEach((b) => b.classList.toggle("on", b.getAttribute("data-v") === "tristonicos"));
+    chead("Tristónicos");
+    body().innerHTML = skFeed(3);
+    const { r, d } = await apiQ("/api/tristonicos");
+    if (!r.ok || !d || !d.ok) { body().innerHTML = '<p class="pf-empty">No cargó. <button class="pf-btn pf-mini" id="tt-retry" type="button">Reintentar</button></p>'; const rb = body().querySelector("#tt-retry"); if (rb) rb.onclick = () => viewTristonicos(); return; }
+    if (!d.member) {
+      body().innerHTML = '<div class="pf-ucard pf-ttgate">' +
+        '<span class="pf-ava pf-ttghost">' + avatar("o") + "</span>" +
+        "<h3>Esto es solo para tristónicos</h3>" +
+        '<p class="pf-dimc" style="text-align:center;padding:4px 0 0">Acá adentro se proponen y se votan las historias del canal. La llave aparece cada tanto en los videos de Insomnio Crónico. Estate atento.</p>' +
+        '<a class="pf-btn" href="https://www.youtube.com/@tristoban" target="_blank" rel="noopener" style="margin-top:14px">Ir al canal</a>' +
+        "</div>";
+      return;
+    }
+    const podio = d.podio || [], props = d.props || [];
+    const pos = ["1°", "2°", "3°"];
+    const podioHTML = podio.length
+      ? '<div class="pf-h">Podio de la semana</div><div class="pf-ttpodio">' + podio.map((p, i) => '<div class="pf-ttp p' + (i + 1) + '"><b>' + pos[i] + "</b><span>" + esc(p.title) + "</span><i>▲ " + p.nv + " · " + esc(p.nick) + "</i></div>").join("") + "</div>"
+      : "";
+    body().innerHTML =
+      podioHTML +
+      '<div class="pf-comp pf-fold" id="tt-comp">' +
+        '<div class="pf-foldrow"><span class="pf-ava pf-foldava">' + avaPic(me.avatar, headFor(me.nick)) + '</span><button class="pf-foldline" id="tt-foldgo" type="button">Proponé una historia para el canal…</button><button class="pf-btn pf-mini" id="tt-foldpub" type="button">Proponer</button></div>' +
+        '<div class="pf-compwrap"><div class="pf-compin">' +
+          '<input class="pf-cti" id="tt-ttl" maxlength="120" placeholder="Título de la historia (esto es lo que se vota)" />' +
+          '<textarea id="tt-body" maxlength="1000" placeholder="Contá de qué va. Ojo: hay cosas que no entran en el canal (casos reales, por ejemplo)."></textarea>' +
+          '<div class="pf-crow"><span class="pf-msg" id="tt-msg"></span><button class="pf-btn pf-spin" id="tt-pub">Proponer</button></div>' +
+        "</div></div>" +
+      "</div>" +
+      '<div class="pf-h">Propuestas</div><div id="tt-list"></div>';
+    const list = body().querySelector("#tt-list");
+    function propHTML(p) {
+      return '<article class="pf-post pf-ttprop">' +
+        '<div class="pf-post-h"><span class="pf-ava">' + avaPic(p.avatar, headFor(p.nick)) + '</span><div class="pf-post-meta">' + uname(p.nick) + "<span>@" + esc(p.nick) + " · " + cuando(p.t) + "</span></div></div>" +
+        '<h3 class="pf-post-t">' + esc(p.title) + "</h3>" +
+        (p.body ? '<p class="pf-post-b">' + rich(p.body) + "</p>" : "") +
+        '<div class="pf-post-f"><button class="pf-fact pf-ttvote' + (p.mio ? " on" : "") + '" data-ttv="' + p.id + '" type="button" title="Votar esta historia">▲<span>' + p.nv + "</span></button>" + (canDel(p.nick) ? '<button class="pf-fact" data-ttdel="' + p.id + '" type="button" title="Borrar propuesta">' + ic("trash") + "</button>" : "") + "</div>" +
+        "</article>";
+    }
+    function pinta() {
+      const orden = props.slice().sort((a, b) => (b.nv - a.nv) || (b.id - a.id));
+      list.innerHTML = orden.length ? orden.map(propHTML).join("") : '<p class="pf-empty">Nadie propuso nada todavía. El primer tristónico que hable escribe la historia.</p>';
+    }
+    pinta();
+    list.addEventListener("click", async (e) => {
+      const v = e.target.closest ? e.target.closest("[data-ttv]") : null;
+      if (v) {
+        e.preventDefault(); e.stopPropagation();
+        const id = Number(v.getAttribute("data-ttv"));
+        const p = props.find((x) => x.id === id); if (!p) return;
+        p.mio = !p.mio; p.nv += p.mio ? 1 : -1; pinta();
+        let res = null; try { res = await api("/api/tristonicos/votar", { method: "POST", headers: JH, body: JSON.stringify({ id: id }) }); } catch (_) {}
+        if (!res || !res.r.ok || !res.d || !res.d.ok) { p.mio = !p.mio; p.nv += p.mio ? 1 : -1; pinta(); toast("No se pudo votar. Probá de nuevo."); }
+        else { p.nv = res.d.n; p.mio = res.d.voto; pinta(); }
+        return;
+      }
+      const dl = e.target.closest ? e.target.closest("[data-ttdel]") : null;
+      if (dl) {
+        e.preventDefault(); e.stopPropagation();
+        const id = Number(dl.getAttribute("data-ttdel"));
+        if (!window.confirm("¿Borrar esta propuesta?")) return;
+        let res = null; try { res = await api("/api/tristonicos/borrar", { method: "POST", headers: JH, body: JSON.stringify({ id: id }) }); } catch (_) {}
+        if (res && res.r.ok) { const i = props.findIndex((x) => x.id === id); if (i >= 0) props.splice(i, 1); pinta(); toast("Propuesta borrada."); }
+        else toast("No se pudo borrar.");
+      }
+    });
+    const compT = body().querySelector("#tt-comp");
+    const unfT = () => { compT.classList.remove("pf-fold"); const t = body().querySelector("#tt-ttl"); if (t) t.focus(); };
+    body().querySelector("#tt-foldgo").onclick = unfT;
+    body().querySelector("#tt-foldpub").onclick = unfT;
+    body().querySelector("#tt-pub").onclick = async () => {
+      const ti = body().querySelector("#tt-ttl"), ta = body().querySelector("#tt-body"), msg = body().querySelector("#tt-msg");
+      msg.textContent = "...";
+      let res = null; try { res = await api("/api/tristonicos/proponer", { method: "POST", headers: JH, body: JSON.stringify({ title: ti.value, body: ta.value }) }); } catch (_) {}
+      if (res && res.r.ok && res.d && res.d.ok) { msg.textContent = ""; toast("Propuesta publicada. Que voten los tristónicos."); viewTristonicos(); }
+      else msg.textContent = (res && res.d && res.d.message) || "No se pudo.";
+    };
   }
 
   /* ---------- Amigos ---------- */
