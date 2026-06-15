@@ -28,8 +28,19 @@
   let score = 0, lines = 0, level = 1, dropInt = 800, finalScore = 0;
   let best = Number(localStorage.getItem("yg_best") || 0);
   let raf = 0, running = false, paused = false, over = false, savedThisRun = false, lastDrop = 0;
-  let holdType = null, holdUsed = false, lockTimer = 0, lockResets = 0;
+  let holdType = null, holdUsed = false, lockTimer = 0, lockResets = 0, hyperOn = false;
   const LOCK_DELAY = 500, LOCK_MAX_RESETS = 15;
+  // --- Modo hiper: a partir del millón el juego se vuelve increíblemente rápido ---
+  const HYPER_START = 1000000, HYPER_STEP = 120000;   // cada 120k de puntos por encima del millón, otro escalón
+  const HYPER_BASE = 20, HYPER_DEC = 2, HYPER_MIN = 5; // intervalo de caída en ms (arranca en 20, baja hasta 5)
+  const HYPER_MAXSTEP = 3;                              // filas que puede caer una pieza por frame en lo más alto
+  const HYPER_LOCK_BASE = 360, HYPER_LOCK_MIN = 180;   // lock delay reducido en hiper
+  const HYPER_RESETS = 6;                              // menos margen para frenar la pieza abajo
+  function hyperSteps() { return score < HYPER_START ? -1 : Math.floor((score - HYPER_START) / HYPER_STEP); }
+  function effInterval() { const s = hyperSteps(); return s < 0 ? dropInt : Math.max(HYPER_MIN, HYPER_BASE - s * HYPER_DEC); }
+  function effLockDelay() { const s = hyperSteps(); return s < 0 ? LOCK_DELAY : Math.max(HYPER_LOCK_MIN, HYPER_LOCK_BASE - s * 20); }
+  function effMaxResets() { return score >= HYPER_START ? HYPER_RESETS : LOCK_MAX_RESETS; }
+  function aceleraFlash() { if (reduce) return; flashQ.push({ text: "ACELERÁ", white: false }); flashQ.push({ text: "MÁS\nRÁPIDO", white: true }); if (!flashing) runFlash(); }
 
   const vpMeta = document.querySelector('meta[name="viewport"]');
   const vpDefault = vpMeta ? vpMeta.getAttribute("content") : null;
@@ -77,7 +88,7 @@
     return n;
   }
   function lock() { const ko = merge(); const n = clearLines(); if (n>0) onClear(n); if (ko) { endGame(); return; } spawn(); }
-  function resetLock() { if (lockTimer && lockResets < LOCK_MAX_RESETS && piece && collide(piece.m, piece.x, piece.y+1)) { lockTimer = performance.now(); lockResets++; } }
+  function resetLock() { if (lockTimer && lockResets < effMaxResets() && piece && collide(piece.m, piece.x, piece.y+1)) { lockTimer = performance.now(); lockResets++; } }
   function move(dx) { if (over||paused||!piece) return; if (!collide(piece.m, piece.x+dx, piece.y)) { piece.x+=dx; resetLock(); draw(); } }
   function rotate() { if (over||paused||!piece) return; const r = rot(piece.m); for (const k of [0,-1,1,-2,2]) { if (!collide(r, piece.x+k, piece.y)) { piece.m=r; piece.x+=k; resetLock(); draw(); return; } } }
   function softDrop() { if (over||paused||!piece) return; if (!collide(piece.m, piece.x, piece.y+1)) { piece.y++; score+=1; updateHud(); lastDrop = performance.now(); } draw(); }
@@ -182,12 +193,19 @@
     if (!running) return;
     if (!paused && !over && piece) {
       if (!lastDrop) lastDrop = t;
+      if (!hyperOn && score >= HYPER_START) { hyperOn = true; aceleraFlash(); }
       if (collide(piece.m, piece.x, piece.y + 1)) {
         if (!lockTimer) lockTimer = t;
-        if (t - lockTimer >= LOCK_DELAY) lock();
+        if (t - lockTimer >= effLockDelay()) lock();
       } else {
         lockTimer = 0; lockResets = 0;
-        if (t - lastDrop >= dropInt) { piece.y++; lastDrop = t; draw(); }
+        const di = effInterval();
+        if (t - lastDrop >= di) {
+          let n = 1;
+          if (score >= HYPER_START) { n = Math.floor((t - lastDrop) / di); if (n < 1) n = 1; else if (n > HYPER_MAXSTEP) n = HYPER_MAXSTEP; }
+          for (let i = 0; i < n && !collide(piece.m, piece.x, piece.y + 1); i++) piece.y++;
+          lastDrop = t; draw();
+        }
       }
     }
     raf = window.requestAnimationFrame(loop);
@@ -195,7 +213,7 @@
 
   function startGame() {
     resetBoard(); score=0; lines=0; level=1; dropInt=800; over=false; paused=false; savedThisRun=false;
-    holdType=null; holdUsed=false; lockTimer=0; lockResets=0; myRank=null; peeking=false; setRank(0);
+    holdType=null; holdUsed=false; lockTimer=0; lockResets=0; hyperOn=false; myRank=null; peeking=false; setRank(0);
     nextType=null; bag=[]; spawn(); updateHud(); hideScreen(); running=true; lastDrop=0;
     peekRank(0).then((d) => { if (d) { myRank = d.rank; setRank(d.rank); } });
     window.cancelAnimationFrame(raf); raf = window.requestAnimationFrame(loop); draw();
