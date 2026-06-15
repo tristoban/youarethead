@@ -9,6 +9,8 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   const proxEl = $("prox"), proxTxt = $("proxtxt");
   const flashBar = $("flashbar"), keyEl = $("keyind"), stamBar = $("stambar"), flareEl = $("flareind");
   const hidePrompt = $("hideprompt"), hideOv = $("hidev"), hideBar = $("hidebar");
+  const energizerEl = $("energizer"), ezBar = $("ezbar");
+  const scrapEl = $("scrapind"), canEl = $("canind"), safePrompt = $("safeprompt"), shopEl = $("shop");
   const intro = $("intro"), dead = $("dead"), deadTitle = $("deadtitle");
   const refuge = $("refuge"), rgLvl = $("rg-lvl"), rgScore = $("rg-score");
   if (!canvas) return;
@@ -23,14 +25,22 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   function initAudio() { if (actx) return; try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) {} }
   function thump(t, vol) { if (!actx) return; const o = actx.createOscillator(), g = actx.createGain(); o.type = "sine"; o.frequency.setValueAtTime(62, t); o.frequency.exponentialRampToValueAtTime(34, t + 0.12); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2); o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.22); }
   function heartbeat(vol) { if (!actx) return; const t = actx.currentTime; thump(t, vol); thump(t + 0.24, vol * 0.62); }
+  function tone(freq, t0, dur, vol, type) { if (!actx) return; const o = actx.createOscillator(), g = actx.createGain(); o.type = type || "square"; o.frequency.setValueAtTime(freq, t0); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + dur + 0.02); }
+  function powerupSfx() { if (!actx) return; const t = actx.currentTime; [392, 523, 659, 784, 1047].forEach((f, i) => tone(f, t + i * 0.06, 0.13, 0.16, "square")); }
+  function popSfx() { if (!actx) return; const t = actx.currentTime; tone(200, t, 0.07, 0.2, "sawtooth"); tone(90, t + 0.05, 0.13, 0.2, "sawtooth"); }
+  function energizerEndSfx() { if (!actx) return; const t = actx.currentTime; [659, 523, 392].forEach((f, i) => tone(f, t + i * 0.08, 0.15, 0.12, "triangle")); }
 
   /* ---------- Config ---------- */
   const CELL = 4, WALL_H = 3.0, VIEW = 8, R = 0.34, EYE = 1.5;
-  const MOVE = 3.4, SPRINT_MULT = 1.8, STAM_DRAIN = 0.34, STAM_REGEN = 0.16;
-  const ENT_BASE = 1.1, ENT_RAMP = 0.010, ENT_DEPTH_BOOST = 0.42;
+  const MOVE = 3.4, SPRINT_MULT = 1.8, STAM_DRAIN = 0.26, STAM_REGEN = 0.26; // sprint más usable como herramienta de escape
+  const ENT_BASE = 1.1, ENT_RAMP = 0.010, ENT_DEPTH_BOOST = 0.30;            // antes 0.42: la curva por nivel pegaba demasiado
+  const ENT_CAP = MOVE * SPRINT_MULT * 0.86;                                  // 5.26 < sprint 6.12 → SIEMPRE podés escapar esprintando
   const FLASH_FREEZE = 5, FLASH_CD_BASE = 20;
   const FLARE_MAX = 3, FLARE_LIFE = 12, FLARE_R = 4.4;
   const HIDE_MAX = 7;
+  // --- Energizer (lata de Tristo): power-up estilo Pac-Man ---
+  const ENERGIZER_TIME = 8, ENERGIZER_SPEED = 1.5, ENERGIZER_SLOW = 0.5, ENERGIZER_BONUS = 250;
+  const HIDE_SEARCH = 2.6, EXIT_GRACE = 1.2;   // el caracol busca 2.6s y deja de campear; gracia al salir del locker
   const SEED = 90210;
   let mazeSeed = SEED, runSeed = SEED;
 
@@ -42,7 +52,14 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   let stamina = 1, sprinting = false;
   let hidden = false, hideT = 0, lastSeen = [0, 0], alertT = 0;
   let flareCount = FLARE_MAX;
-  function flashCd() { return FLASH_CD_BASE + depth * 2; }
+  let energizerT = 0, levelTime = 0, bonus = 0, graceT = 0, hideSearchT = 0, canCell = null, canTaken = false;
+  // --- Zona segura + economía híbrida ---
+  let scrap = 0, spent = 0, inSafe = false, shopOpen = false, nearNpc = null, nearExit = false, carryCan = false;
+  let stamMax = 1, flashCdMul = 1, reveal = false, flareCapBonus = 0;
+  const npcs = [];
+  let safeExitCell = [0, 0];
+  function curScore() { return depth * 1000 + Math.floor(activeTime) + bonus - spent; }
+  function flashCd() { return (FLASH_CD_BASE + depth * 2) * flashCdMul; }
   const isTouch = matchMedia("(pointer: coarse)").matches || ("ontouchstart" in window);
   let touchF = 0, touchS = 0, moveId = null, lookId = null, mLastX = 0, mLastY = 0, stickCX = 0, stickCY = 0;
   const tbHide = $("tb-hide");
@@ -210,7 +227,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     const m = new THREE.SpriteMaterial({ map: enemyTex || baseEntTex, transparent: true, depthWrite: false, fog: false });
     if (tint) m.color.setHex(tint);
     const s = new THREE.Sprite(m); s.scale.set(2.0, 3.0, 1); s.position.y = 1.5; s.visible = false; scene.add(s);
-    return { sprite: s, x: 0, z: 0, step: null, timer: 0, spd: 0 };
+    return { sprite: s, x: 0, z: 0, step: null, timer: 0, spd: 0, hx: 0, hz: 0, patrol: null };
   }
   new THREE.TextureLoader().load("/enemymaze.png", (t) => { t.colorSpace = THREE.SRGBColorSpace; enemyTex = t; ents.forEach((e) => { e.sprite.material.map = t; e.sprite.material.needsUpdate = true; }); }, undefined, () => {});
 
@@ -223,6 +240,153 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   const doorLight = new THREE.PointLight(0xd23b47, 1.8, 12, 1.3); scene.add(doorLight);
   const burst = new THREE.PointLight(0xffffff, 0, 70, 0.5); camera.add(burst);
   function setDoorLocked(locked) { const c = locked ? 0xd23b47 : 0x46d17f; doorMat.color.setHex(c); doorLight.color.setHex(c); }
+
+  /* ---------- Lata Energizer de Tristo (procedural; reemplazable por /energizer.png) ---------- */
+  function canTex() {
+    const w = 128, h = 200, cv = document.createElement("canvas"); cv.width = w; cv.height = h; const c = cv.getContext("2d");
+    const bx = 24, bw = w - 48, top = 24, bh = h - 48;
+    const g = c.createLinearGradient(bx, 0, bx + bw, 0);
+    g.addColorStop(0, "#5a5f6b"); g.addColorStop(0.18, "#cfd4dc"); g.addColorStop(0.5, "#f4f6fa"); g.addColorStop(0.82, "#aeb4bf"); g.addColorStop(1, "#4a4f59");
+    c.fillStyle = g; c.fillRect(bx, top, bw, bh);
+    c.fillStyle = "#3a3f49"; c.fillRect(bx, top - 6, bw, 8); c.fillRect(bx, top + bh - 2, bw, 8);   // tapas
+    c.fillStyle = "#0c7d3a"; c.fillRect(bx, top + bh * 0.30, bw, bh * 0.40);                         // banda verde (energía)
+    c.fillStyle = "#0a6b32"; c.fillRect(bx, top + bh * 0.30, bw, 4);
+    // rayo
+    c.fillStyle = "#ffe23a"; c.beginPath();
+    const mx = bx + bw / 2, my = top + bh * 0.5;
+    c.moveTo(mx + 8, my - 22); c.lineTo(mx - 10, my + 2); c.lineTo(mx + 1, my + 2); c.lineTo(mx - 8, my + 22); c.lineTo(mx + 12, my - 6); c.lineTo(mx + 1, my - 6); c.closePath(); c.fill();
+    // texto TRISTO
+    c.fillStyle = "#f4f6fa"; c.font = "800 15px Montserrat, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
+    c.fillText("TRISTO", mx, top + bh * 0.16);
+    c.fillStyle = "#d8ffe6"; c.font = "800 9px Montserrat, sans-serif"; c.fillText("ENERGIZER", mx, top + bh * 0.85);
+    c.strokeStyle = "rgba(255,255,255,.5)"; c.lineWidth = 2; c.strokeRect(bx, top, bw, bh);
+    return new THREE.CanvasTexture(cv);
+  }
+  const canMat = new THREE.SpriteMaterial({ map: canTex(), transparent: true, depthWrite: false, fog: false });
+  const canObj = new THREE.Sprite(canMat); canObj.scale.set(0.95, 1.5, 1); canObj.position.y = 1.0; canObj.visible = false; scene.add(canObj);
+  const canLight = new THREE.PointLight(0x4dff86, 0, 9, 1.4); scene.add(canLight);
+  new THREE.TextureLoader().load("/energizer.png", (t) => { t.colorSpace = THREE.SRGBColorSpace; canMat.map = t; canMat.needsUpdate = true; }, undefined, () => {});
+  function placeEnergizer() {
+    canTaken = false;
+    let cx = 1 + Math.floor(hash(70, 71, 5) * (MW - 2));
+    let cz = 1 + Math.floor(hash(72, 73, 5) * (MH - 2));
+    if (cx + cz < Math.floor((MW + MH) * 0.35)) { cx = Math.max(cx, Math.floor(MW * 0.55)); cz = Math.max(cz, Math.floor(MH * 0.55)); } // lejos del spawn
+    cx = Math.max(1, Math.min(MW - 2, cx)); cz = Math.max(1, Math.min(MH - 2, cz));
+    canCell = [cx, cz];
+    canObj.position.set(cx * CELL + CELL / 2, 1.0, cz * CELL + CELL / 2);
+    canLight.position.set(cx * CELL + CELL / 2, 1.2, cz * CELL + CELL / 2);
+    canObj.visible = true; canLight.intensity = 1.2;
+  }
+
+  /* ---------- Zona segura: NPCs vendedores + sala 3D ---------- */
+  function npcTex(kind) {
+    const w = 128, h = 256, cv = document.createElement("canvas"); cv.width = w; cv.height = h; const x = cv.getContext("2d");
+    const accent = kind === "latas" ? "#4dff86" : kind === "bengalas" ? "#ffb866" : "#6b8cff";
+    const g = x.createLinearGradient(0, h * 0.2, 0, h); g.addColorStop(0, "rgba(60,62,72,.95)"); g.addColorStop(1, "rgba(20,21,26,.92)");
+    x.fillStyle = g; x.beginPath(); x.moveTo(w * 0.5, h * 0.16); x.lineTo(w * 0.84, h * 0.5); x.lineTo(w * 0.78, h); x.lineTo(w * 0.22, h); x.lineTo(w * 0.16, h * 0.5); x.closePath(); x.fill();
+    x.fillStyle = "#26272e"; x.beginPath(); x.ellipse(w * 0.5, h * 0.2, w * 0.2, h * 0.13, 0, 0, 7); x.fill();
+    x.fillStyle = "#0a0a0e"; x.beginPath(); x.ellipse(w * 0.5, h * 0.22, w * 0.12, h * 0.09, 0, 0, 7); x.fill();
+    x.fillStyle = accent; x.beginPath(); x.ellipse(w * 0.44, h * 0.22, 4, 6, 0, 0, 7); x.ellipse(w * 0.56, h * 0.22, 4, 6, 0, 0, 7); x.fill();
+    x.fillStyle = accent; x.globalAlpha = 0.85; x.fillRect(w * 0.34, h * 0.46, w * 0.32, h * 0.05); x.globalAlpha = 1;
+    return new THREE.CanvasTexture(cv);
+  }
+  const NPC_DEF = [
+    { kind: "latas", name: "EL REPOSITOR", png: "/npc_latas.png" },
+    { kind: "bengalas", name: "LA FAROLERA", png: "/npc_bengalas.png" },
+    { kind: "flash", name: "EL TÉCNICO", png: "/npc_flash.png" },
+  ];
+  NPC_DEF.forEach((d) => {
+    const m = new THREE.SpriteMaterial({ map: npcTex(d.kind), transparent: true, depthWrite: false, fog: false });
+    const s = new THREE.Sprite(m); s.scale.set(1.7, 2.6, 1); s.position.y = 1.3; s.visible = false; scene.add(s);
+    const npc = { sprite: s, mat: m, kind: d.kind, name: d.name, cx: 0, cz: 0 };
+    new THREE.TextureLoader().load(d.png, (t) => { t.colorSpace = THREE.SRGBColorSpace; m.map = t; m.needsUpdate = true; }, undefined, () => {});
+    npcs.push(npc);
+  });
+  function buildSafeRoom() {
+    MW = 9; MH = 6; grid = new Uint8Array(MW * MH);
+    for (let z = 0; z < MH; z++) for (let xx = 0; xx < MW; xx++) for (let i = 0; i < 4; i++) { const nx = xx + DIRS[i][0], nz = z + DIRS[i][1]; if (nx >= 0 && nx < MW && nz >= 0 && nz < MH) grid[z * MW + xx] |= (1 << i); }
+    buildWalls();
+    ambient.intensity = 0.85; torch.intensity = 13; glow.intensity = 1.4;
+    const spots = [[2, 1], [4, 1], [6, 1]];
+    npcs.forEach((n, i) => { const sp = spots[i] || [4, 1]; n.cx = sp[0]; n.cz = sp[1]; n.sprite.position.set(sp[0] * CELL + CELL / 2, 1.3, sp[1] * CELL + CELL / 2); n.sprite.visible = true; });
+    safeExitCell = [MW - 1, MH - 1];
+    doorObj.visible = true; setDoorLocked(false);
+    doorObj.position.set(safeExitCell[0] * CELL + CELL / 2, WALL_H * 0.47, safeExitCell[1] * CELL + CELL / 2);
+    doorLight.position.set(safeExitCell[0] * CELL + CELL / 2, 1.6, safeExitCell[1] * CELL + CELL / 2); doorLight.visible = true;
+  }
+  function enterSafe() {
+    inSafe = true; inRefuge = false; hasKey = false; hidden = false; energizerT = 0; shopOpen = false; nearNpc = null; nearExit = false;
+    scrap += 10 + depth * 5;
+    ents.forEach((e) => { e.sprite.visible = false; });
+    keyObj.visible = false; keyLight.visible = false; canObj.visible = false; canLight.intensity = 0;
+    resetConsumables();
+    buildSafeRoom();
+    px = 1 * CELL + CELL / 2; pz = (MH - 1) * CELL + CELL / 2; yaw = -0.6; pitch = 0;
+    if (proxEl) proxEl.style.opacity = "0"; if (hideOv) hideOv.style.opacity = "0";
+    if (refuge) refuge.classList.add("hidden");
+    sfx(stepStop);
+    if (!isTouch) canvas.requestPointerLock();
+  }
+  function npcAt() { for (const n of npcs) if (Math.hypot(px - (n.cx * CELL + CELL / 2), pz - (n.cz * CELL + CELL / 2)) < 1.7) return n; return null; }
+  function safeFrame(dt) {
+    let mv = false;
+    let f = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0) + touchF;
+    let s = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) + touchS;
+    f = Math.max(-1, Math.min(1, f)); s = Math.max(-1, Math.min(1, s));
+    if (f || s) {
+      const sin = Math.sin(yaw), cos = Math.cos(yaw), spd = MOVE * dt;
+      px += (-sin * f + cos * s) * spd; pz += (-cos * f - sin * s) * spd; collide();
+      stepT -= dt; if (stepT <= 0) { sfx(stepToggle ? stepA : stepB); stepToggle = !stepToggle; stepT = 0.45; }
+      mv = true;
+    } else if (moving) sfx(stepStop);
+    moving = mv;
+    nearNpc = npcAt();
+    nearExit = Math.hypot(px - (safeExitCell[0] * CELL + CELL / 2), pz - (safeExitCell[1] * CELL + CELL / 2)) < 1.7;
+    if (safePrompt) { let txt = ""; if (nearNpc) txt = "E · comprar — " + nearNpc.name; else if (nearExit) txt = "E · seguir / salir"; safePrompt.textContent = txt; safePrompt.style.opacity = txt ? "1" : "0"; }
+    if (scrapEl) scrapEl.textContent = "CHATARRA " + scrap;
+  }
+  /* ---------- Tienda ---------- */
+  const SHOP = {
+    latas: [{ id: "can", label: "Lata Energizer para llevar (Q)", cur: "scrap", price: 40 }],
+    bengalas: [{ id: "flare2", label: "+2 bengalas", cur: "scrap", price: 15 }, { id: "flaremax", label: "+1 al máximo de bengalas", cur: "scrap", price: 35 }],
+    flash: [{ id: "recharge", label: "Recargar flash ahora", cur: "scrap", price: 10 }, { id: "air", label: "Aire máximo +25%", cur: "score", price: 250 }, { id: "fastflash", label: "Flash 20% más rápido", cur: "score", price: 250 }, { id: "reveal", label: "Revelar la llave en el mapa", cur: "score", price: 400 }],
+  };
+  function renderShop(npc) {
+    const wrap = $("shop-items"); if (!wrap) return;
+    if ($("shop-name")) $("shop-name").textContent = npc.name;
+    if ($("shop-scrap")) $("shop-scrap").textContent = String(scrap);
+    if ($("shop-score")) $("shop-score").textContent = String(curScore());
+    const items = SHOP[npc.kind] || [];
+    wrap.innerHTML = items.map((it) => {
+      const owned = (it.id === "reveal" && reveal) || (it.id === "can" && carryCan);
+      const ok = !owned && (it.cur === "scrap" ? scrap >= it.price : curScore() >= it.price);
+      const tag = it.cur === "scrap" ? (it.price + " chatarra") : (it.price + " pts");
+      return '<button class="shop-it" data-id="' + it.id + '"' + (ok ? "" : " disabled") + '><span>' + it.label + '</span><b>' + (owned ? "✓ ya lo tenés" : tag) + '</b></button>';
+    }).join("");
+    wrap.querySelectorAll(".shop-it").forEach((b) => { b.onclick = () => buyItem(npc, b.getAttribute("data-id")); });
+  }
+  function buyItem(npc, id) {
+    const it = (SHOP[npc.kind] || []).find((x) => x.id === id); if (!it) return;
+    if ((id === "reveal" && reveal) || (id === "can" && carryCan)) return;
+    if (it.cur === "scrap") { if (scrap < it.price) return; scrap -= it.price; } else { if (curScore() < it.price) return; spent += it.price; }
+    if (id === "can") carryCan = true;
+    else if (id === "flare2") flareCount += 2;
+    else if (id === "flaremax") { flareCapBonus++; flareCount++; }
+    else if (id === "recharge") flashCharge = 1;
+    else if (id === "air") stamMax += 0.25;
+    else if (id === "fastflash") flashCdMul *= 0.8;
+    else if (id === "reveal") reveal = true;
+    powerupSfx(); renderShop(npc);
+  }
+  function openShop(npc) { shopOpen = true; if (document.pointerLockElement) document.exitPointerLock(); renderShop(npc); if (shopEl) shopEl.classList.remove("hidden"); }
+  function closeShop() { shopOpen = false; if (shopEl) shopEl.classList.add("hidden"); if (!isTouch && inSafe) canvas.requestPointerLock(); }
+  function openExitPanel() {
+    shopOpen = true; inRefuge = true; if (document.pointerLockElement) document.exitPointerLock();
+    if (rgLvl) rgLvl.textContent = String(depth + 1);
+    if (rgScore) rgScore.textContent = String(curScore());
+    if (refuge) refuge.classList.remove("hidden");
+    sfx(stepStop);
+  }
 
   /* ---------- Lockers (escondites) ---------- */
   const lockerSide = new THREE.MeshLambertMaterial({ map: lockerTex, color: 0xffffff });
@@ -312,7 +476,8 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     if (!alive || !running || inRefuge) return;
     if (e.code === "Space") { e.preventDefault(); if (flashCharge >= 1 && !hidden) { freezeT = FLASH_FREEZE; flashLt = 1.6; flashCharge = 0; } }
     if (e.code === "KeyF") { if (!hidden) dropFlare(); }
-    if (e.code === "KeyE") { if (hidden) exitHide(false); else if (nearLocker()) enterHide(); }
+    if (e.code === "KeyE") { if (inSafe) { if (nearNpc) openShop(nearNpc); else if (nearExit) openExitPanel(); } else if (hidden) exitHide(false); else if (nearLocker()) enterHide(); }
+    if (e.code === "KeyQ") { if (!inSafe && !hidden && carryCan && energizerT <= 0) { carryCan = false; energizerT = ENERGIZER_TIME; ents.forEach((e2) => { e2.patrol = null; e2.step = null; }); powerupSfx(); } }
   });
   addEventListener("keyup", (e) => { keys[e.code] = false; });
   canvas.addEventListener("click", () => { if (!isTouch && alive && !running && !inRefuge) canvas.requestPointerLock(); });
@@ -351,7 +516,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     function tbtn(id, fn) { const b = $(id); if (b) b.addEventListener("touchstart", (e) => { e.preventDefault(); e.stopPropagation(); if (alive && running && !inRefuge) fn(); }, { passive: false }); }
     tbtn("tb-flash", () => { if (flashCharge >= 1 && !hidden) { freezeT = FLASH_FREEZE; flashLt = 1.6; flashCharge = 0; } });
     tbtn("tb-flare", () => { if (!hidden) dropFlare(); });
-    tbtn("tb-hide", () => { if (hidden) exitHide(false); else if (nearLocker()) enterHide(); });
+    tbtn("tb-hide", () => { if (inSafe) { if (nearNpc) openShop(nearNpc); else if (nearExit) openExitPanel(); } else if (hidden) exitHide(false); else if (nearLocker()) enterHide(); });
   }
 
   function collide() {
@@ -409,17 +574,30 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   }
 
   /* ---------- Esconderse ---------- */
-  function enterHide() { hidden = true; hideT = 0; lastSeen = [Math.floor(px / CELL), Math.floor(pz / CELL)]; if (hideOv) hideOv.style.opacity = "1"; sfx(stepStop); }
-  function exitHide(forced) { hidden = false; hideT = 0; if (hideOv) hideOv.style.opacity = "0"; if (forced) alertT = 3; }
+  function enterHide() { hidden = true; hideT = 0; hideSearchT = HIDE_SEARCH; ents.forEach((e) => { e.patrol = null; e.step = null; }); lastSeen = [Math.floor(px / CELL), Math.floor(pz / CELL)]; if (hideOv) hideOv.style.opacity = "1"; sfx(stepStop); }
+  function exitHide(forced) { hidden = false; hideT = 0; graceT = EXIT_GRACE; if (hideOv) hideOv.style.opacity = "0"; if (forced) alertT = 2; }
+  // Celda transitable lejana (para que el caracol patrulle lejos del locker / huya en Energizer)
+  function farCell(fx, fz) { let bx = fx, bz = fz, bd = -1; for (let k = 0; k < 8; k++) { const cx = Math.floor(Math.random() * MW), cz = Math.floor(Math.random() * MH); const d = (cx - fx) ** 2 + (cz - fz) ** 2; if (d > bd) { bd = d; bx = cx; bz = cz; } } return [bx, bz]; }
+  function entTarget(e) {
+    const ecx = Math.floor(e.x / CELL), ecz = Math.floor(e.z / CELL);
+    if (energizerT > 0 && !hidden) { // Pac-Man: el caracol HUYE del jugador
+      if (!e.patrol || (e.patrol[0] === ecx && e.patrol[1] === ecz)) e.patrol = farCell(Math.floor(px / CELL), Math.floor(pz / CELL));
+      return e.patrol;
+    }
+    if (!hidden) { e.patrol = null; return [Math.floor(px / CELL), Math.floor(pz / CELL)]; }
+    if (hideSearchT > 0) return lastSeen;                 // te busca un rato en tu última posición
+    if (!e.patrol || (e.patrol[0] === ecx && e.patrol[1] === ecz)) e.patrol = farCell(lastSeen[0], lastSeen[1]); // se rinde y se aleja del locker
+    return e.patrol;
+  }
 
   /* ---------- Refugio + niveles ---------- */
   function spawnEntities() {
-    const need = depth >= 2 ? 2 : 1;
+    const need = depth >= 3 ? 2 : 1;   // antes depth>=2 (nivel 3): el 2º caracol llegaba justo cuando se volvía imposible
     while (ents.length < need) ents.push(makeEntity(0xff8a8a));
     const spots = [[MW - 2, MH - 2], [MW - 2, 1]];
-    ents.forEach((e, i) => { e.sprite.visible = i < need; e.step = null; e.timer = 0; const sp = spots[i] || [MW - 2, MH - 2]; e.x = sp[0] * CELL + CELL / 2; e.z = sp[1] * CELL + CELL / 2; });
+    ents.forEach((e, i) => { e.sprite.visible = i < need; e.step = null; e.timer = 0; e.patrol = null; const sp = spots[i] || [MW - 2, MH - 2]; e.x = sp[0] * CELL + CELL / 2; e.z = sp[1] * CELL + CELL / 2; e.hx = e.x; e.hz = e.z; });
   }
-  function resetConsumables() { flashCharge = 1; stamina = 1; flareCount = FLARE_MAX; flarePool.forEach((f) => { f.on = false; f.light.intensity = 0; f.mark.visible = false; }); }
+  function resetConsumables() { flashCharge = 1; stamina = stamMax; flareCount = Math.max(flareCount, FLARE_MAX + flareCapBonus); flarePool.forEach((f) => { f.on = false; f.light.intensity = 0; f.mark.visible = false; }); }
   function enterRefuge() {
     inRefuge = true; hasKey = false;
     if (document.pointerLockElement) document.exitPointerLock();
@@ -427,7 +605,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     ents.forEach((e) => { e.sprite.visible = false; });
     if (proxEl) proxEl.style.opacity = "0";
     if (rgLvl) rgLvl.textContent = String(depth + 1);
-    if (rgScore) rgScore.textContent = String(depth * 1000 + Math.floor(activeTime));
+    if (rgScore) rgScore.textContent = String(depth * 1000 + Math.floor(activeTime) + bonus);
     if (refuge) refuge.classList.remove("hidden");
     sfx(stepStop);
   }
@@ -435,14 +613,17 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     depth++; mazeSeed = runSeed + depth * 7919;
     px = CELL / 2; pz = CELL / 2; yaw = 0; pitch = 0;
     hasKey = false; hidden = false; hideT = 0; alertT = 0;
+    energizerT = 0; levelTime = 0; graceT = 0; hideSearchT = 0;
     resetConsumables();
-    genMaze(); buildWalls(); placeObjectives(); placeLockers(); applyLevelLights(); spawnEntities();
+    genMaze(); buildWalls(); placeObjectives(); placeLockers(); placeEnergizer(); applyLevelLights(); spawnEntities();
     if (refuge) refuge.classList.add("hidden");
     if (hideOv) hideOv.style.opacity = "0";
-    inRefuge = false;
+    inRefuge = false; inSafe = false; shopOpen = false; nearNpc = null; nearExit = false;
+    npcs.forEach((n) => { n.sprite.visible = false; });
+    if (shopEl) shopEl.classList.add("hidden"); if (safePrompt) safePrompt.style.opacity = "0";
     if (!isTouch) canvas.requestPointerLock();
   }
-  function finishRun() { if (refuge) refuge.classList.add("hidden"); inRefuge = false; submitScore("SALISTE CON VIDA"); }
+  function finishRun() { if (refuge) refuge.classList.add("hidden"); inRefuge = false; inSafe = false; shopOpen = false; npcs.forEach((n) => { n.sprite.visible = false; }); submitScore("SALISTE CON VIDA"); }
 
   /* ---------- Minimapa (fog of war) ---------- */
   const mctx = miniCv.getContext("2d");
@@ -465,8 +646,12 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     }
     // puerta (si fue vista) en verde si tenés la llave
     if (seenCells.has(doorCell[0] + "," + doorCell[1])) { const dx = doorCell[0], dz = doorCell[1]; if (Math.abs(dx - pcx) <= range && Math.abs(dz - pcz) <= range) { mctx.fillStyle = hasKey ? "#46d17f" : "#d23b47"; const sx = W / 2 + (dx - pcx + 0.5) * cellPx, sy = H / 2 + (dz - pcz + 0.5) * cellPx; mctx.fillRect(sx - 3, sy - 3, 6, 6); } }
+    // perk "revelar llave": muestra la llave en el mapa aunque no la hayas visto
+    if (reveal && !hasKey) { const kx = keyCell[0], kz = keyCell[1]; if (Math.abs(kx - pcx) <= range && Math.abs(kz - pcz) <= range) { mctx.fillStyle = "#ffd24a"; const sx = W / 2 + (kx - pcx + 0.5) * cellPx, sy = H / 2 + (kz - pcz + 0.5) * cellPx; mctx.beginPath(); mctx.arc(sx, sy, 3, 0, 7); mctx.fill(); } }
     // bengalas activas (naranja)
     for (const f of flarePool) { if (!f.on) continue; const fx = Math.floor(f.x / CELL), fz = Math.floor(f.z / CELL); if (Math.abs(fx - pcx) <= range && Math.abs(fz - pcz) <= range) { mctx.fillStyle = "#ffb866"; const sx = W / 2 + (fx - pcx + 0.5) * cellPx, sy = H / 2 + (fz - pcz + 0.5) * cellPx; mctx.beginPath(); mctx.arc(sx, sy, 2.6, 0, 7); mctx.fill(); } }
+    // lata Energizer (verde) si fue vista y no recogida
+    if (!canTaken && canCell && seenCells.has(canCell[0] + "," + canCell[1])) { const cx2 = canCell[0], cz2 = canCell[1]; if (Math.abs(cx2 - pcx) <= range && Math.abs(cz2 - pcz) <= range) { mctx.fillStyle = "#4dff86"; const sx = W / 2 + (cx2 - pcx + 0.5) * cellPx, sy = H / 2 + (cz2 - pcz + 0.5) * cellPx; mctx.beginPath(); mctx.arc(sx, sy, 3, 0, 7); mctx.fill(); } }
     // entidades (rojo)
     for (const e of ents) { if (!e.sprite.visible) continue; const ecx = Math.floor(e.x / CELL), ecz = Math.floor(e.z / CELL); if (Math.abs(ecx - pcx) <= range && Math.abs(ecz - pcz) <= range) { mctx.fillStyle = "#d23b47"; const sx = W / 2 + (ecx - pcx + 0.5) * cellPx, sy = H / 2 + (ecz - pcz + 0.5) * cellPx; mctx.beginPath(); mctx.arc(sx, sy, 3.5, 0, 7); mctx.fill(); } }
     // jugador (flecha)
@@ -481,7 +666,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     if (title !== "SALISTE CON VIDA") sfx(monster);
     if (proxEl) proxEl.style.opacity = "0";
     if (document.pointerLockElement) document.exitPointerLock();
-    const sc = depth * 1000 + Math.floor(activeTime);
+    const sc = depth * 1000 + Math.floor(activeTime) + bonus;
     if (deadTitle) deadTitle.textContent = title;
     $("dscore").textContent = sc;
     dead.classList.remove("hidden");
@@ -501,44 +686,59 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000 || 0); last = now;
     updateRain(dt);
-    if (alive && running && !inRefuge) {
-      if (!hidden) activeTime += dt;
+    if (alive && running && !inRefuge && !inSafe) {
+      if (!hidden) { activeTime += dt; levelTime += dt; }
       // mover jugador (bloqueado si está escondido)
       let mv = false;
       if (!hidden) {
+        const ez = energizerT > 0;
         let f = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0) + touchF;
         let s = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0) + touchS;
         f = Math.max(-1, Math.min(1, f)); s = Math.max(-1, Math.min(1, s));
         const tMag = Math.hypot(touchF, touchS);
-        sprinting = !!(((keys.ShiftLeft || keys.ShiftRight) || tMag > 0.92) && stamina > 0.04 && (f || s));
+        sprinting = !!(((keys.ShiftLeft || keys.ShiftRight) || tMag > 0.92) && (ez || stamina > 0.04) && (f || s));
         if (f || s) {
-          const sin = Math.sin(yaw), cos = Math.cos(yaw), spd = MOVE * (sprinting ? SPRINT_MULT : 1) * dt;
+          const sin = Math.sin(yaw), cos = Math.cos(yaw), spd = MOVE * (ez ? ENERGIZER_SPEED : 1) * (sprinting ? SPRINT_MULT : 1) * dt;
           px += (-sin * f + cos * s) * spd; pz += (-cos * f - sin * s) * spd; collide();
           stepT -= dt * (sprinting ? 1.5 : 1); if (stepT <= 0) { sfx(stepToggle ? stepA : stepB); stepToggle = !stepToggle; stepT = 0.42; }
           mv = true;
         } else if (moving) sfx(stepStop);
-        if (sprinting) stamina = Math.max(0, stamina - STAM_DRAIN * dt); else stamina = Math.min(1, stamina + STAM_REGEN * dt);
+        if (sprinting && !ez) stamina = Math.max(0, stamina - STAM_DRAIN * dt); else stamina = Math.min(stamMax, stamina + STAM_REGEN * dt); // en Energizer el aire no baja
       }
       moving = mv;
       // flash: carga + congelado + estallido
       if (flashCharge < 1) flashCharge = Math.min(1, flashCharge + dt / flashCd());
       if (freezeT > 0) freezeT -= dt;
       if (alertT > 0) alertT -= dt;
+      if (graceT > 0) graceT -= dt;
+      if (energizerT > 0) { energizerT -= dt; if (energizerT <= 0) { energizerT = 0; energizerEndSfx(); ents.forEach((e) => { e.patrol = null; e.step = null; }); } }
+      if (hidden && hideSearchT > 0) hideSearchT -= dt;
       if (flashLt > 0) { flashLt -= dt; burst.intensity = Math.max(0, flashLt) * 9; } else burst.intensity = 0;
       updateFlares(dt);
-      // escondite: medidor de permanencia
-      if (hidden) { hideT += dt; if (hideBar) hideBar.style.width = Math.min(100, hideT / HIDE_MAX * 100) + "%"; if (hideT >= HIDE_MAX) exitHide(true); }
+      // escondite: el medidor muestra el estado del caracol (te busca → rojo; se fue → verde). Ya NO te expulsa.
+      if (hidden) {
+        hideT += dt;
+        if (hideBar) {
+          const searching = hideSearchT > 0;
+          hideBar.style.width = searching ? Math.min(100, (1 - hideSearchT / HIDE_SEARCH) * 100) + "%" : "100%";
+          hideBar.style.background = searching ? "linear-gradient(90deg,#d8b14a,#d23b47)" : "linear-gradient(90deg,#46d17f,#9be36a)";
+        }
+      }
       // entidades
       const pcx = Math.floor(px / CELL), pcz = Math.floor(pz / CELL);
-      const tgt = hidden ? lastSeen : [pcx, pcz];
       let nearestPd = 1e9;
       for (const e of ents) {
         if (!e.sprite.visible) continue;
-        e.spd = (ENT_BASE + depth * ENT_DEPTH_BOOST + activeTime * ENT_RAMP) * (alertT > 0 ? 1.5 : 1) * dt;
+        let espd = ENT_BASE + depth * ENT_DEPTH_BOOST + levelTime * ENT_RAMP; // ramp por NIVEL, no acumulado en toda la run
+        espd = Math.min(espd, ENT_CAP);                                        // tope: nunca más rápido que tu sprint
+        if (alertT > 0) espd *= 1.25;
+        if (energizerT > 0) espd *= ENERGIZER_SLOW;                            // en Energizer el caracol se arrastra
+        e.spd = espd * dt;
         const ecx = Math.floor(e.x / CELL), ecz = Math.floor(e.z / CELL);
         if (freezeT <= 0) {
+          const tg = entTarget(e);
           e.timer -= dt;
-          if (e.timer <= 0 || !e.step) { e.step = bfsStep(ecx, ecz, tgt[0], tgt[1]); e.timer = 0.5; if (!e.step && hidden) { const o = openNeighbors(ecx, ecz); if (o.length) e.step = o[Math.floor(Math.random() * o.length)]; } }
+          if (e.timer <= 0 || !e.step) { e.step = bfsStep(ecx, ecz, tg[0], tg[1]); e.timer = 0.5; if (!e.step) { const o = openNeighbors(ecx, ecz); if (o.length) e.step = o[Math.floor(Math.random() * o.length)]; } }
           let budget = e.spd, guard = 0;
           while (e.step && budget > 0 && guard++ < 6) {
             const txx = e.step[0] * CELL + CELL / 2, tzz = e.step[1] * CELL + CELL / 2;
@@ -546,9 +746,9 @@ import * as THREE from "https://esm.sh/three@0.160.0";
             if (dl <= budget || dl < 0.04) {
               if (nearFlare(txx, tzz)) { budget = 0; break; }
               e.x = txx; e.z = tzz; budget -= dl;
-              const nt = hidden ? lastSeen : [Math.floor(px / CELL), Math.floor(pz / CELL)];
+              const nt = entTarget(e);
               e.step = bfsStep(e.step[0], e.step[1], nt[0], nt[1]);
-              if (!e.step && hidden) { const o = openNeighbors(Math.floor(e.x / CELL), Math.floor(e.z / CELL)); if (o.length) e.step = o[Math.floor(Math.random() * o.length)]; }
+              if (!e.step) { const o = openNeighbors(Math.floor(e.x / CELL), Math.floor(e.z / CELL)); if (o.length) e.step = o[Math.floor(Math.random() * o.length)]; }
             } else {
               const nx2 = e.x + (dx / dl) * budget, nz2 = e.z + (dz / dl) * budget;
               if (nearFlare(nx2, nz2)) { budget = 0; break; }
@@ -558,12 +758,24 @@ import * as THREE from "https://esm.sh/three@0.160.0";
         }
         e.sprite.position.x = e.x; e.sprite.position.z = e.z;
         const pd = Math.hypot(px - e.x, pz - e.z); if (pd < nearestPd) nearestPd = pd;
-        if (!hidden && pd < 1.25 && freezeT <= 0) { die(); }
+        // Pac-Man: con Energizer activo, tocar al caracol lo manda a su guarida + bonus (no te mata)
+        if (energizerT > 0 && pd < 1.4) { e.x = e.hx; e.z = e.hz; e.sprite.position.x = e.x; e.sprite.position.z = e.z; e.step = null; e.patrol = null; bonus += ENERGIZER_BONUS; scrap += 20; popSfx(); continue; }
+        if (!hidden && pd < 1.25 && freezeT <= 0 && graceT <= 0) { die(); } // gracia al salir del locker: no te mata pegado
       }
       keyObj.position.y = 1.1 + Math.sin(now / 380) * 0.13;
+      // lata Energizer: flota, gira y se recoge al pasar cerca
+      if (!canTaken && canCell) {
+        canObj.position.y = 1.0 + Math.sin(now / 300) * 0.12;
+        canMat.rotation = Math.sin(now / 700) * 0.5;
+        canLight.intensity = 1.0 + Math.sin(now / 220) * 0.4;
+        if (Math.hypot(px - (canCell[0] * CELL + CELL / 2), pz - (canCell[1] * CELL + CELL / 2)) < 1.2) {
+          canTaken = true; canObj.visible = false; canLight.intensity = 0; energizerT = ENERGIZER_TIME;
+          ents.forEach((e) => { e.patrol = null; e.step = null; }); powerupSfx();
+        }
+      }
       // llave / puerta / refugio
       if (!hasKey && Math.hypot(px - (keyCell[0] * CELL + CELL / 2), pz - (keyCell[1] * CELL + CELL / 2)) < 1.2) { hasKey = true; keyObj.visible = false; keyLight.visible = false; setDoorLocked(false); heartbeat(0.18); }
-      if (hasKey && Math.hypot(px - (doorCell[0] * CELL + CELL / 2), pz - (doorCell[1] * CELL + CELL / 2)) < 1.5) enterRefuge();
+      if (hasKey && Math.hypot(px - (doorCell[0] * CELL + CELL / 2), pz - (doorCell[1] * CELL + CELL / 2)) < 1.5) enterSafe();
       // proximidad weirdman + latido (entidad más cercana)
       const pd = nearestPd;
       if (proxEl) { if (!hidden && freezeT <= 0 && pd < CELL * 4.5) { proxEl.style.opacity = String(Math.min(1, 1.25 - pd / (CELL * 4.5))); if (proxTxt) proxTxt.textContent = "EL MONSTRUO ESTÁ A " + Math.round(pd) + " M"; } else proxEl.style.opacity = "0"; }
@@ -578,10 +790,14 @@ import * as THREE from "https://esm.sh/three@0.160.0";
       timeEl.textContent = activeTime.toFixed(1);
       if (levelEl) levelEl.textContent = String(depth + 1);
       if (flashBar) flashBar.style.width = (flashCharge * 100) + "%";
-      if (stamBar) stamBar.style.width = (stamina * 100) + "%";
+      if (stamBar) stamBar.style.width = (stamina / stamMax * 100) + "%";
       if (keyEl) keyEl.style.opacity = hasKey ? "1" : "0.3";
       if (flareEl) flareEl.textContent = "BENGALAS " + flareCount + " · F";
+      if (energizerEl) { if (energizerT > 0) { energizerEl.style.opacity = "1"; if (ezBar) ezBar.style.width = (energizerT / ENERGIZER_TIME * 100) + "%"; } else energizerEl.style.opacity = "0"; }
+      if (canEl) canEl.style.opacity = carryCan ? "1" : "0.25";
+      if (scrapEl) scrapEl.textContent = "CHATARRA " + scrap;
     }
+    if (alive && inSafe && !shopOpen && (running || isTouch)) safeFrame(dt);
     // cámara
     camera.position.set(px, EYE, pz); camera.rotation.y = yaw; camera.rotation.x = pitch;
     // render (CRT)
@@ -592,16 +808,20 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     } else {
       renderer.setRenderTarget(null); renderer.render(scene, camera);
     }
-    if (alive && running && !inRefuge) drawMini();
+    if (alive && running && !inRefuge && !inSafe) drawMini();
   }
 
   function start() {
     seenCells.clear();
     depth = 0; runSeed = (SEED + Math.floor(Math.random() * 1e9)) >>> 0; mazeSeed = runSeed; hasKey = false; flashCharge = 1; freezeT = 0; flashLt = 0; hbT = 0;
     stamina = 1; flareCount = FLARE_MAX; hidden = false; hideT = 0; alertT = 0; inRefuge = false; touchF = 0; touchS = 0; moveId = null; lookId = null;
+    energizerT = 0; levelTime = 0; bonus = 0; graceT = 0; hideSearchT = 0; canTaken = false;
+    scrap = 0; spent = 0; carryCan = false; stamMax = 1; flashCdMul = 1; reveal = false; flareCapBonus = 0;
+    inSafe = false; shopOpen = false; nearNpc = null; nearExit = false;
+    npcs.forEach((n) => { n.sprite.visible = false; }); if (shopEl) shopEl.classList.add("hidden");
     px = CELL / 2; pz = CELL / 2; yaw = 0; pitch = 0;
     resetConsumables();
-    genMaze(); buildWalls(); placeObjectives(); placeLockers(); applyLevelLights(); spawnEntities();
+    genMaze(); buildWalls(); placeObjectives(); placeLockers(); placeEnergizer(); applyLevelLights(); spawnEntities();
     alive = true; activeTime = 0; moving = false; stepT = 0;
     intro.classList.add("hidden"); dead.classList.add("hidden"); if (refuge) refuge.classList.add("hidden");
     if (hideOv) hideOv.style.opacity = "0"; if (proxEl) proxEl.style.opacity = "0";
@@ -615,6 +835,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   $("retry").onclick = start;
   if ($("rg-next")) $("rg-next").onclick = nextLevel;
   if ($("rg-quit")) $("rg-quit").onclick = finishRun;
+  if ($("shop-close")) $("shop-close").onclick = closeShop;
 
   // Top 5 del laberinto en la intro (antes de jugar)
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }

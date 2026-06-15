@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon-02.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/maze3d.css?v=7" />
+  <link rel="stylesheet" href="/maze3d.css?v=8" />
 </head>
 <body>
   <div id="game">
@@ -25,6 +25,10 @@
     <div id="keyind">LLAVE</div>
     <div id="hideprompt">E · esconderte</div>
     <div id="prox" class="prox"><img src="/weirdman.png" alt="" /><span id="proxtxt"></span></div>
+    <div id="energizer" aria-hidden="true"><b>MODO ENERGIZER</b><div class="ezbg"><i id="ezbar"></i></div></div>
+    <div id="scrapind">CHATARRA 0</div>
+    <div id="canind">LATA · Q</div>
+    <div id="safeprompt" aria-hidden="true"></div>
 
     <div id="hidev" aria-hidden="true"><div class="hidemeter"><i id="hidebar"></i></div><span>conteniendo la respiración… (E para salir)</span></div>
 
@@ -63,6 +67,15 @@
       </div>
     </div>
 
+    <div id="shop" class="ov hidden">
+      <div class="ovbox">
+        <h2 id="shop-name">TIENDA</h2>
+        <div class="shop-wallet">Chatarra <b id="shop-scrap">0</b> · Puntos <b id="shop-score">0</b></div>
+        <div id="shop-items"></div>
+        <button id="shop-close" class="mbtn ghost" type="button">Volver al refugio</button>
+      </div>
+    </div>
+
     <div id="dead" class="ov hidden">
       <div class="ovbox">
         <h1 id="deadtitle">TE ALCANZÓ</h1>
@@ -73,6 +86,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="/maze3d.js?v=10"></script>
+  <script type="module" src="/maze3d.js?v=11"></script>
 </body>
 </html>
