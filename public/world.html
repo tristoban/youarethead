@@ -12,7 +12,7 @@
 <meta property="og:image" content="/logoyatasocial.png" />
 <meta name="twitter:card" content="summary_large_image" />
 <link rel="icon" href="/favicon-02.png" type="image/png" />
-<link rel="stylesheet" href="/world.css?v=3" />
+<link rel="stylesheet" href="/world.css?v=4" />
 <style>
   /* logo YATA clásico (blanco, letras disruptivas) */
   #intro .logo{width:min(540px,82vw);height:auto;display:block;margin:2px auto 0;
@@ -64,6 +64,18 @@
     </div>
   </div>
 
+  <!-- vestuario (sastrería) -->
+  <div id="shop">
+    <div class="shop-head"><b>Vestuario</b><button id="shopDone" class="btn primary">Listo</button></div>
+    <div class="shop-rows">
+      <div class="shop-row" data-part="coat"><span class="shop-lbl">Campera</span><div class="sw"></div></div>
+      <div class="shop-row" data-part="accent"><span class="shop-lbl">Acento</span><div class="sw"></div></div>
+      <div class="shop-row" data-part="lantern"><span class="shop-lbl">Farol</span><div class="sw"></div></div>
+      <div class="shop-row" data-part="hat"><span class="shop-lbl">Sombrero</span><div class="sw"></div></div>
+    </div>
+    <div class="shop-foot"><button id="shopRandom" class="btn">Al azar</button></div>
+  </div>
+
   <!-- intro -->
   <div id="intro">
     <span class="tag">La red social de Tristo</span>
@@ -80,6 +92,6 @@
   </div>
 
   <script src="/three.min.js?v=128"></script>
-  <script src="/world.js?v=4"></script>
+  <script src="/world.js?v=5"></script>
 </body>
 </html>

@@ -1,6 +1,5 @@
 /* ===========================================================================
-   YATA — el mundo (night planet shell)
-   HUD + overlay + loader. El 3D lo dibuja world.js sobre #c.
+   YATA — el mundo (night planet shell). HUD + overlay + vestuario + loader.
    =========================================================================== */
 :root{
   --acc:#74e0d0; --acc-d:#2dd4bf; --warm:#ffcf8f;
@@ -66,8 +65,6 @@ html,body{margin:0;height:100%;overflow:hidden;background:#05060f;color:var(--in
 .label .ico{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;
   border:1px solid var(--line);background:var(--glass)}
 .label small{display:block;color:var(--muted);font-weight:600;font-size:10px;letter-spacing:1px;text-transform:uppercase}
-
-/* NPC name tags */
 .label.npc{font-size:11px;font-weight:600;color:var(--muted);background:rgba(8,14,22,.5);
   border:1px solid var(--line);padding:2px 8px;border-radius:8px;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);gap:5px}
 .label.npc .dotn{width:6px;height:6px;border-radius:50%;background:var(--acc);box-shadow:0 0 8px var(--acc);display:inline-block}
@@ -87,9 +84,6 @@ html,body{margin:0;height:100%;overflow:hidden;background:#05060f;color:var(--in
 #intro.hide{opacity:0;pointer-events:none}
 #intro .tag{font-size:11px;letter-spacing:5px;color:var(--acc);text-transform:uppercase;font-weight:700;
   padding:6px 15px;border:1px solid var(--line);border-radius:999px;background:var(--glass)}
-#intro h1{font-size:clamp(46px,12vw,120px);margin:.04em 0;line-height:.9;font-weight:800;letter-spacing:-2px;
-  background:linear-gradient(180deg,#fff,var(--acc));-webkit-background-clip:text;background-clip:text;color:transparent;
-  filter:drop-shadow(0 6px 30px rgba(116,224,208,.25))}
 #intro p{max-width:520px;color:var(--muted);font-size:clamp(14px,2.2vw,17px);line-height:1.55;margin:0 auto}
 #intro .keys{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;margin-top:4px;color:var(--muted);font-size:12px}
 
@@ -116,6 +110,26 @@ html,body{margin:0;height:100%;overflow:hidden;background:#05060f;color:var(--in
   .chip{width:40px;height:40px}
   .ov-card{margin:0 6px 6px}
 }
+
+/* ---------------- vestuario (sastrería) ---------------- */
+#shop{position:fixed;left:0;right:0;bottom:0;z-index:55;transform:translateY(112%);transition:transform .32s cubic-bezier(.2,.9,.2,1);
+  background:var(--glass);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);
+  border-top:1px solid var(--line);padding:14px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -20px 60px rgba(0,0,0,.55)}
+#shop.show{transform:translateY(0)}
+.shop-head{display:flex;align-items:center;justify-content:space-between;max-width:740px;margin:0 auto 10px}
+.shop-head b{font-size:16px;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+.shop-head b::before{content:"🧥"}
+.shop-rows{display:flex;flex-direction:column;gap:9px;max-width:740px;margin:0 auto}
+.shop-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.shop-lbl{width:74px;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.sw{display:flex;gap:8px;flex-wrap:wrap}
+.swatch{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.18);cursor:pointer;padding:0;transition:transform .1s}
+.swatch:hover{transform:scale(1.12)}
+.swatch.on{border-color:#fff;box-shadow:0 0 0 2px var(--acc),0 0 12px var(--acc)}
+.hatchip{padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--ink);font-weight:650;font-size:13px;cursor:pointer}
+.hatchip.on{background:linear-gradient(180deg,var(--acc),var(--acc-d));color:#04201c;border-color:transparent}
+.shop-foot{max-width:740px;margin:10px auto 0;display:flex;justify-content:flex-end;gap:8px}
+@media (max-width:560px){ .shop-lbl{width:100%;margin-bottom:-3px} }
 
 /* on-screen joystick (touch) */
 #joy{position:fixed;left:22px;bottom:74px;width:132px;height:132px;border-radius:50%;z-index:12;
