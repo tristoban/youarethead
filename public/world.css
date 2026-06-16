@@ -79,7 +79,10 @@ html,body{margin:0;height:100%;overflow:hidden;background:#05060f;color:var(--in
 .roomui-row{display:flex;gap:8px}
 .room-hint{color:var(--muted);font-size:12px;background:var(--glass);border:1px solid var(--line);padding:7px 12px;border-radius:10px;backdrop-filter:blur(8px)}
 .room-hint b{color:var(--acc)}
-body.inroom #hint,body.inroom #prompt,body.inroom #joy,body.inroom #mobileEnter{display:none!important}
+body.inroom #hint,body.inroom #prompt,body.inroom #mobileEnter{display:none!important}
+#crosshair{position:fixed;left:50%;top:50%;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 0 3px rgba(0,0,0,.8);z-index:13;pointer-events:none;display:none}
+body.inroom #crosshair{display:block}
+body.touch #crosshair{display:none}
 
 /* ---------------- intro / loader ---------------- */
 #loader{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
