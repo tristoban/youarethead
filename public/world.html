@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>YATA — el mundo</title>
+<meta name="description" content="Es un planeta chiquito, pero alguien tiene que repartir. La red social de Tristo, ahora un mundo." />
+<meta name="theme-color" content="#070a1d" />
+<meta property="og:title" content="YATA — el mundo" />
+<meta property="og:description" content="Entrá al planeta de YATA: el café es el feed, el club son los Tristónicos, el arcade los juegos." />
+<meta property="og:url" content="https://youarethead.com.ar/yata" />
+<meta property="og:image" content="/logoyatasocial.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="icon" href="/favicon-02.png" type="image/png" />
+<link rel="stylesheet" href="/world.css?v=3" />
+</head>
+<body>
+  <div id="sky"></div>
+  <canvas id="c"></canvas>
+  <div id="vignette"></div>
+
+  <!-- floating house labels (positioned by world.js) -->
+  <div id="labels"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <a class="brand" href="/" title="Inicio"><i></i>YATA <small>el mundo</small></a>
+    <div id="chips">
+      <div class="chip" id="chipNotif" title="Notificaciones" data-sec="notifs"><svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 1112 0c0 4 1.6 5.4 2 6H4c.4-.6 2-2 2-6"/><path d="M10 19a2 2 0 004 0"/></svg><span class="dot" id="notifDot"></span></div>
+      <div class="chip" id="chipMsg" title="Mensajes" data-sec="mensajes"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/></svg></div>
+      <div class="chip" id="chipFriends" title="Amigos" data-sec="amigos"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c0-3.3 3-5 5.5-5s5.5 1.7 5.5 5"/><path d="M16 6.5a3 3 0 010 6"/></svg></div>
+      <div class="chip admin is-hidden" id="chipAdmin" title="Admin" data-sec="admin"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg></div>
+      <div class="chip" id="chipSound" title="Sonido"><svg viewBox="0 0 24 24" id="soundIco"><path d="M5 9v6h4l5 4V5L9 9H5z"/><path d="M16 9a3 3 0 010 6"/></svg></div>
+      <div class="chip admin is-hidden" id="chipClassic" title="Ver versión clásica"><svg viewBox="0 0 24 24"><path d="M4 5h16v12H4z"/><path d="M2 21h20"/><path d="M9 9h6M9 13h4"/></svg></div>
+    </div>
+    <div id="hint">
+      <span><b>Movete</b> y entrá a las casas</span>
+      <span class="k">W A S D</span><span class="k">↑ ← ↓ →</span><span class="k">E entrar</span>
+    </div>
+  </div>
+
+  <div id="prompt"><div class="ring" id="promptRing">Entrar <b>—</b></div></div>
+
+  <!-- touch joystick + boton entrar (mobile) -->
+  <div id="joy"><div id="joyStick"></div></div>
+  <button id="mobileEnter" type="button">Entrar</button>
+
+  <!-- overlay: la app real adentro del mundo -->
+  <div id="overlay">
+    <div class="ov-bar">
+      <div class="ov-back" id="ovBack"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg> Volver al mundo</div>
+      <div class="ov-title" id="ovTitle"><span class="em">☕</span> <span>Café</span><small>Feed</small></div>
+    </div>
+    <div class="ov-card" style="position:relative">
+      <div class="ov-load" id="ovLoad">abriendo…</div>
+      <iframe id="ovFrame" title="YATA" allow="clipboard-write; fullscreen; microphone; camera; autoplay"></iframe>
+    </div>
+  </div>
+
+  <!-- intro -->
+  <div id="intro">
+    <span class="tag">La red social de Tristo</span>
+    <h1>YATA</h1>
+    <p>Es un planeta chiquito, pero alguien tiene que repartir. Caminá por el mundo embrujado y entrá a las casas: el <b>café</b> es tu feed, el <b>club</b> son los Tristónicos, el <b>arcade</b> son los juegos.</p>
+    <button class="btn primary" id="enterBtn">Entrar al mundo</button>
+    <div class="keys"><span class="k">W A S D / flechas — moverte</span><span class="k">E / click — entrar</span></div>
+  </div>
+
+  <!-- loader -->
+  <div id="loader">
+    <div class="orbit"><b></b><i></i></div>
+    <div id="loadnote">despertando el planeta…</div>
+  </div>
+
+  <script src="/three.min.js?v=128"></script>
+  <script src="/world.js?v=3"></script>
+</body>
+</html>

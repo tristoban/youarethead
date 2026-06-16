@@ -2455,9 +2455,21 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.code(400).send({ ok: false, error: 'accion' });
   });
 
-  app.get('/yata', async (_req, reply) => {
+  app.get('/yata', async (req, reply) => {
     reply.header('cache-control', 'no-store');
-    return reply.sendFile('perfil.html');
+    const url = (req.raw && req.raw.url) || '';
+    // El overlay del mundo pide la app clásica enfocada en una sección.
+    if (/[?&]embed=1/.test(url)) return reply.sendFile('perfil.html');
+    // Por defecto: el mundo. Solo un admin (sesión) puede ver la versión clásica.
+    const a = await adminUser(db, req);
+    const cookie = (req.headers && req.headers.cookie) || '';
+    const wantClasica = /[?&]clasico=1/.test(url);
+    const wantMundo = /[?&]mundo=1/.test(url);
+    if (a && wantClasica) reply.header('set-cookie', 'yata_view=clasico; Path=/; Max-Age=2592000; SameSite=Lax');
+    if (wantMundo) reply.header('set-cookie', 'yata_view=; Path=/; Max-Age=0; SameSite=Lax');
+    const cookieClasica = /(?:^|;\s*)yata_view=clasico/.test(cookie);
+    const clasica = !!a && (wantClasica || (cookieClasica && !wantMundo));
+    return reply.sendFile(clasica ? 'perfil.html' : 'world.html');
   });
   app.get('/tristonicos', async (_req, reply) => {
     reply.header('cache-control', 'no-store');

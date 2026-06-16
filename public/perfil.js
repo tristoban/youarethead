@@ -192,6 +192,9 @@
 
   async function boot() {
     const params = new URLSearchParams(location.search);
+    const embed = params.get("embed") === "1";
+    const embSec = params.get("sec");
+    if (embed) { document.body.classList.add("yata-embed"); if (!document.getElementById("yata-embed-css")) { const st = document.createElement("style"); st.id = "yata-embed-css"; st.textContent = ".yata-embed .pf-left,.yata-embed .pf-right,.yata-embed .pf-topbar,.yata-embed .pf-tabbar{display:none!important}.yata-embed .pf-app{display:block!important}.yata-embed .pf-center{max-width:760px;margin:0 auto}"; document.head.appendChild(st); } }
     const oauth = params.get("oauth");
     if (oauth) history.replaceState(null, "", location.pathname);
     const llaveT = params.get("llave");
@@ -219,6 +222,7 @@
     else if (wantUser) viewUser(wantUser);
     else if (wantPost) viewPost(wantPost);
     else if (wantTristo) setView("tristonicos");
+    else if (embed && embSec) setView(embSec);   // deep-link desde el mundo (overlay)
   }
   async function guestPost(id) {
     const { r, d } = await apiQ("/api/social/post?id=" + id);
