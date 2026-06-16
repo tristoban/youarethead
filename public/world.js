@@ -1,5 +1,6 @@
 /* ===========================================================================
-   YATA — el mundo (planeta embrujado).  Navegable, denso, animado.
+   YATA — el mundo (planeta embrujado, estética PS1 / Silent Hill).
+   Render a baja resolución + niebla espesa + grano/dither + wobble de vértices.
    Three r128 (global THREE, vendoreado).  Las casas abren la app real en overlay.
    =========================================================================== */
 (function () {
@@ -20,9 +21,19 @@ function noise3(v){
   return 0.55*Math.sin(v.x*1.7+v.y*2.3) + 0.35*Math.sin(v.y*2.9+v.z*1.3+1.7)
        + 0.28*Math.sin(v.z*2.1+v.x*1.9+4.1) + 0.18*Math.sin((v.x+v.z)*4.0+2.0);
 }
-var R=30;                              // planeta más grande
-function terrainR(dir){ return R + noise3(dir.clone().multiplyScalar(1.6))*2.1; }   // altura analítica (sin raycast)
+var R=30;
+function terrainR(dir){ return R + noise3(dir.clone().multiplyScalar(1.6))*2.1; }
 function surfacePoint(dir){ var d=dir.clone().normalize(); return d.multiplyScalar(terrainR(d)); }
+
+// ---- PS1: snap de vértices en el shader (jitter clásico) ----
+function ps1v(mat){
+  mat.onBeforeCompile=function(sh){
+    sh.vertexShader=sh.vertexShader.replace('#include <project_vertex>',
+      '#include <project_vertex>\n{ float _w=max(gl_Position.w,0.0001); vec2 _g=vec2(184.0,140.0);\n gl_Position.xy=floor((gl_Position.xy/_w)*_g)/_g*_w; }');
+  };
+  mat.customProgramCacheKey=function(){return 'ps1snap';};
+  return mat;
+}
 
 function glowTexture(inner, outer){
   var s=128, cv=document.createElement('canvas'); cv.width=cv.height=s;
@@ -38,12 +49,12 @@ var TEX_MAG =glowTexture('rgba(255,140,235,1)','rgba(190,80,220,.4)');
 var TEX_RED =glowTexture('rgba(255,120,90,1)','rgba(200,40,30,.4)');
 var TEX_GRN =glowTexture('rgba(150,255,150,1)','rgba(60,200,90,.4)');
 var TEX_PURP=glowTexture('rgba(190,150,255,1)','rgba(120,70,220,.4)');
-var TEX_MIST=glowTexture('rgba(150,190,210,.55)','rgba(90,120,150,.22)');
+var TEX_MIST=glowTexture('rgba(170,180,185,.6)','rgba(110,120,128,.25)');
 var TEX_SHADOW=glowTexture('rgba(0,0,0,.6)','rgba(0,0,0,0)');
 
 function batTexture(){
   var s=64, cv=document.createElement('canvas'); cv.width=cv.height=s; var c=cv.getContext('2d');
-  c.fillStyle='#0a0a12'; c.beginPath();
+  c.fillStyle='#08080e'; c.beginPath();
   c.moveTo(32,30); c.quadraticCurveTo(8,14,2,30); c.quadraticCurveTo(14,30,18,40);
   c.quadraticCurveTo(26,30,32,42); c.quadraticCurveTo(38,30,46,40); c.quadraticCurveTo(50,30,62,30);
   c.quadraticCurveTo(56,14,32,30); c.fill();
@@ -57,14 +68,13 @@ function makeSprite(tex,color,scale,blend){
   var s=new T.Sprite(m); s.scale.setScalar(scale); return s;
 }
 function emat(color,emis,ei,rough){
-  return new T.MeshStandardMaterial({color:color,emissive:(emis===undefined?0x000000:emis),
-    emissiveIntensity:(ei===undefined?0:ei),roughness:(rough===undefined?0.85:rough),flatShading:true});
+  return ps1v(new T.MeshStandardMaterial({color:color,emissive:(emis===undefined?0x000000:emis),
+    emissiveIntensity:(ei===undefined?0:ei),roughness:(rough===undefined?0.85:rough),flatShading:true}));
 }
 function fibSphere(n){ var p=[],phi=Math.PI*(3-Math.sqrt(5)),i;
   for(i=0;i<n;i++){var y=1-(i/(n-1))*2,r=Math.sqrt(1-y*y),t=phi*i; p.push(new T.Vector3(Math.cos(t)*r,y,Math.sin(t)*r));} return p; }
 function randDir(){ return new T.Vector3(rand(-1,1),rand(-1,1),rand(-1,1)).normalize(); }
 
-// merge varias partes (con color y matriz) en una sola BufferGeometry con vertex colors
 function mergeParts(parts){
   var pos=[],nor=[],col=[],i,j;
   for(i=0;i<parts.length;i++){
@@ -92,24 +102,56 @@ function instAt(mesh,i,dir,scaleV,yaw,lift){
 
 /* ----------------------------------------------------------- renderer/scene */
 var canvas=document.getElementById('c');
-var renderer=new T.WebGLRenderer({canvas:canvas,antialias:true,alpha:true});
-renderer.setClearColor(0x000000,0);
+var renderer=new T.WebGLRenderer({canvas:canvas,antialias:false,alpha:true});
+renderer.setClearColor(0x090c12,1);                  // fondo oscuro opaco (cielo de niebla)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
 renderer.outputEncoding=T.sRGBEncoding;
 renderer.toneMapping=T.ACESFilmicToneMapping;
-renderer.toneMappingExposure=0.96;                   // más oscuro/creepy
+renderer.toneMappingExposure=1.0;
 
 var scene=new T.Scene();
-scene.fog=new T.FogExp2(0x0a1024,0.012);              // niebla más densa
-var camera=new T.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 4000);
+scene.fog=new T.FogExp2(0x161d22,0.016);              // niebla espesa, gris-verdosa (Silent Hill)
+var camera=new T.PerspectiveCamera(62, window.innerWidth/window.innerHeight, 0.1, 2000);
 camera.position.set(0,40,60);
 
-scene.add(new T.AmbientLight(0x3a5570,0.42));
-var hemi=new T.HemisphereLight(0x6f8fc8,0x07140f,0.42); scene.add(hemi);
-var moonLight=new T.DirectionalLight(0xaecbe6,0.7); moonLight.position.set(80,50,40); scene.add(moonLight);
-var rim=new T.DirectionalLight(0x59f0d8,0.25); rim.position.set(-60,10,-40); scene.add(rim);   // rim teal
+scene.add(new T.AmbientLight(0x39505f,0.42));
+var hemi=new T.HemisphereLight(0x66808f,0x07110d,0.4); scene.add(hemi);
+var moonLight=new T.DirectionalLight(0x9fb4c2,0.65); moonLight.position.set(80,50,40); scene.add(moonLight);
+var rim=new T.DirectionalLight(0x4fd6c2,0.2); rim.position.set(-60,10,-40); scene.add(rim);
 
 var world=new T.Group(); scene.add(world);
+
+/* ----------------------------------------------------------- POST: render PS1 a baja resolución */
+var rt=new T.WebGLRenderTarget(2,2,{minFilter:T.NearestFilter,magFilter:T.NearestFilter,depthBuffer:true});
+var postScene=new T.Scene(), postCam=new T.OrthographicCamera(-1,1,1,-1,0,1);
+var POST_FRAG=[
+'precision highp float;',
+'uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uTime; varying vec2 vUv;',
+'float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }',
+'void main(){',
+'  vec3 col=texture2D(tDiffuse,vUv).rgb;',
+'  float l=dot(col,vec3(0.299,0.587,0.114));',
+'  col=mix(col,vec3(l),0.5);',                        // desaturar
+'  col*=vec3(0.86,0.95,0.9);',                         // tinte gris-verdoso enfermizo
+'  col=pow(clamp(col,0.0,1.0),vec3(1.16));',           // mas contraste / mas oscuro
+'  float tq=floor(uTime*24.0);',                       // grano cuantizado ~24fps
+'  float dth=hash(floor(vUv*uRes)+tq)-0.5;',
+'  float levels=22.0;',
+'  col=floor(col*levels+0.5+dth*0.9)/levels;',         // reduccion de color + dither (PS1)
+'  float gr=hash(vUv*uRes+tq*1.7)-0.5;',
+'  col+=gr*0.075;',                                    // grano de pelicula
+'  col*=0.93+0.07*sin(vUv.y*uRes.y*3.14159);',         // scanlines
+'  float vig=smoothstep(1.05,0.38,length(vUv-0.5));',
+'  col*=mix(0.48,1.0,vig);',                            // viñeta
+'  gl_FragColor=vec4(col,1.0);',
+'}'].join('\n');
+var postMat=new T.ShaderMaterial({
+  uniforms:{ tDiffuse:{value:rt.texture}, uRes:{value:new T.Vector2(1,1)}, uTime:{value:0} },
+  vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }',
+  fragmentShader:POST_FRAG, depthTest:false, depthWrite:false
+});
+postScene.add(new T.Mesh(new T.PlaneGeometry(2,2), postMat));
+var PIXEL=3.1;   // tamaño de pixel (mayor = más chunky)
 
 /* ----------------------------------------------------------- planet */
 var planetMesh;
@@ -131,7 +173,7 @@ var planetMesh;
     for(var k=0;k<3;k++) col.push(c.r,c.g,c.b);
   }
   geo.setAttribute('color',new T.Float32BufferAttribute(col,3));
-  planetMesh=new T.Mesh(geo,new T.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:0.97}));
+  planetMesh=new T.Mesh(geo, ps1v(new T.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:0.97})));
   world.add(planetMesh);
   var ocean=new T.Mesh(new T.SphereGeometry(R-0.7,56,56), emat(0x0a2630,0x07212a,0.6,0.35));
   world.add(ocean);
@@ -148,7 +190,6 @@ function orientToDir(obj,dir){
 /* ----------------------------------------------------------- GRASS (instanced + viento) */
 var GRASS_SHADER=null;
 (function grass(){
-  // tuft = 3 hojas (triángulos), color base oscuro -> punta clara
   var base=new T.Color(0x0c2a20), tipc=new T.Color(0x2f6e54);
   var pos=[],col=[]; var blades=3,bi;
   for(bi=0;bi<blades;bi++){
@@ -160,17 +201,18 @@ var GRASS_SHADER=null;
   g.setAttribute('position',new T.Float32BufferAttribute(pos,3));
   g.setAttribute('color',new T.Float32BufferAttribute(col,3));
   g.computeVertexNormals();
-  var mat=new T.MeshStandardMaterial({vertexColors:true,roughness:1,side:T.DoubleSide,emissive:0x0a3a2c,emissiveIntensity:0.18});
+  var mat=new T.MeshStandardMaterial({vertexColors:true,roughness:1,side:T.DoubleSide,emissive:0x0a3a2c,emissiveIntensity:0.16});
   mat.onBeforeCompile=function(sh){
     sh.uniforms.uTime={value:0};
     sh.vertexShader='uniform float uTime;\n'+sh.vertexShader.replace('#include <begin_vertex>',
       '#include <begin_vertex>\n#ifdef USE_INSTANCING\n vec3 ip=instanceMatrix[3].xyz; float ph=ip.x*0.5+ip.z*0.5; float hh=max(position.y,0.0);\n transformed.x+=sin(uTime*1.7+ph)*0.16*hh; transformed.z+=cos(uTime*1.35+ph)*0.12*hh;\n#endif');
     GRASS_SHADER=sh;
   };
+  mat.customProgramCacheKey=function(){return 'grasswind';};
   var N=5200, mesh=new T.InstancedMesh(g,mat,N), i, placed=0;
   for(i=0;i<N;i++){
     var d=randDir(); var rr=terrainR(d);
-    if(rr<R-0.3) continue;                                  // evitá el "agua"
+    if(rr<R-0.3) continue;
     var sc=rand(0.8,1.7); instAt(mesh,placed,d,_s.set(sc,rand(0.9,1.6),sc),rand(0,TAU));
     placed++;
   }
@@ -185,14 +227,12 @@ function mtx(x,y,z,sx,sy,sz,ry){ var m=new T.Matrix4(); var q=new T.Quaternion()
   m.compose(new T.Vector3(x,y,z),q,new T.Vector3(sx||1,sy||1,sz||1)); return m; }
 function rotZ(m,a){ return m.multiply(new T.Matrix4().makeRotationZ(a)); }
 
-// fir (abeto) merged
 var firGeo=mergeParts([
   {geo:cylGeo(0.12,0.18,0.7,6),color:new T.Color(0x3a2a22),matrix:mtx(0,0.35,0,1,1,1)},
   {geo:coneGeo(0.85,0.9,7),color:new T.Color(0x123a2c),matrix:mtx(0,0.7,0,1,1,1)},
   {geo:coneGeo(0.63,0.78,7),color:new T.Color(0x14402f),matrix:mtx(0,1.25,0,1,1,1)},
   {geo:coneGeo(0.41,0.66,7),color:new T.Color(0x174833),matrix:mtx(0,1.8,0,1,1,1)}
 ]);
-// dead twisted tree merged (ramas)
 var deadGeo=mergeParts([
   {geo:cylGeo(0.1,0.22,1.6,6),color:new T.Color(0x241c1a),matrix:mtx(0,0.8,0,1,1,1)},
   {geo:cylGeo(0.05,0.1,0.9,5),color:new T.Color(0x201917),matrix:rotZ(mtx(0.25,1.5,0,1,1,1),0.7)},
@@ -211,28 +251,24 @@ function instancedField(geo,mat,count,opt){
   }
   mesh.count=placed; mesh.instanceMatrix.needsUpdate=true; mesh.frustumCulled=false; world.add(mesh); return mesh;
 }
-var treeMat=new T.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:1,emissive:0x06140f,emissiveIntensity:0.25});
-var deadMat=new T.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:1});
-var housesDirsHolder=[];        // se llena abajo; árboles evitan casas
+var treeMat=ps1v(new T.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:1,emissive:0x06140f,emissiveIntensity:0.22}));
+var deadMat=ps1v(new T.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:1}));
+var housesDirsHolder=[];
 function avoidHouses(d){ for(var i=0;i<housesDirsHolder.length;i++){ if(d.angleTo(housesDirsHolder[i])<0.18) return true; } return false; }
 
-/* rocas */
 var rockGeo=new T.IcosahedronGeometry(0.6,0); (function(){ var p=rockGeo.attributes.position,v=new T.Vector3();
   for(var i=0;i<p.count;i++){ v.fromBufferAttribute(p,i); v.multiplyScalar(rand(0.7,1.3)); p.setXYZ(i,v.x,v.y,v.z);} rockGeo.computeVertexNormals(); })();
 var rockMat=emat(0x2b3340,0,0,1);
-/* lápidas */
 var graveGeo=mergeParts([
   {geo:new T.BoxGeometry(0.5,0.7,0.12),color:new T.Color(0x3a4048),matrix:mtx(0,0.45,0,1,1,1)},
   {geo:new T.BoxGeometry(0.7,0.12,0.4),color:new T.Color(0x2c3138),matrix:mtx(0,0.06,0,1,1,1)}
 ]);
-var graveMat=new T.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:1});
-
-/* hongos + cristales (glow) */
+var graveMat=ps1v(new T.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:1}));
 var mushGeo=mergeParts([
   {geo:cylGeo(0.05,0.08,0.3,6),color:new T.Color(0xcfd6c8),matrix:mtx(0,0.15,0,1,1,1)},
   {geo:new T.SphereGeometry(0.18,8,6,0,TAU,0,Math.PI/2),color:new T.Color(0x59f0d8),matrix:mtx(0,0.3,0,1,1,1)}
 ]);
-var mushMat=new T.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:0.6,emissive:0x1f8f80,emissiveIntensity:0.9});
+var mushMat=ps1v(new T.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:0.6,emissive:0x1f8f80,emissiveIntensity:0.9}));
 var crysGeo=new T.IcosahedronGeometry(0.4,0);
 var crysMat=emat(0x123a44,0x49d0ff,1.4,0.3);
 
@@ -327,13 +363,11 @@ var houses=[], pickables=[], labelsBox=document.getElementById('labels');
   });
 })();
 
-/* place fields now that houses are known */
 instancedField(firGeo,treeMat,150,{min:0.8,max:1.5,avoid:avoidHouses});
 instancedField(deadGeo,deadMat,60,{min:0.8,max:1.6,avoid:avoidHouses});
 instancedField(rockGeo,rockMat,90,{min:0.5,max:1.8});
 instancedField(mushGeo,mushMat,70,{min:0.7,max:1.5,lift:0.02});
 instancedField(crysGeo,crysMat,22,{min:0.6,max:1.5,lift:0.1});
-// graveyard cluster cerca de "My Hell"
 (function graveyard(){
   var center=houses[2].dir.clone(), tangent=new T.Vector3().crossVectors(center,UP_Y).normalize(), bit=new T.Vector3().crossVectors(center,tangent).normalize();
   var mesh=new T.InstancedMesh(graveGeo,graveMat,26),i,placed=0;
@@ -342,7 +376,6 @@ instancedField(crysGeo,crysMat,22,{min:0.6,max:1.5,lift:0.1});
   mesh.count=placed; mesh.instanceMatrix.needsUpdate=true; mesh.frustumCulled=false; world.add(mesh);
 })();
 
-/* lampposts con luz que titila */
 var lamps=[];
 (function lampposts(){
   var n=7,i; for(i=0;i<n;i++){ var d=randDir(); if(terrainR(d)<R-0.1||avoidHouses(d)) continue;
@@ -356,49 +389,45 @@ var lamps=[];
   }
 })();
 
-/* ----------------------------------------------------------- sky */
+/* ----------------------------------------------------------- sky (fog:false para que sobrevivan a la niebla) */
 function buildStars(count,radius,size,color,op){ var g=new T.BufferGeometry(),arr=new Float32Array(count*3),i;
   for(i=0;i<count;i++){ var v=randDir().multiplyScalar(radius*rand(0.8,1)); arr[i*3]=v.x;arr[i*3+1]=v.y;arr[i*3+2]=v.z; }
   g.setAttribute('position',new T.Float32BufferAttribute(arr,3));
-  return new T.Points(g,new T.PointsMaterial({color:color,size:size,sizeAttenuation:true,transparent:true,opacity:op,depthWrite:false})); }
+  return new T.Points(g,new T.PointsMaterial({color:color,size:size,sizeAttenuation:true,transparent:true,opacity:op,depthWrite:false,fog:false})); }
 var starField=new T.Group();
-starField.add(buildStars(1700,1200,2.6,0xcfe8ff,0.85),buildStars(600,800,3.8,0xffffff,0.95),buildStars(320,950,3.2,0x8ff0e0,0.6));
+starField.add(buildStars(1500,1000,2.6,0xb9c8d0,0.7),buildStars(550,750,3.6,0xdfe6ea,0.85),buildStars(300,900,3.0,0x7fb0a8,0.5));
 scene.add(starField);
 
 var moon=new T.Group();
-moon.add(new T.Mesh(new T.SphereGeometry(34,32,32),emat(0xe8e2f0,0xcdbfe6,0.85,1)));
-moon.add(makeSprite(TEX_SOFT,0xcfc6e6,200)); moon.add(makeSprite(TEX_PURP,0xb59cff,150));
+var moonBall=new T.Mesh(new T.SphereGeometry(34,32,32),emat(0xcfcad6,0xb7afc4,0.7,1)); moonBall.material.fog=false; moon.add(moonBall);
+var mh1=makeSprite(TEX_SOFT,0xc2bccc,200); mh1.material.fog=false; var mh2=makeSprite(TEX_PURP,0x9b86c8,150); mh2.material.fog=false;
+moon.add(mh1); moon.add(mh2);
 moon.position.set(300,150,-340); scene.add(moon);
 
-// niebla baja (parches que derivan)
 var mists=[],mi;
-for(mi=0;mi<10;mi++){ var d=randDir(); var sp=surfacePoint(d); var s=makeSprite(TEX_MIST,0xaecbe0,rand(10,20),T.NormalBlending);
-  s.material.opacity=rand(0.1,0.22); s.position.copy(sp).addScaledVector(d,rand(0.5,2.0)); s.userData={ph:rand(0,TAU)}; world.add(s); mists.push(s); }
+for(mi=0;mi<14;mi++){ var d=randDir(); var sp=surfacePoint(d); var s=makeSprite(TEX_MIST,0xb6c0c4,rand(12,24),T.NormalBlending);
+  s.material.opacity=rand(0.12,0.26); s.position.copy(sp).addScaledVector(d,rand(0.4,1.8)); s.userData={ph:rand(0,TAU)}; world.add(s); mists.push(s); }
 
-// luciérnagas
 var NF=150,fireGeo=new T.BufferGeometry(),farr=new Float32Array(NF*3),fph=[];
 for(var fi=0;fi<NF;fi++){ var fd=randDir().multiplyScalar(R+rand(1.5,7)); farr[fi*3]=fd.x;farr[fi*3+1]=fd.y;farr[fi*3+2]=fd.z; fph.push(rand(0,TAU)); }
 fireGeo.setAttribute('position',new T.Float32BufferAttribute(farr,3));
-var fireflies=new T.Points(fireGeo,new T.PointsMaterial({map:TEX_TEAL,color:0x9ff5e2,size:1.6,transparent:true,blending:T.AdditiveBlending,depthWrite:false,opacity:0.9}));
+var fireflies=new T.Points(fireGeo,new T.PointsMaterial({map:TEX_TEAL,color:0x9ff5e2,size:1.6,transparent:true,blending:T.AdditiveBlending,depthWrite:false,opacity:0.85}));
 world.add(fireflies);
 
-// will-o-wisps (espíritus que vagan)
 var wisps=[],wi;
 for(wi=0;wi<14;wi++){ var col=pick([0x7ff0dd,0x9affb0,0xb59cff,0x8fd0ff]);
   var s=makeSprite(col===0xb59cff?TEX_PURP:(col===0x8fd0ff?TEX_SOFT:TEX_GRN),col,rand(0.8,1.5));
   var d=randDir(); var p=d.clone().multiplyScalar(terrainR(d)+rand(1.5,4));
   s.position.copy(p); world.add(s); wisps.push({sp:s,pos:p.clone(),target:p.clone(),ph:rand(0,TAU)}); }
 
-// murciélagos
 var bats=[],bti;
-function makeBat(){ var s=makeSprite(TEX_BAT,0x12121c,rand(1.2,2.0),T.NormalBlending); s.material.opacity=0.95; return s; }
+function makeBat(){ var s=makeSprite(TEX_BAT,0x0e0e16,rand(1.2,2.0),T.NormalBlending); s.material.opacity=0.95; return s; }
 for(bti=0;bti<8;bti++){ var bs=makeBat(); var orbR=R+rand(6,16), axis=randDir(); var bph=rand(0,TAU);
   scene.add(bs); bats.push({sp:bs,orbR:orbR,axis:axis,ref:new T.Vector3().crossVectors(axis,UP_Y).normalize(),ph:bph,spd:rand(0.25,0.6),flap:rand(8,14)}); }
 
-// estrellas fugaces
 var shooters=[],shooterTimer=rand(2,5);
 function spawnShooter(){ var from=randDir().multiplyScalar(900); from.y=Math.abs(from.y);
-  var to=from.clone().add(randDir().multiplyScalar(rand(220,400))); var sp=makeSprite(TEX_SOFT,0xffffff,12); sp.position.copy(from); scene.add(sp);
+  var to=from.clone().add(randDir().multiplyScalar(rand(220,400))); var sp=makeSprite(TEX_SOFT,0xffffff,12); sp.material.fog=false; sp.position.copy(from); scene.add(sp);
   shooters.push({sp:sp,from:from,to:to,t:0,life:rand(0.7,1.2)}); }
 
 /* ----------------------------------------------------------- courier (vos) */
@@ -449,9 +478,8 @@ function makeNPC(){
 }
 var ni; for(ni=0;ni<9;ni++) npcs.push(makeNPC());
 
-// espíritus flotantes
 var spirits=[];
-for(ni=0;ni<3;ni++){ var sg=new T.Group(); var sm=new T.MeshStandardMaterial({color:0x8fb6d6,transparent:true,opacity:0.32,emissive:0x4a7fb0,emissiveIntensity:0.6,flatShading:true});
+for(ni=0;ni<3;ni++){ var sg=new T.Group(); var sm=ps1v(new T.MeshStandardMaterial({color:0x8fb6d6,transparent:true,opacity:0.32,emissive:0x4a7fb0,emissiveIntensity:0.6,flatShading:true}));
   sg.add(meshAt(coneGeo(0.5,1.4,8),sm,0,0,0)); sg.add(meshAt(new T.SphereGeometry(0.3,10,10),sm,0,0.6,0));
   sg.add(makeSprite(TEX_SOFT,0x9fd0ff,2.0)); var sd=randDir(); sg.userData={dir:sd,ph:rand(0,TAU)}; world.add(sg); spirits.push(sg); }
 
@@ -512,7 +540,7 @@ function blip(f,d,ty,g){ if(!actx||muted)return; var o=actx.createOscillator(),g
   gn.gain.setValueAtTime(0,actx.currentTime); gn.gain.linearRampToValueAtTime(g||0.1,actx.currentTime+0.01); gn.gain.exponentialRampToValueAtTime(0.0001,actx.currentTime+(d||0.2));
   o.connect(gn).connect(actx.destination); o.start(); o.stop(actx.currentTime+(d||0.2)+0.02); }
 function startPad(){ if(!actx||muted||pad)return; var o1=actx.createOscillator(),o2=actx.createOscillator(),gn=actx.createGain(),f=actx.createBiquadFilter();
-  o1.type='sawtooth';o2.type='sawtooth';o1.frequency.value=82;o2.frequency.value=82*1.006;f.type='lowpass';f.frequency.value=440;gn.gain.value=0.05;
+  o1.type='sawtooth';o2.type='sawtooth';o1.frequency.value=70;o2.frequency.value=70*1.007;f.type='lowpass';f.frequency.value=360;gn.gain.value=0.055;
   o1.connect(f);o2.connect(f);f.connect(gn).connect(actx.destination);o1.start();o2.start();pad={o1:o1,o2:o2}; }
 function stopPad(){ if(pad){ try{pad.o1.stop();pad.o2.stop();}catch(e){} pad=null; } }
 
@@ -539,7 +567,10 @@ fetch('/api/hub/me',{headers:{'accept':'application/json'}}).then(function(r){re
 }).catch(function(){});
 
 /* ----------------------------------------------------------- resize + loop */
-function onResize(){ camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight); }
+function onResize(){ var w=window.innerWidth,h=window.innerHeight;
+  camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h);
+  var lw=Math.max(2,Math.floor(w/PIXEL)), lh=Math.max(2,Math.floor(h/PIXEL));
+  rt.setSize(lw,lh); postMat.uniforms.uRes.value.set(lw,lh); }
 addEventListener('resize',onResize); onResize();
 
 var clock=new T.Clock(), _camTarget=new T.Vector3(), _proj=new T.Vector3();
@@ -590,7 +621,7 @@ function animate(){
   starField.rotation.y+=dt*0.005; starField.rotation.x=Math.sin(t*0.02)*0.04;
   moon.position.x=Math.cos(t*0.008)*310; moon.position.z=-340+Math.sin(t*0.008)*40;
   var fp=fireflies.geometry.attributes.position; for(i=0;i<NF;i++){ fp.array[i*3+1]+=Math.cos(t*0.8+fph[i])*0.003; } fp.needsUpdate=true; fireflies.rotation.y+=dt*0.025;
-  for(i=0;i<mists.length;i++){ var M=mists[i]; M.material.rotation+=dt*0.05; M.material.opacity=0.12+0.06*Math.sin(t*0.4+M.userData.ph); }
+  for(i=0;i<mists.length;i++){ var M=mists[i]; M.material.rotation+=dt*0.05; M.material.opacity=0.14+0.07*Math.sin(t*0.4+M.userData.ph); }
   for(i=0;i<wisps.length;i++){ var w=wisps[i]; if(w.pos.distanceTo(w.target)<0.5){ var nd=randDir(); w.target.copy(nd.multiplyScalar(terrainR(nd)+rand(1.5,4))); }
     w.pos.lerp(w.target,dt*0.4); w.sp.position.copy(w.pos); w.sp.position.y+=Math.sin(t*2+w.ph)*0.3; w.sp.material.opacity=0.6+0.4*Math.sin(t*3+w.ph); }
   for(i=0;i<bats.length;i++){ var B=bats[i]; B.ph+=dt*B.spd; var ba=B.ref.clone().applyAxisAngle(B.axis,B.ph).multiplyScalar(B.orbR);
@@ -598,7 +629,11 @@ function animate(){
   shooterTimer-=dt; if(shooterTimer<=0){ spawnShooter(); shooterTimer=rand(3,8); }
   for(i=shooters.length-1;i>=0;i--){ var S=shooters[i]; S.t+=dt/S.life; S.sp.position.lerpVectors(S.from,S.to,clamp(S.t,0,1)); S.sp.material.opacity=Math.sin(clamp(S.t,0,1)*Math.PI); S.sp.scale.setScalar(12*(1-Math.abs(0.5-S.t))); if(S.t>=1){ scene.remove(S.sp); shooters.splice(i,1); } }
 
-  updateCamera(dt); renderer.render(scene,camera);
+  updateCamera(dt);
+  // --- PS1: render a baja resolución y pasada de post ---
+  postMat.uniforms.uTime.value=t;
+  renderer.setRenderTarget(rt); renderer.render(scene,camera);
+  renderer.setRenderTarget(null); renderer.render(postScene,postCam);
 }
 
 /* ----------------------------------------------------------- start */
