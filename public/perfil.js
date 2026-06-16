@@ -260,7 +260,7 @@
 
   /* ---------- Login (solo Google) ---------- */
   var GBTN = '<svg viewBox="0 0 24 24" width="18" height="18" style="vertical-align:-4px;margin-right:8px" aria-hidden="true"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.4-1.7 4.1-5.5 4.1-3.3 0-6-2.7-6-6.1S8.7 5.9 12 5.9c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.3 14.6 2.3 12 2.3 6.9 2.3 2.8 6.4 2.8 11.5S6.9 20.7 12 20.7c5.3 0 8.8-3.7 8.8-9 0-.6-.06-1-.15-1.5H12z"/></svg>';
-  function gbtn(label) { return '<a href="/api/auth/google" style="display:flex;align-items:center;justify-content:center;background:#fff;color:#111;font-weight:800;border-radius:10px;padding:13px 18px;text-decoration:none;margin-top:6px">' + GBTN + (label || "Entrar con Google") + "</a>"; }
+  function gbtn(label) { return '<a href="/api/auth/google" target="_top" style="display:flex;align-items:center;justify-content:center;background:#fff;color:#111;font-weight:800;border-radius:10px;padding:13px 18px;text-decoration:none;margin-top:6px">' + GBTN + (label || "Entrar con Google") + "</a>"; }
   function login(err) {
     const emsg = err === "error" ? "No se pudo entrar con Google. Probá de nuevo." : err === "banned" ? "Tu cuenta está suspendida." : err === "off" ? "El ingreso con Google todavía no está activo. Volvé en un rato." : "";
     root.innerHTML =

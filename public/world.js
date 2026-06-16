@@ -124,7 +124,7 @@ var rim=new T.DirectionalLight(0x4fd6c2,0.2); rim.position.set(-60,10,-40); scen
 
 var world=new T.Group(); scene.add(world);
 
-/* ----------------------------------------------------------- POST PS1 (sin scanlines) */
+/* ----------------------------------------------------------- POST PS1 (cel + CRT sutil) */
 var rt=new T.WebGLRenderTarget(2,2,{minFilter:T.NearestFilter,magFilter:T.NearestFilter,depthBuffer:true});
 var postScene=new T.Scene(), postCam=new T.OrthographicCamera(-1,1,1,-1,0,1);
 var POST_FRAG=[
@@ -148,6 +148,10 @@ var POST_FRAG=[
 '  col=mix(col,vec3(0.0),ink);',
 '  float vig=smoothstep(1.05,0.32,length(vUv-0.5));',
 '  col*=mix(0.52,1.0,vig);',
+'  float scan=1.0-0.045*(0.5+0.5*sin(vUv.y*uRes.y*3.14159));',
+'  col*=scan;',
+'  float gr=hash(vUv*uRes+fract(uTime))-0.5; col+=gr*0.022;',
+'  col=clamp(col,0.0,1.0);',
 '  gl_FragColor=vec4(col,1.0);',
 '}'].join('\n');
 var postMat=new T.ShaderMaterial({
@@ -806,16 +810,40 @@ document.getElementById('chipClassic').addEventListener('click',function(){ loca
 document.getElementById('chipSound').addEventListener('click',function(){ muted=!muted; document.getElementById('soundIco').style.opacity=muted?0.4:1; });
 
 var me=null;
+function showEl(id,show){ var e=document.getElementById(id); if(e) e.style.display=show?'':'none'; }
+function gateMsg(code){ var m={error:'No se pudo entrar con Google. Proba de nuevo.',off:'El ingreso con Google todavia no esta activo. Volve en un rato.',banned:'Tu cuenta esta suspendida.'}; var el=document.getElementById('authMsg'); if(el) el.textContent=m[code]||''; }
+var OAUTH=null; try{ OAUTH=new URLSearchParams(location.search).get('oauth'); }catch(e){}
+if(VISIT){ try{ localStorage.setItem('yata_pending_casa',VISIT); }catch(e){} }
+function gateLogged(){ showEl('gateLoad',false); showEl('gateAuth',false); showEl('gateSetup',false); showEl('enterBtn',true);
+  if(!VISIT){ try{ var pc=localStorage.getItem('yata_pending_casa'); if(pc){ VISIT=pc.replace(/[^A-Za-z0-9_.-]/g,'').slice(0,40)||null; } }catch(e){} }
+  if(VISIT){ try{ localStorage.removeItem('yata_pending_casa'); }catch(e){} var eb=document.getElementById('enterBtn'); if(eb) eb.textContent='Entrar a la casa de '+VISIT; } }
+function gateLogin(){ showEl('gateLoad',false); showEl('enterBtn',false); if(OAUTH==='setup'){ showEl('gateAuth',false); showEl('gateSetup',true); setupPrefill(); } else { showEl('gateSetup',false); showEl('gateAuth',true); gateMsg(OAUTH); } }
 fetch('/api/hub/me',{headers:{'accept':'application/json'}}).then(function(r){return r.json();}).then(function(d){
   if(d&&d.ok&&d.logged){ me=d; var _inv=document.getElementById('roomInviteBtn'); if(_inv&&d.nick) _inv.style.display='inline-flex'; if(d.avatar) setAvatar(d.avatar); if(roomDecor.setBannerNick) roomDecor.setBannerNick(d.nick);
-    if(d.admin){ document.getElementById('chipAdmin').classList.remove('is-hidden'); document.getElementById('chipClassic').classList.remove('is-hidden'); } }
-}).catch(function(){});
+    if(d.admin){ document.getElementById('chipAdmin').classList.remove('is-hidden'); document.getElementById('chipClassic').classList.remove('is-hidden'); }
+    gateLogged();
+  } else { gateLogin(); }
+}).catch(function(){ gateLogin(); });
 fetch('/api/world/me',{headers:{'accept':'application/json'}}).then(function(r){return r.json();}).then(function(d){
   if(d&&d.logged&&d.data){ var D=d.data;
     if(D.fit){ FIT=Object.assign({},DEFAULT_FIT,D.fit); applyFit(FIT); try{ localStorage.setItem('yata_fit',JSON.stringify(FIT)); }catch(e){} }
     if(D.room){ ROOM=Object.assign({},DEFAULT_ROOM,D.room); ROOM.items=Object.assign({},DEFAULT_ROOM.items,D.room.items||{}); applyRoom(ROOM); try{ localStorage.setItem('yata_room',JSON.stringify(ROOM)); }catch(e){} }
   }
 }).catch(function(){});
+
+/* ----------------------------------------------------------- login gate setup */
+function gateGo(url,body){ return fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};}); }); }
+function setupPrefill(){ fetch('/api/auth/google/pending',{headers:{'accept':'application/json'}}).then(function(r){return r.json();}).then(function(d){ if(d&&d.ok&&d.suggest){ var i=document.getElementById('suNick'); if(i&&!i.value) i.value=d.suggest; } }).catch(function(){}); }
+(function(){
+  function seg(which){ showEl('suNewBox',which==='new'); showEl('suOldBox',which==='old'); }
+  var bN=document.getElementById('suNew'), bO=document.getElementById('suOld'), msg=document.getElementById('setupMsg');
+  if(bN) bN.addEventListener('click',function(){ seg('new'); });
+  if(bO) bO.addEventListener('click',function(){ seg('old'); });
+  var gN=document.getElementById('suNewGo');
+  if(gN) gN.addEventListener('click',function(){ if(msg)msg.textContent='...'; var nick=(document.getElementById('suNick')||{}).value||''; gateGo('/api/auth/google/new',{nick:nick.trim()}).then(function(res){ if(res.ok&&res.d&&res.d.logged){ location.href='/yata'; } else if(msg){ msg.textContent=(res.d&&res.d.message)||'No se pudo.'; } }).catch(function(){ if(msg)msg.textContent='No se pudo.'; }); });
+  var gL=document.getElementById('suLgo');
+  if(gL) gL.addEventListener('click',function(){ if(msg)msg.textContent='...'; var nk=(document.getElementById('suLnick')||{}).value||'', pn=(document.getElementById('suLpin')||{}).value||''; gateGo('/api/auth/google/link',{nick:nk.trim(),pin:pn.trim()}).then(function(res){ if(res.ok&&res.d&&res.d.logged){ location.href='/yata'; } else if(msg){ msg.textContent=(res.d&&res.d.message)||'No se pudo.'; } }).catch(function(){ if(msg)msg.textContent='No se pudo.'; }); });
+})();
 
 /* ----------------------------------------------------------- resize + loop */
 function onResize(){ var w=window.innerWidth,h=window.innerHeight;

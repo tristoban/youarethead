@@ -68,7 +68,7 @@
         '<a href="#" class="th-back" id="th-back">← volver</a>' +
         '<h3>Entrar a Tristo&#39;s</h3>' +
         '<p class="th-p th-dim">Entrá con tu cuenta de Google. Rápido y seguro.</p>' +
-        '<a href="/api/auth/google?return=/tristos" style="display:flex;align-items:center;justify-content:center;background:#fff;color:#111;font-weight:800;border-radius:10px;padding:13px 18px;text-decoration:none;margin-top:6px"><svg viewBox="0 0 24 24" width="18" height="18" style="vertical-align:-4px;margin-right:8px" aria-hidden="true"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.4-1.7 4.1-5.5 4.1-3.3 0-6-2.7-6-6.1S8.7 5.9 12 5.9c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.3 14.6 2.3 12 2.3 6.9 2.3 2.8 6.4 2.8 11.5S6.9 20.7 12 20.7c5.3 0 8.8-3.7 8.8-9 0-.6-.06-1-.15-1.5H12z"/></svg>Entrar con Google</a>' +
+        '<a href="/api/auth/google?return=/tristos" target="_top" style="display:flex;align-items:center;justify-content:center;background:#fff;color:#111;font-weight:800;border-radius:10px;padding:13px 18px;text-decoration:none;margin-top:6px"><svg viewBox="0 0 24 24" width="18" height="18" style="vertical-align:-4px;margin-right:8px" aria-hidden="true"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.4-1.7 4.1-5.5 4.1-3.3 0-6-2.7-6-6.1S8.7 5.9 12 5.9c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.3 14.6 2.3 12 2.3 6.9 2.3 2.8 6.4 2.8 11.5S6.9 20.7 12 20.7c5.3 0 8.8-3.7 8.8-9 0-.6-.06-1-.15-1.5H12z"/></svg>Entrar con Google</a>' +
         '<p class="th-p th-dim" style="margin-top:10px;font-size:13px">Si ya tenías cuenta, al entrar te dejamos vincularla.</p>' +
       '</div>';
     viewEl.querySelector("#th-back").onclick = (e) => { e.preventDefault(); viewMenu(); };
