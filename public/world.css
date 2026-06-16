@@ -76,6 +76,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:#05060f;color:var(--in
 #roomBack,#roomDecorBtn{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;cursor:pointer;color:var(--ink);font-weight:700;font-size:14px;
   padding:10px 18px;border-radius:999px;border:1px solid var(--line);background:var(--glass);backdrop-filter:blur(10px)}
 #roomBack:hover,#roomDecorBtn:hover{color:var(--acc);box-shadow:0 0 20px rgba(116,224,208,.25)}
+#roomInviteBtn{pointer-events:auto;display:none;align-items:center;gap:8px;cursor:pointer;color:var(--ink);font-weight:700;font-size:14px;padding:10px 18px;border-radius:999px;border:1px solid var(--line);background:var(--glass);backdrop-filter:blur(10px)}
+#roomInviteBtn:hover{color:var(--acc);box-shadow:0 0 20px rgba(116,224,208,.25)}
+#roomtitle{display:none;align-items:center;gap:8px;color:var(--ink);font-weight:750;font-size:14px;padding:10px 16px;border-radius:999px;border:1px solid var(--acc);background:var(--glass);backdrop-filter:blur(10px);box-shadow:0 0 22px rgba(116,224,208,.22)}
+body.visiting #roomtitle{display:inline-flex}
+body.visiting #roomInviteBtn,body.visiting #roomDecorBtn{display:none!important}
 .roomui-row{display:flex;gap:8px}
 .room-hint{color:var(--muted);font-size:12px;background:var(--glass);border:1px solid var(--line);padding:7px 12px;border-radius:10px;backdrop-filter:blur(8px)}
 .room-hint b{color:var(--acc)}

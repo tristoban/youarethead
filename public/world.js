@@ -607,11 +607,33 @@ function applyRoom(r){ var d=roomDecor;
 }
 ROOM=loadRoom()||Object.assign({},DEFAULT_ROOM,{items:Object.assign({},DEFAULT_ROOM.items)}); applyRoom(ROOM);
 var inRoom=false;
+var VISIT=null; try{ VISIT=new URLSearchParams(location.search).get('casa'); }catch(e){} if(VISIT){ VISIT=VISIT.replace(/[^A-Za-z0-9_.-]/g,'').slice(0,40)||null; }
+var visiting=null, ownerAvatar=null;
+if(VISIT){ var _eb0=document.getElementById('enterBtn'); if(_eb0) _eb0.textContent='Entrar a la casa de '+VISIT; var _ip0=document.querySelector('#intro p'); if(_ip0) _ip0.textContent='Estás por visitar la casa de '+VISIT+' en el planeta de YATA. Entrá y mirá cómo la decoró.'; }
 function fadeFlash(){ var f=document.getElementById('fade'); if(!f)return; f.style.transition='none'; f.style.opacity='1';
   requestAnimationFrame(function(){ requestAnimationFrame(function(){ f.style.transition='opacity .45s ease'; f.style.opacity='0'; }); }); }
-function enterRoom(){ inRoom=true; fp.x=0; fp.z=3; fp.y=0; fp.yaw=Math.PI; fp.pitch=0; currentHouse=null;
+function _enterFP(){ inRoom=true; fp.x=0; fp.z=3; fp.y=0; fp.yaw=Math.PI; fp.pitch=0; currentHouse=null;
   document.body.classList.add('inroom'); document.getElementById('roomui').classList.add('show'); prompt.classList.remove('show'); fadeFlash(); blip(300,0.18,'sine',0.07); }
-function exitRoom(){ inRoom=false; try{ if(document.exitPointerLock&&document.pointerLockElement)document.exitPointerLock(); }catch(e){} document.body.classList.remove('inroom'); document.getElementById('roomui').classList.remove('show'); closeDecor(); fadeFlash(); }
+function clearOwner(){ if(ownerAvatar){ interiorScene.remove(ownerAvatar.group); ownerAvatar=null; } }
+function enterRoom(){ visiting=null; document.body.classList.remove('visiting'); clearOwner(); applyRoom(ROOM); _enterFP(); }
+function buildOwner(fit,avatarUrl){ var f=buildFigure({coat:fit.coat,accent:fit.accent,lantern:fit.lantern});
+  if(f.matCoat2){ f.matCoat2.color.set(fit.coat); f.matCoat2.color.multiplyScalar(0.82); }
+  if(fit.hat&&fit.hat!=='none'&&f.hats[fit.hat]) f.hats[fit.hat].visible=true;
+  if(avatarUrl){ var l=new T.TextureLoader(); l.setCrossOrigin('anonymous'); l.load(avatarUrl,function(tex){ tex.encoding=T.sRGBEncoding; f.faceMat.map=tex; f.faceMat.needsUpdate=true; f.face.visible=true; if(f.visor)f.visor.visible=false; },undefined,function(){}); }
+  return f; }
+function applyVisit(nick,d){
+  var roomData=Object.assign({},DEFAULT_ROOM,{items:Object.assign({},DEFAULT_ROOM.items)}), fit=Object.assign({},DEFAULT_FIT), shownNick=nick, av=null;
+  if(d&&d.ok){ if(d.nick)shownNick=d.nick; av=d.avatar||null; if(d.data){ if(d.data.room){ roomData=Object.assign({},DEFAULT_ROOM,d.data.room); roomData.items=Object.assign({},DEFAULT_ROOM.items,d.data.room.items||{}); } if(d.data.fit){ fit=Object.assign({},DEFAULT_FIT,d.data.fit); } } }
+  visiting=shownNick; document.body.classList.add('visiting');
+  applyRoom(roomData); clearOwner();
+  ownerAvatar=buildOwner(fit,av); ownerAvatar.group.position.set(-1.1,0,1.2); ownerAvatar.group.rotation.y=-0.55; interiorScene.add(ownerAvatar.group);
+  var rt=document.getElementById('roomtitle'); if(rt) rt.textContent='🏠 Casa de '+shownNick;
+  _enterFP(); }
+function enterVisit(nick){ if(inRoom||!nick)return;
+  fetch('/api/world/user/'+encodeURIComponent(nick),{headers:{'accept':'application/json'}}).then(function(r){return r.json();}).then(function(d){ applyVisit(nick,d); }).catch(function(){ applyVisit(nick,null); }); }
+function exitRoom(){ inRoom=false; try{ if(document.exitPointerLock&&document.pointerLockElement)document.exitPointerLock(); }catch(e){} document.body.classList.remove('inroom'); document.getElementById('roomui').classList.remove('show'); closeDecor();
+  if(visiting){ visiting=null; document.body.classList.remove('visiting'); clearOwner(); applyRoom(ROOM); }
+  fadeFlash(); }
 function openEscritorio(){ var nick=(me&&me.nick)?me.nick:''; if(nick) openURL('/demon/'+encodeURIComponent(nick)+'/escritorio?embed=1','🖥️','Escritorio','tu PC'); else openURL('/yata?embed=1&sec=perfil','🖥️','My Hell','perfil'); }
 function updateHouse(dt,t){
   var mf=0,ms=0;
@@ -630,10 +652,11 @@ function updateHouse(dt,t){
   if(monitorScreen) monitorScreen.material.emissiveIntensity=1.35+Math.sin(t*22)*0.06+Math.random()*0.05;
   if(roomDust) roomDust.rotation.y+=dt*0.03;
   var nd=(fp.z>2.7&&Math.abs(fp.x)<1.5), npc=houseNearPC(), hint=document.querySelector('#roomui .room-hint');
-  if(hint) hint.innerHTML = npc?'Tu PC — <b>E</b> para abrir el escritorio' : (nd?'<b>E</b> para salir al mundo' : 'WASD moverte · mirá con el mouse · <b>E</b> interactuar');
+  if(hint) hint.innerHTML = npc?(visiting?('💻 La compu de '+visiting):'Tu PC — <b>E</b> para abrir el escritorio') : (nd?'<b>E</b> para salir al mundo' : (visiting?('Estás en la casa de '+visiting+' · <b>E</b> para salir') : 'WASD moverte · mirá con el mouse · <b>E</b> interactuar'));
+  if(ownerAvatar){ ownerAvatar.hips.position.y=0.98+Math.sin(t*1.3)*0.012; ownerAvatar.torso.rotation.y=Math.sin(t*0.5)*0.12; ownerAvatar.head.rotation.y=Math.sin(t*0.4+1)*0.18; if(ownerAvatar.lantGlow) ownerAvatar.lantGlow.scale.setScalar(2.2*(0.92+Math.sin(t*5)*0.06)); }
 }
 function houseNearPC(){ if(!monitorScreen)return false; var mp=new T.Vector3(); monitorScreen.getWorldPosition(mp); return (Math.hypot(fp.x-mp.x,fp.z-mp.z)<2.2 && Math.abs(fp.y-(mp.y-1.62))<2.2); }
-function houseInteract(){ if(houseNearPC()){ openEscritorio(); return; } if(fp.z>2.6&&Math.abs(fp.x)<1.6){ exitRoom(); } }
+function houseInteract(){ if(houseNearPC()){ if(!visiting) openEscritorio(); return; } if(fp.z>2.6&&Math.abs(fp.x)<1.6){ exitRoom(); } }
 addEventListener('keydown',function(e){ if(inRoom&&e.key&&e.key.toLowerCase()==='e') houseInteract(); });
 document.addEventListener('pointerlockchange',function(){ fpLocked=(document.pointerLockElement===canvas); });
 
@@ -734,6 +757,7 @@ document.getElementById('ovBack').addEventListener('click',closeOverlay);
 var prompt=document.getElementById('prompt'), promptRing=document.getElementById('promptRing');
 prompt.addEventListener('click',function(){ if(currentHouse) enter(currentHouse); });
 var roomBackBtn=document.getElementById('roomBack'); if(roomBackBtn) roomBackBtn.addEventListener('click',exitRoom);
+var roomInvBtn=document.getElementById('roomInviteBtn'); if(roomInvBtn) roomInvBtn.addEventListener('click',function(){ if(!me||!me.nick)return; var link=location.origin+'/yata?casa='+encodeURIComponent(me.nick); var ok=false; try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(link); ok=true; } }catch(e){} if(!ok){ try{ var ta=document.createElement('textarea'); ta.value=link; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }catch(e2){} } var old=roomInvBtn.textContent; roomInvBtn.textContent='✓ Link copiado'; setTimeout(function(){ roomInvBtn.textContent=old; },1700); try{ blip(660,0.08,'sine',0.06); }catch(e3){} });
 
 var PAL={
   coat:['#1d2a3a','#20242b','#133a34','#3a1822','#15301f','#241830','#121418','#5a4632'],
@@ -783,7 +807,7 @@ document.getElementById('chipSound').addEventListener('click',function(){ muted=
 
 var me=null;
 fetch('/api/hub/me',{headers:{'accept':'application/json'}}).then(function(r){return r.json();}).then(function(d){
-  if(d&&d.ok&&d.logged){ me=d; if(d.avatar) setAvatar(d.avatar); if(roomDecor.setBannerNick) roomDecor.setBannerNick(d.nick);
+  if(d&&d.ok&&d.logged){ me=d; var _inv=document.getElementById('roomInviteBtn'); if(_inv&&d.nick) _inv.style.display='inline-flex'; if(d.avatar) setAvatar(d.avatar); if(roomDecor.setBannerNick) roomDecor.setBannerNick(d.nick);
     if(d.admin){ document.getElementById('chipAdmin').classList.remove('is-hidden'); document.getElementById('chipClassic').classList.remove('is-hidden'); } }
 }).catch(function(){});
 fetch('/api/world/me',{headers:{'accept':'application/json'}}).then(function(r){return r.json();}).then(function(d){
@@ -880,7 +904,7 @@ function animate(){
 /* ----------------------------------------------------------- start */
 document.getElementById('enterBtn').addEventListener('click',function(){ if(started)return; started=true;
   audioInit(); if(actx&&actx.state==='suspended')actx.resume();
-  document.getElementById('intro').classList.add('hide'); document.getElementById('hud').classList.add('show'); });
+  document.getElementById('intro').classList.add('hide'); document.getElementById('hud').classList.add('show'); if(VISIT){ setTimeout(function(){ enterVisit(VISIT); },350); } });
 setTimeout(function(){ document.getElementById('loader').classList.add('hide'); },800);
 animate();
 

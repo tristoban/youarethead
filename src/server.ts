@@ -1396,6 +1396,17 @@ export function buildApp(db: Db): FastifyInstance {
     const r = await db.query('SELECT world_data FROM hub_users WHERE id = $1', [u.id]);
     return { ok: true, logged: true, data: (r.rows[0]?.world_data as unknown) ?? null };
   });
+  app.get('/api/world/user/:nick', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const raw = String(((req.params ?? {}) as { nick?: unknown }).nick ?? '');
+    let nick = raw; try { nick = decodeURIComponent(raw); } catch { nick = raw; }
+    nick = nick.trim();
+    if (!nick) return reply.code(400).send({ ok: false, error: 'nick' });
+    const r = await db.query('SELECT nick, avatar, world_data FROM hub_users WHERE nick_norm = $1', [nick.toLowerCase()]);
+    const row = r.rows[0];
+    if (!row) return reply.code(404).send({ ok: false, error: 'no_user' });
+    return { ok: true, nick: (row.nick as string | null) ?? nick, avatar: (row.avatar as string | null) ?? null, data: (row.world_data as unknown) ?? null };
+  });
   app.post('/api/world/save', async (req, reply) => {
     const u = await hubUserBySession(db, req);
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
