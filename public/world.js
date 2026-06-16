@@ -110,16 +110,16 @@ renderer.setClearColor(0x090c12,1);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
 renderer.outputEncoding=T.sRGBEncoding;
 renderer.toneMapping=T.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.7;
+renderer.toneMappingExposure=1.35;
 
 var scene=new T.Scene();
-scene.fog=new T.FogExp2(0x1a232a,0.011);
+scene.fog=new T.FogExp2(0x121a1d,0.013);
 var camera=new T.PerspectiveCamera(62, window.innerWidth/window.innerHeight, 0.1, 2000);
 camera.position.set(0,40,60);
 
-scene.add(new T.AmbientLight(0x4a6377,0.9));
-var hemi=new T.HemisphereLight(0x7d97a8,0x0b1712,0.78); scene.add(hemi);
-var moonLight=new T.DirectionalLight(0xb6cee0,1.15); moonLight.position.set(80,50,40); scene.add(moonLight);
+scene.add(new T.AmbientLight(0x3e4a52,0.6));
+var hemi=new T.HemisphereLight(0x5c6e78,0x0a0f0d,0.55); scene.add(hemi);
+var moonLight=new T.DirectionalLight(0x9aa6b0,0.8); moonLight.position.set(80,50,40); scene.add(moonLight);
 var rim=new T.DirectionalLight(0x4fd6c2,0.2); rim.position.set(-60,10,-40); scene.add(rim);
 
 var world=new T.Group(); scene.add(world);
@@ -132,19 +132,22 @@ var POST_FRAG=[
 'uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uTime; varying vec2 vUv;',
 'float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }',
 'void main(){',
-'  vec3 col=texture2D(tDiffuse,vUv).rgb;',
-'  float l=dot(col,vec3(0.299,0.587,0.114));',
-'  col=mix(col,vec3(l),0.38);',
-'  col*=vec3(0.99,1.0,0.99);',
-'  col=pow(clamp(col,0.0,1.0),vec3(0.9));',
-'  float tq=floor(uTime*24.0);',
-'  float dth=hash(floor(vUv*uRes)+tq)-0.5;',
-'  float levels=22.0;',
-'  col=floor(col*levels+0.5+dth*0.9)/levels;',
-'  float gr=hash(vUv*uRes+tq*1.7)-0.5;',
-'  col+=gr*0.06;',
-'  float vig=smoothstep(1.05,0.4,length(vUv-0.5));',
-'  col*=mix(0.84,1.0,vig);',
+'  vec2 px=1.4/uRes;',
+'  vec3 c=texture2D(tDiffuse,vUv).rgb;',
+'  float l0=dot(c,vec3(0.299,0.587,0.114));',
+'  float lx=dot(texture2D(tDiffuse,vUv+vec2(px.x,0.0)).rgb,vec3(0.299,0.587,0.114));',
+'  float lX=dot(texture2D(tDiffuse,vUv-vec2(px.x,0.0)).rgb,vec3(0.299,0.587,0.114));',
+'  float ly=dot(texture2D(tDiffuse,vUv+vec2(0.0,px.y)).rgb,vec3(0.299,0.587,0.114));',
+'  float lY=dot(texture2D(tDiffuse,vUv-vec2(0.0,px.y)).rgb,vec3(0.299,0.587,0.114));',
+'  float edge=abs(l0-lx)+abs(l0-lX)+abs(l0-ly)+abs(l0-lY);',
+'  vec3 col=c;',
+'  float g=dot(col,vec3(0.299,0.587,0.114)); col=mix(col,vec3(g),0.52);',
+'  col*=vec3(0.9,0.97,0.95);',
+'  col=pow(clamp(col,0.0,1.0),vec3(1.16));',
+'  float ink=smoothstep(0.1,0.22,edge);',
+'  col=mix(col,vec3(0.0),ink);',
+'  float vig=smoothstep(1.05,0.32,length(vUv-0.5));',
+'  col*=mix(0.52,1.0,vig);',
 '  gl_FragColor=vec4(col,1.0);',
 '}'].join('\n');
 var postMat=new T.ShaderMaterial({
@@ -153,7 +156,7 @@ var postMat=new T.ShaderMaterial({
   fragmentShader:POST_FRAG, depthTest:false, depthWrite:false
 });
 postScene.add(new T.Mesh(new T.PlaneGeometry(2,2), postMat));
-var PIXEL=2.3;
+var PIXEL=1.0;
 
 /* ----------------------------------------------------------- planet */
 var planetMesh;
@@ -163,7 +166,7 @@ var planetMesh;
     v.copy(d).multiplyScalar(R+noise3(d.clone().multiplyScalar(1.6))*2.1); pos.setXYZ(i,v.x,v.y,v.z); }
   geo.computeVertexNormals(); geo=geo.toNonIndexed();
   var p=geo.attributes.position, col=[];
-  var lo=new T.Color(0x16382f), mid=new T.Color(0x214f40), hi=new T.Color(0x336b50), rock=new T.Color(0x3a4452), moss=new T.Color(0x1c3e33);
+  var lo=new T.Color(0x1e261f), mid=new T.Color(0x2c352c), hi=new T.Color(0x3c4339), rock=new T.Color(0x3c3b3d), moss=new T.Color(0x262e23);
   var c=new T.Color(),a=new T.Vector3(),b=new T.Vector3(),cc=new T.Vector3();
   for(i=0;i<p.count;i+=3){
     a.fromBufferAttribute(p,i); b.fromBufferAttribute(p,i+1); cc.fromBufferAttribute(p,i+2);
@@ -177,7 +180,7 @@ var planetMesh;
   geo.setAttribute('color',new T.Float32BufferAttribute(col,3));
   planetMesh=new T.Mesh(geo, ps1v(new T.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:0.97})));
   world.add(planetMesh);
-  var ocean=new T.Mesh(new T.SphereGeometry(R-0.7,56,56), emat(0x0a2630,0x07212a,0.6,0.35));
+  var ocean=new T.Mesh(new T.SphereGeometry(R-0.7,56,56), emat(0x07100f,0x050d0c,0.3,0.4));
   world.add(ocean);
 })();
 
@@ -391,8 +394,8 @@ var houses=[], pickables=[], labelsBox=document.getElementById('labels');
   });
 })();
 
-instancedField(firGeo,treeMat,150,{min:0.8,max:1.5,avoid:avoidHouses});
-instancedField(deadGeo,deadMat,60,{min:0.8,max:1.6,avoid:avoidHouses});
+instancedField(firGeo,treeMat,60,{min:0.8,max:1.5,avoid:avoidHouses});
+instancedField(deadGeo,deadMat,170,{min:0.8,max:1.6,avoid:avoidHouses});
 instancedField(rockGeo,rockMat,90,{min:0.5,max:1.8});
 instancedField(mushGeo,mushMat,70,{min:0.7,max:1.5,lift:0.02});
 instancedField(crysGeo,crysMat,22,{min:0.6,max:1.5,lift:0.1});
@@ -427,8 +430,8 @@ starField.add(buildStars(1500,1000,2.6,0xb9c8d0,0.7),buildStars(550,750,3.6,0xdf
 scene.add(starField);
 
 var moon=new T.Group();
-var moonBall=new T.Mesh(new T.SphereGeometry(34,32,32),emat(0xcfcad6,0xb7afc4,0.7,1)); moonBall.material.fog=false; moon.add(moonBall);
-var mh1=makeSprite(TEX_SOFT,0xc2bccc,200); mh1.material.fog=false; var mh2=makeSprite(TEX_PURP,0x9b86c8,150); mh2.material.fog=false;
+var moonBall=new T.Mesh(new T.SphereGeometry(34,32,32),emat(0x6e3c30,0x3a1810,0.85,1)); moonBall.material.fog=false; moon.add(moonBall);
+var mh1=makeSprite(TEX_RED,0x8a4438,220); mh1.material.fog=false; var mh2=makeSprite(TEX_RED,0x5a221a,150); mh2.material.fog=false;
 moon.add(mh1); moon.add(mh2);
 moon.position.set(300,150,-340); scene.add(moon);
 
@@ -440,10 +443,10 @@ var NF=150,fireGeo=new T.BufferGeometry(),farr=new Float32Array(NF*3),fph=[];
 for(var fi=0;fi<NF;fi++){ var fd=randDir().multiplyScalar(R+rand(1.5,7)); farr[fi*3]=fd.x;farr[fi*3+1]=fd.y;farr[fi*3+2]=fd.z; fph.push(rand(0,TAU)); }
 fireGeo.setAttribute('position',new T.Float32BufferAttribute(farr,3));
 var fireflies=new T.Points(fireGeo,new T.PointsMaterial({map:TEX_TEAL,color:0x9ff5e2,size:1.6,transparent:true,blending:T.AdditiveBlending,depthWrite:false,opacity:0.85}));
-world.add(fireflies);
+/*sin luciernagas*/
 
 var wisps=[],wi;
-for(wi=0;wi<14;wi++){ var col=pick([0x7ff0dd,0x9affb0,0xb59cff,0x8fd0ff]);
+for(wi=0;wi<0;wi++){ var col=pick([0x7ff0dd,0x9affb0,0xb59cff,0x8fd0ff]);
   var s=makeSprite(col===0xb59cff?TEX_PURP:(col===0x8fd0ff?TEX_SOFT:TEX_GRN),col,rand(0.8,1.5));
   var d=randDir(); var p=d.clone().multiplyScalar(terrainR(d)+rand(1.5,4));
   s.position.copy(p); world.add(s); wisps.push({sp:s,pos:p.clone(),target:p.clone(),ph:rand(0,TAU)}); }
@@ -468,7 +471,8 @@ var courier=new T.Group(), visor, lanternPivot, lanternGlow, courierLight;
   courier.add(meshAt(new T.BoxGeometry(0.5,0.05,0.04),teal,0,1.35,0.45));
   courier.add(meshAt(new T.SphereGeometry(0.22,8,8),coat2,-0.42,1.4,0)); courier.add(meshAt(new T.SphereGeometry(0.22,8,8),coat2,0.42,1.4,0));
   courier.add(meshAt(new T.SphereGeometry(0.34,16,16),emat(0x2b3d4f,0,0,0.7),0,1.78,0));
-  var hood=meshAt(coneGeo(0.5,0.6,10),coat,0,1.95,-0.05); hood.rotation.x=-0.15; courier.add(hood);
+  var hood=meshAt(coneGeo(0.58,0.82,10),coat,0,2.04,-0.06); hood.rotation.x=-0.16; courier.add(hood);
+  courier.add(meshAt(cylGeo(0.5,0.64,1.55,9),coat,0,0.78,0));
   visor=meshAt(new T.BoxGeometry(0.42,0.12,0.16),teal,0,1.8,0.28); courier.add(visor);
   var faceMat=new T.MeshBasicMaterial({color:0xffffff,transparent:true,depthWrite:false});
   var face=meshAt(new T.PlaneGeometry(0.5,0.5),faceMat,0,1.8,0.27); face.visible=false; courier.add(face);
@@ -672,7 +676,7 @@ function npcStep(n,dt){
 var posN=new T.Vector3(0,0,1), fwd=new T.Vector3(0,1,0);
 function orthonormalize(){ fwd.addScaledVector(posN,-fwd.dot(posN)); if(fwd.lengthSq()<1e-6) fwd.set(posN.y,-posN.x,0); fwd.normalize(); }
 orthonormalize(); posN.copy(houses[0].dir).applyAxisAngle(new T.Vector3(1,0,0),0.5).normalize(); orthonormalize();
-var SPEED=0.42, TURN=2.2, walkBob=0, vel=0;
+var SPEED=0.26, TURN=1.9, walkBob=0, vel=0;
 function moveForward(ds){ var right=new T.Vector3().crossVectors(posN,fwd).normalize(); posN.applyAxisAngle(right,ds).normalize(); fwd.applyAxisAngle(right,ds); orthonormalize(); }
 function turn(a){ fwd.applyAxisAngle(posN,a); orthonormalize(); }
 
