@@ -12,7 +12,7 @@
 <meta property="og:image" content="/logoyatasocial.png" />
 <meta name="twitter:card" content="summary_large_image" />
 <link rel="icon" href="/favicon-02.png" type="image/png" />
-<link rel="stylesheet" href="/world.css?v=11" />
+<link rel="stylesheet" href="/world.css?v=12" />
 <style>
   #intro .logo{width:min(540px,82vw);height:auto;display:block;margin:2px auto 0;
     filter:drop-shadow(0 6px 30px rgba(116,224,208,.30)) drop-shadow(0 0 10px rgba(255,255,255,.14))}
@@ -25,6 +25,7 @@
   <canvas id="c"></canvas>
   <div id="vignette"></div>
   <div id="fade"></div>
+  <div id="nightveil"></div>
   <div id="crosshair"></div>
 
   <!-- floating house labels (positioned by world.js) -->
@@ -38,9 +39,11 @@
       <div class="chip" id="chipMsg" title="Mensajes" data-sec="mensajes"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/></svg></div>
       <div class="chip" id="chipFriends" title="Amigos" data-sec="amigos"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c0-3.3 3-5 5.5-5s5.5 1.7 5.5 5"/><path d="M16 6.5a3 3 0 010 6"/></svg></div>
       <div class="chip admin is-hidden" id="chipAdmin" title="Admin" data-sec="admin"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg></div>
+      <div class="chip" id="chipRank" title="Los que más aguantan"><svg viewBox="0 0 24 24"><path d="M7 4h10v3a5 5 0 01-10 0z"/><path d="M5 5H3v2a3 3 0 003 3M19 5h2v2a3 3 0 01-3 3M9 20h6M12 12v8"/></svg></div>
       <div class="chip" id="chipSound" title="Sonido"><svg viewBox="0 0 24 24" id="soundIco"><path d="M5 9v6h4l5 4V5L9 9H5z"/><path d="M16 9a3 3 0 010 6"/></svg></div>
       <div class="chip admin is-hidden" id="chipClassic" title="Ver versión clásica"><svg viewBox="0 0 24 24"><path d="M4 5h16v12H4z"/><path d="M2 21h20"/><path d="M9 9h6M9 13h4"/></svg></div>
     </div>
+    <div id="streakChip" title="Tu racha — tocá para ver el ranking"><span id="streakDot"></span><span id="streakVal">0s</span><span id="streakPhase" class="ph day">DÍA</span></div>
     <div id="hint">
       <span><b>Movete</b> y entrá a los edificios</span>
       <span class="k">W A S D</span><span class="k">↑ ← ↓ →</span><span class="k">E entrar</span>
@@ -130,6 +133,12 @@
     <div class="keys"><span class="k">W A S D / flechas — moverte</span><span class="k">E / click — entrar</span></div>
   </div>
 
+  <!-- leaderboard -->
+  <div id="board">
+    <div class="bd-head"><b>Los que más aguantan</b><button id="boardClose" type="button">✕</button></div>
+    <div id="boardList"></div>
+  </div>
+
   <!-- loader -->
   <div id="loader">
     <div class="orbit"><b></b><i></i></div>
@@ -137,6 +146,6 @@
   </div>
 
   <script src="/three.min.js?v=128"></script>
-  <script src="/world.js?v=14"></script>
+  <script src="/world.js?v=15"></script>
 </body>
 </html>

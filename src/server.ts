@@ -209,6 +209,10 @@ export async function initDb(db: Db): Promise<void> {
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS badges jsonb;`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS streak INT NOT NULL DEFAULT 0;`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS streak_day DATE;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS alive_secs INT NOT NULL DEFAULT 0;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS alive_since TIMESTAMPTZ;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS alive_seen TIMESTAMPTZ;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS alive_best INT NOT NULL DEFAULT 0;`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS nick_changed TIMESTAMPTZ;`);
   await db.query(`
     CREATE TABLE IF NOT EXISTS grupos (
@@ -1417,6 +1421,37 @@ export function buildApp(db: Db): FastifyInstance {
       return { nick: (row.nick as string | null) ?? '', avatar: (row.avatar as string | null) ?? null, fit: wd && wd.fit ? wd.fit : null };
     });
     return { ok: true, people };
+  });
+  app.post('/api/world/alive', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    const now = Date.now();
+    if (!u) return { ok: true, logged: false, streak: 0, best: 0, now: Math.floor(now / 1000) };
+    const active = ((req.body ?? {}) as { active?: unknown }).active === true;
+    const r = await db.query('SELECT alive_secs, alive_since, alive_seen, alive_best FROM hub_users WHERE id = $1', [u.id]);
+    const row = r.rows[0] ?? {};
+    const GAP = 40000;
+    let secs = Number(row.alive_secs ?? 0) || 0;
+    const since = row.alive_since ? new Date(row.alive_since).getTime() : 0;
+    const seen = row.alive_seen ? new Date(row.alive_seen).getTime() : 0;
+    if (since) { const end = (seen && now - seen > GAP) ? seen : now; secs += Math.max(0, Math.round((end - since) / 1000)); }
+    const best = Math.max(Number(row.alive_best ?? 0) || 0, secs);
+    const nextSince = active ? new Date(now).toISOString() : null;
+    await db.query('UPDATE hub_users SET alive_secs = $2, alive_since = $3, alive_seen = $4, alive_best = $5 WHERE id = $1', [u.id, secs, nextSince, new Date(now).toISOString(), best]);
+    return { ok: true, logged: true, streak: secs, best, now: Math.floor(now / 1000) };
+  });
+  app.post('/api/world/fell', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return { ok: true };
+    await db.query('UPDATE hub_users SET alive_secs = 0, alive_since = NULL WHERE id = $1', [u.id]);
+    return { ok: true };
+  });
+  app.get('/api/world/leaderboard', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const r = await db.query("SELECT nick, alive_secs, (alive_seen > now() - interval '45 seconds') AS online FROM hub_users WHERE nick IS NOT NULL AND alive_secs > 0 ORDER BY alive_secs DESC LIMIT 10");
+    const top = r.rows.map((row) => ({ nick: row.nick as string, secs: Number(row.alive_secs ?? 0) || 0, online: row.online === true }));
+    return { ok: true, top };
   });
   app.post('/api/world/save', async (req, reply) => {
     const u = await hubUserBySession(db, req);
