@@ -462,36 +462,54 @@ function spawnShooter(){ var from=randDir().multiplyScalar(900); from.y=Math.abs
   shooters.push({sp:sp,from:from,to:to,t:0,life:rand(0.7,1.2)}); }
 
 /* ----------------------------------------------------------- courier (vos) + vestuario */
-var courier=new T.Group(), visor, lanternPivot, lanternGlow, courierLight;
-(function buildCourier(){
-  var coat=emat(0x1d2a3a,0,0,0.78), coat2=emat(0x16222f,0,0,0.8), teal=emat(0x59f0d8,0x59f0d8,1.5,0.3), dark=emat(0x141b26,0,0,0.7);
-  courier.add(meshAt(cylGeo(0.16,0.2,0.7,6),dark,-0.16,0.35,0)); courier.add(meshAt(cylGeo(0.16,0.2,0.7,6),dark,0.16,0.35,0));
-  courier.add(meshAt(cylGeo(0.42,0.5,1.0,8),coat,0,1.0,0));
-  courier.add(meshAt(new T.BoxGeometry(0.06,0.95,0.04),teal,0,1.0,0.46));
-  courier.add(meshAt(new T.BoxGeometry(0.5,0.05,0.04),teal,0,1.35,0.45));
-  courier.add(meshAt(new T.SphereGeometry(0.22,8,8),coat2,-0.42,1.4,0)); courier.add(meshAt(new T.SphereGeometry(0.22,8,8),coat2,0.42,1.4,0));
-  courier.add(meshAt(new T.SphereGeometry(0.34,16,16),emat(0x2b3d4f,0,0,0.7),0,1.78,0));
-  var hood=meshAt(coneGeo(0.58,0.82,10),coat,0,2.04,-0.06); hood.rotation.x=-0.16; courier.add(hood);
-  courier.add(meshAt(cylGeo(0.5,0.64,1.55,9),coat,0,0.78,0));
-  visor=meshAt(new T.BoxGeometry(0.42,0.12,0.16),teal,0,1.8,0.28); courier.add(visor);
-  var faceMat=new T.MeshBasicMaterial({color:0xffffff,transparent:true,depthWrite:false});
-  var face=meshAt(new T.PlaneGeometry(0.5,0.5),faceMat,0,1.8,0.27); face.visible=false; courier.add(face);
-  courier.add(meshAt(new T.BoxGeometry(0.5,0.5,0.42),emat(0x123a34,0x1d8a7d,0.6,0.6),0.5,0.95,-0.02));
-  courier.add(meshAt(new T.BoxGeometry(0.62,0.08,0.04),teal,0.2,1.25,0.3));
-  lanternPivot=new T.Group(); lanternPivot.position.set(-0.5,1.35,0.15); courier.add(lanternPivot);
-  lanternPivot.add(meshAt(cylGeo(0.07,0.07,0.7,6),coat2,0,-0.3,0));
-  var lantMat=emat(0xffe6b0,0xffce80,2.4,0.3); lanternPivot.add(meshAt(new T.IcosahedronGeometry(0.2,0),lantMat,0,-0.72,0));
-  lanternGlow=makeSprite(TEX_WARM,0xffd98f,2.6); lanternGlow.position.set(0,-0.72,0); lanternPivot.add(lanternGlow);
-  courierLight=new T.PointLight(0xffd28a,1.5,12); courierLight.position.set(0,-0.7,0); lanternPivot.add(courierLight);
-  var hats={};
-  function addHat(name,obj){ obj.visible=false; courier.add(obj); hats[name]=obj; }
-  var gorro=new T.Group(); gorro.add(meshAt(cylGeo(0.32,0.35,0.3,10),emat(0x2a2f38),0,2.02,0)); gorro.add(meshAt(new T.SphereGeometry(0.1,8,8),emat(0xff5ad0,0xff5ad0,0.7),0,2.22,0)); addHat('gorro',gorro);
-  var gorra=new T.Group(); gorra.add(meshAt(new T.SphereGeometry(0.34,12,8,0,TAU,0,Math.PI/2),emat(0x1d2a3a),0,1.98,0)); gorra.add(meshAt(new T.BoxGeometry(0.5,0.06,0.34),emat(0x1d2a3a),0,1.97,0.34)); addHat('gorra',gorra);
-  var galera=new T.Group(); galera.add(meshAt(cylGeo(0.3,0.3,0.5,12),emat(0x121418),0,2.22,0)); galera.add(meshAt(cylGeo(0.44,0.44,0.05,12),emat(0x121418),0,1.99,0)); galera.add(meshAt(cylGeo(0.305,0.305,0.06,12),emat(0x59f0d8,0x59f0d8,0.5),0,2.02,0)); addHat('galera',galera);
-  var aura=meshAt(new T.TorusGeometry(0.27,0.04,8,24),emat(0xffe07a,0xffe07a,2.2),0,2.4,0); aura.rotation.x=Math.PI/2; addHat('aura',aura);
-  var cuernos=new T.Group(); var cm=emat(0x3a1414,0xff3a2a,0.6); var c1=meshAt(coneGeo(0.08,0.32,6),cm,-0.18,2.12,0); c1.rotation.z=0.3; var c2=meshAt(coneGeo(0.08,0.32,6),cm,0.18,2.12,0); c2.rotation.z=-0.3; cuernos.add(c1); cuernos.add(c2); addHat('cuernos',cuernos);
-  courier.userData={faceMat:faceMat,face:face,matCoat:coat,matCoat2:coat2,matAccent:teal,matLantern:lantMat,hats:hats};
-})();
+function buildFigure(opt){
+  opt=opt||{};
+  var g=new T.Group();
+  var coat=emat(opt.coat||0x1d2a3a,0,0,0.78), coat2=emat(opt.coat2||0x16222f,0,0,0.8), accent=emat(opt.accent||0x59f0d8,opt.accent||0x59f0d8,1.4,0.3), dark=emat(0x12161c,0,0,0.72), skin=emat(0x2b3d4f,0,0,0.7);
+  var hips=new T.Group(); hips.position.y=0.98; g.add(hips);
+  var torso=new T.Group(); hips.add(torso);
+  torso.add(meshAt(cylGeo(0.24,0.32,0.72,8),coat,0,0.36,0));
+  torso.add(meshAt(new T.BoxGeometry(0.05,0.64,0.05),accent,0,0.36,0.3));
+  torso.add(meshAt(new T.BoxGeometry(0.42,0.05,0.05),accent,0,0.62,0.29));
+  torso.add(meshAt(new T.SphereGeometry(0.15,8,8),coat2,-0.28,0.66,0)); torso.add(meshAt(new T.SphereGeometry(0.15,8,8),coat2,0.28,0.66,0));
+  var cape=meshAt(coneGeo(0.42,1.05,8,1,true),coat,0,0.2,-0.16); cape.rotation.x=0.08; torso.add(cape);
+  var head=new T.Group(); head.position.set(0,0.82,0); torso.add(head);
+  head.add(meshAt(cylGeo(0.07,0.09,0.13,6),skin,0,-0.04,0));
+  head.add(meshAt(new T.SphereGeometry(0.2,14,12),skin,0,0.17,0));
+  var hood=meshAt(coneGeo(0.34,0.52,10),coat,0,0.3,-0.04); hood.rotation.x=-0.18; head.add(hood);
+  var visor=meshAt(new T.BoxGeometry(0.26,0.07,0.1),accent,0,0.17,0.17); head.add(visor);
+  var faceMat=new T.MeshBasicMaterial({color:0xffffff,transparent:true,depthWrite:false}); var face=meshAt(new T.PlaneGeometry(0.3,0.3),faceMat,0,0.17,0.165); face.visible=false; head.add(face);
+  function arm(side){ var a=new T.Group(); a.position.set(side*0.3,0.6,0); torso.add(a);
+    a.add(meshAt(cylGeo(0.07,0.08,0.36,6),coat,0,-0.18,0));
+    var fore=new T.Group(); fore.position.y=-0.36; a.add(fore);
+    fore.add(meshAt(cylGeo(0.06,0.07,0.34,6),coat2,0,-0.17,0)); fore.add(meshAt(new T.SphereGeometry(0.06,6,6),dark,0,-0.35,0));
+    return {a:a,fore:fore}; }
+  var armL=arm(-1), armR=arm(1);
+  function leg(side){ var l=new T.Group(); l.position.set(side*0.13,0,0); hips.add(l);
+    l.add(meshAt(cylGeo(0.09,0.1,0.48,6),dark,0,-0.26,0));
+    var shin=new T.Group(); shin.position.y=-0.48; l.add(shin);
+    shin.add(meshAt(cylGeo(0.07,0.08,0.44,6),dark,0,-0.23,0)); shin.add(meshAt(new T.BoxGeometry(0.14,0.11,0.28),coat2,0,-0.48,0.06));
+    return {l:l,shin:shin}; }
+  var legL=leg(-1), legR=leg(1);
+  torso.add(meshAt(new T.BoxGeometry(0.32,0.32,0.26),emat(0x123a34,0x1d8a7d,0.5,0.6),0.32,0.32,-0.02));
+  torso.add(meshAt(new T.BoxGeometry(0.5,0.07,0.04),accent,0.12,0.55,0.27));
+  var lantMat=emat(0xffe6b0,opt.lantern||0xffce80,2.2,0.3);
+  var lantGrp=new T.Group(); lantGrp.position.set(0,-0.37,0.1); armL.fore.add(lantGrp);
+  lantGrp.add(meshAt(cylGeo(0.02,0.02,0.12,5),dark,0,0.08,0)); lantGrp.add(meshAt(new T.IcosahedronGeometry(0.13,0),lantMat,0,-0.05,0));
+  var lantGlow=makeSprite(TEX_WARM,opt.lantern||0xffd98f,opt.npc?1.5:2.4); lantGlow.position.set(0,-0.05,0); lantGrp.add(lantGlow);
+  var lantLight=null; if(opt.withLight){ lantLight=new T.PointLight(opt.lantern||0xffd28a,1.3,11); lantLight.position.set(0,-0.05,0); lantGrp.add(lantLight); }
+  var hats={}; function addHat(name,obj){ obj.visible=false; head.add(obj); hats[name]=obj; }
+  var gorro=new T.Group(); gorro.add(meshAt(cylGeo(0.2,0.22,0.18,10),emat(0x2a2f38),0,0.26,0)); gorro.add(meshAt(new T.SphereGeometry(0.06,8,8),emat(0xff5ad0,0xff5ad0,0.7),0,0.4,0)); addHat('gorro',gorro);
+  var gorra=new T.Group(); gorra.add(meshAt(new T.SphereGeometry(0.21,12,8,0,TAU,0,Math.PI/2),emat(0x1d2a3a),0,0.24,0)); gorra.add(meshAt(new T.BoxGeometry(0.32,0.04,0.2),emat(0x1d2a3a),0,0.23,0.2)); addHat('gorra',gorra);
+  var galera=new T.Group(); galera.add(meshAt(cylGeo(0.18,0.18,0.34,12),emat(0x121418),0,0.42,0)); galera.add(meshAt(cylGeo(0.28,0.28,0.04,12),emat(0x121418),0,0.26,0)); galera.add(meshAt(cylGeo(0.185,0.185,0.05,12),emat(0x59f0d8,0x59f0d8,0.5),0,0.28,0)); addHat('galera',galera);
+  var aura=meshAt(new T.TorusGeometry(0.24,0.03,8,24),emat(0xffe07a,0xffe07a,2.2),0,0.5,0); aura.rotation.x=Math.PI/2; addHat('aura',aura);
+  var cuernos=new T.Group(); var cm=emat(0x3a1414,0xff3a2a,0.6); var c1=meshAt(coneGeo(0.06,0.22,6),cm,-0.13,0.32,0); c1.rotation.z=0.35; var c2=meshAt(coneGeo(0.06,0.22,6),cm,0.13,0.32,0); c2.rotation.z=-0.35; cuernos.add(c1); cuernos.add(c2); addHat('cuernos',cuernos);
+  return {group:g,hips:hips,torso:torso,head:head,legL:legL.l,legLs:legL.shin,legR:legR.l,legRs:legR.shin,armL:armL.a,armR:armR.a,
+    matCoat:coat,matCoat2:coat2,matAccent:accent,matLantern:lantMat,lantGlow:lantGlow,lantLight:lantLight,faceMat:faceMat,face:face,hats:hats,visor:visor};
+}
+var courierFig=buildFigure({coat:0x1d2a3a,accent:0x59f0d8,lantern:0xffce80,withLight:true});
+var courier=courierFig.group, visor=courierFig.visor, lanternGlow=courierFig.lantGlow, courierLight=courierFig.lantLight;
+courier.userData={faceMat:courierFig.faceMat,face:courierFig.face,matCoat:courierFig.matCoat,matCoat2:courierFig.matCoat2,matAccent:courierFig.matAccent,matLantern:courierFig.matLantern,hats:courierFig.hats};
 world.add(courier);
 var shadow=new T.Mesh(new T.CircleGeometry(1.0,20),new T.MeshBasicMaterial({map:TEX_SHADOW,transparent:true,opacity:0.5,depthWrite:false})); world.add(shadow);
 function setAvatar(url){ if(!url)return; var l=new T.TextureLoader(); l.setCrossOrigin('anonymous');
@@ -623,19 +641,11 @@ document.addEventListener('pointerlockchange',function(){ fpLocked=(document.poi
 var npcNames=['Nochi','osaaran','z_Juan','EXO','fabrx','Polizzeh','dilan','n!co','Soo','justdag','Haze'];
 var npcs=[];
 function makeNPC(){
-  var g=new T.Group(); var col=pick([0x223044,0x2a2436,0x1f3a36,0x33283a]);
-  g.add(meshAt(cylGeo(0.16,0.2,0.6,6),emat(0x141b26,0,0,0.8),-0.14,0.3,0)); g.add(meshAt(cylGeo(0.16,0.2,0.6,6),emat(0x141b26,0,0,0.8),0.14,0.3,0));
-  g.add(meshAt(cylGeo(0.38,0.46,0.9,7),emat(col,0,0,0.8),0,0.95,0));
-  g.add(meshAt(new T.SphereGeometry(0.3,12,12),emat(0x2b3d4f),0,1.65,0));
-  var hood=meshAt(coneGeo(0.44,0.52,9),emat(col),0,1.8,-0.04); hood.rotation.x=-0.15; g.add(hood);
-  var ec=pick([0x59f0d8,0xff5ad0,0xffca6a,0x8fd0ff]);
-  g.add(meshAt(new T.BoxGeometry(0.34,0.1,0.14),emat(ec,ec,1.4,0.3),0,1.66,0.24));
-  var lant=makeSprite(TEX_WARM,0xffd98f,1.8); lant.position.set(-0.42,1.0,0.2); g.add(lant);
-  g.add(meshAt(new T.IcosahedronGeometry(0.13,0),emat(0xffe6b0,0xffce80,2.0,0.3),-0.42,1.0,0.2));
-  world.add(g);
+  var cc=pick([0x223044,0x2a2436,0x1f3a36,0x33283a]), ec=pick([0x59f0d8,0xff5ad0,0xffca6a,0x8fd0ff]);
+  var fig=buildFigure({coat:cc,accent:ec,lantern:0xffce80,npc:true}); world.add(fig.group);
   var el=document.createElement('div'); el.className='label npc'; el.innerHTML='<span class="dotn"></span>'+pick(npcNames); labelsBox.appendChild(el);
-  var d=randDir(); var posN2=d.clone(); var fwd2=new T.Vector3().crossVectors(posN2,UP_Y).normalize();
-  return {group:g,posN:posN2,fwd:fwd2,target:randDir(),spd:rand(0.18,0.32),el:el,bob:rand(0,TAU),lant:lant};
+  var d=randDir();
+  return {group:fig.group,fig:fig,posN:d.clone(),fwd:new T.Vector3().crossVectors(d,UP_Y).normalize(),target:randDir(),spd:rand(0.16,0.3),el:el,bob:rand(0,TAU)};
 }
 var ni; for(ni=0;ni<9;ni++) npcs.push(makeNPC());
 
@@ -657,6 +667,7 @@ function npcStep(n,dt){
   n.group.position.copy(sp).addScaledVector(n.posN,0.02+bob);
   var r2=new T.Vector3().crossVectors(n.posN,n.fwd).normalize(), f2=new T.Vector3().crossVectors(r2,n.posN).normalize();
   n.group.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(r2,n.posN,f2));
+  if(n.fig){ var ph=n.bob*1.5; n.fig.legL.rotation.x=Math.sin(ph)*0.45; n.fig.legR.rotation.x=-Math.sin(ph)*0.45; n.fig.armL.rotation.x=-Math.sin(ph)*0.35; n.fig.armR.rotation.x=Math.sin(ph)*0.35; n.fig.legLs.rotation.x=Math.max(0,-Math.sin(ph))*0.4; n.fig.legRs.rotation.x=Math.max(0,Math.sin(ph))*0.4; }
 }
 
 /* ----------------------------------------------------------- movimiento (vos) */
@@ -825,7 +836,11 @@ function animate(){
   courier.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(right,up,f2));
   courier.rotateZ(-steer*0.16*vel); courier.rotateX(-0.12*vel);
   if(shopOpen){ shopSpin+=dt*0.7; courier.rotateY(shopSpin); }
-  if(lanternPivot) lanternPivot.rotation.x=Math.sin(walkBob*0.5)*0.25*vel + Math.sin(t*1.3)*0.05;
+  { var ph=walkBob, sw=clamp(vel,0,1);
+    courierFig.legL.rotation.x=Math.sin(ph)*0.5*sw; courierFig.legR.rotation.x=-Math.sin(ph)*0.5*sw;
+    courierFig.legLs.rotation.x=Math.max(0,-Math.sin(ph))*0.45*sw; courierFig.legRs.rotation.x=Math.max(0,Math.sin(ph))*0.45*sw;
+    courierFig.armL.rotation.x=-Math.sin(ph)*0.4*sw+Math.sin(t*1.3)*0.04; courierFig.armR.rotation.x=Math.sin(ph)*0.4*sw;
+    courierFig.torso.rotation.y=Math.sin(ph)*0.05*sw; courierFig.hips.position.y=0.98+Math.abs(Math.sin(ph))*0.03*sw; }
   shadow.position.copy(sp).addScaledVector(posN,0.05); orientToDir(shadow,posN); shadow.rotateX(-Math.PI/2);
   var fl=0.85+Math.sin(t*9)*0.06+Math.random()*0.05; if(courierLight)courierLight.intensity=1.4*fl; if(lanternGlow)lanternGlow.scale.setScalar(2.6*fl);
 
@@ -838,7 +853,7 @@ function animate(){
 
   for(i=0;i<npcs.length;i++){ var n=npcs[i]; if(!paused&&started)npcStep(n,dt); var ns=projectToScreen(n.group.position);
     if(ns.behind||posN.angleTo(n.posN)>0.6){ n.el.style.opacity=0; } else { n.el.style.left=ns.x+'px'; n.el.style.top=(ns.y-34)+'px'; n.el.style.opacity=clamp(0.9-posN.angleTo(n.posN),0,0.9); }
-    n.lant.scale.setScalar(1.8*(0.9+Math.sin(t*7+n.bob)*0.08)); }
+    if(n.fig&&n.fig.lantGlow) n.fig.lantGlow.scale.setScalar(1.6*(0.9+Math.sin(t*7+n.bob)*0.08)); }
   for(i=0;i<spirits.length;i++){ var s2=spirits[i], dd=s2.userData; dd.dir.applyAxisAngle(UP_Y,dt*0.06);
     var ps=surfacePoint(dd.dir).addScaledVector(dd.dir,2.2+Math.sin(t*0.8+dd.ph)*0.6); s2.position.copy(ps); orientToDir(s2,dd.dir); s2.children[2].material.opacity=0.5+0.3*Math.sin(t*2+dd.ph); }
 
