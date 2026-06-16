@@ -195,6 +195,7 @@
     const embed = params.get("embed") === "1";
     const embSec = params.get("sec");
     if (embed) { document.body.classList.add("yata-embed"); if (!document.getElementById("yata-embed-css")) { const st = document.createElement("style"); st.id = "yata-embed-css"; st.textContent = ".yata-embed .pf-left,.yata-embed .pf-right,.yata-embed .pf-topbar,.yata-embed .pf-tabbar{display:none!important}.yata-embed .pf-app{display:block!important}.yata-embed .pf-center{max-width:760px;margin:0 auto}"; document.head.appendChild(st); } }
+    try { if (!embed && /(?:^|;\s*)yata_view=clasico/.test(document.cookie)) { var _vb = document.createElement("a"); _vb.href = "/yata?mundo=1"; _vb.id = "yata-back-mundo"; _vb.textContent = "🌍 Volver al juego"; _vb.style.cssText = "position:fixed;z-index:99999;right:14px;bottom:14px;padding:11px 16px;border-radius:999px;background:#000;color:#fff;border:1px solid #2a2a2a;font:700 14px ui-sans-serif,system-ui,sans-serif;text-decoration:none;box-shadow:0 8px 30px rgba(0,0,0,.6)"; (document.body || document.documentElement).appendChild(_vb); } } catch (e) {}
     const oauth = params.get("oauth");
     if (oauth) history.replaceState(null, "", location.pathname);
     const llaveT = params.get("llave");
