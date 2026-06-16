@@ -184,7 +184,7 @@ var planetMesh;
   geo.setAttribute('color',new T.Float32BufferAttribute(col,3));
   planetMesh=new T.Mesh(geo, ps1v(new T.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:0.97})));
   world.add(planetMesh);
-  var ocean=new T.Mesh(new T.SphereGeometry(R-0.7,56,56), emat(0x07100f,0x050d0c,0.3,0.4));
+  var ocean=new T.Mesh(new T.SphereGeometry(R-0.7,56,56), new T.MeshStandardMaterial({color:0x07100f,emissive:0x050d0c,emissiveIntensity:0.3,roughness:0.4,flatShading:true}));
   world.add(ocean);
 })();
 
@@ -665,16 +665,28 @@ addEventListener('keydown',function(e){ if(inRoom&&e.key&&e.key.toLowerCase()===
 document.addEventListener('pointerlockchange',function(){ fpLocked=(document.pointerLockElement===canvas); });
 
 /* ----------------------------------------------------------- NPCs */
-var npcNames=['Nochi','osaaran','z_Juan','EXO','fabrx','Polizzeh','dilan','n!co','Soo','justdag','Haze'];
 var npcs=[];
-function makeNPC(){
-  var cc=pick([0x223044,0x2a2436,0x1f3a36,0x33283a]), ec=pick([0x59f0d8,0xff5ad0,0xffca6a,0x8fd0ff]);
-  var fig=buildFigure({coat:cc,accent:ec,lantern:0xffce80,npc:true}); world.add(fig.group);
-  var el=document.createElement('div'); el.className='label npc'; el.innerHTML='<span class="dotn"></span>'+pick(npcNames); labelsBox.appendChild(el);
+function npcFigFor(person){
+  var fit=(person&&person.fit)?person.fit:{};
+  var cc=fit.coat||pick([0x223044,0x2a2436,0x1f3a36,0x33283a]), ec=fit.accent||pick([0x59f0d8,0xff5ad0,0xffca6a,0x8fd0ff]), lc=fit.lantern||0xffce80;
+  var fig=buildFigure({coat:cc,accent:ec,lantern:lc,npc:true});
+  if(fig.matCoat2){ fig.matCoat2.color.set(cc); fig.matCoat2.color.multiplyScalar(0.82); }
+  if(fit.hat&&fit.hat!=='none'&&fig.hats[fit.hat]) fig.hats[fit.hat].visible=true;
+  if(person&&person.avatar){ var l=new T.TextureLoader(); l.setCrossOrigin('anonymous'); l.load(person.avatar,function(tex){ tex.encoding=T.sRGBEncoding; fig.faceMat.map=tex; fig.faceMat.needsUpdate=true; fig.face.visible=true; if(fig.visor)fig.visor.visible=false; },undefined,function(){}); }
+  return fig;
+}
+function makeNPC(person){
+  var fig=npcFigFor(person); world.add(fig.group);
+  var nm=(person&&person.nick)?(''+person.nick):'?';
+  var el=document.createElement('div'); el.className='label npc'; var dn=document.createElement('span'); dn.className='dotn'; el.appendChild(dn); el.appendChild(document.createTextNode(' '+nm)); labelsBox.appendChild(el);
   var d=randDir();
   return {group:fig.group,fig:fig,posN:d.clone(),fwd:new T.Vector3().crossVectors(d,UP_Y).normalize(),target:randDir(),spd:rand(0.16,0.3),el:el,bob:rand(0,TAU)};
 }
-var ni; for(ni=0;ni<9;ni++) npcs.push(makeNPC());
+var ni;
+fetch('/api/world/people',{headers:{'accept':'application/json'}}).then(function(r){return r.json();}).then(function(d){
+  var ppl=(d&&d.ok&&d.people)?d.people:[];
+  for(var pi=0;pi<ppl.length&&pi<12;pi++) npcs.push(makeNPC(ppl[pi]));
+}).catch(function(){});
 
 var spirits=[];
 for(ni=0;ni<3;ni++){ var sg=new T.Group(); var sm=ps1v(new T.MeshStandardMaterial({color:0x8fb6d6,transparent:true,opacity:0.32,emissive:0x4a7fb0,emissiveIntensity:0.6,flatShading:true}));

@@ -1407,6 +1407,17 @@ export function buildApp(db: Db): FastifyInstance {
     if (!row) return reply.code(404).send({ ok: false, error: 'no_user' });
     return { ok: true, nick: (row.nick as string | null) ?? nick, avatar: (row.avatar as string | null) ?? null, data: (row.world_data as unknown) ?? null };
   });
+  app.get('/api/world/people', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    const meId = u ? u.id : 0;
+    const r = await db.query("SELECT nick, avatar, world_data FROM hub_users WHERE nick IS NOT NULL AND banned IS NOT TRUE AND id <> $1 ORDER BY random() LIMIT 12", [meId]);
+    const people = r.rows.map((row) => {
+      const wd = (row.world_data ?? null) as { fit?: unknown } | null;
+      return { nick: (row.nick as string | null) ?? '', avatar: (row.avatar as string | null) ?? null, fit: wd && wd.fit ? wd.fit : null };
+    });
+    return { ok: true, people };
+  });
   app.post('/api/world/save', async (req, reply) => {
     const u = await hubUserBySession(db, req);
     if (!u) return reply.code(401).send({ ok: false, error: 'login' });
