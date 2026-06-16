@@ -1,7 +1,7 @@
 /* ===========================================================================
    YATA — el mundo (planeta embrujado, estética PS1 / Silent Hill).
    Render a baja resolución + niebla + grano/dither + wobble de vértices.
-   Casas abren la app en overlay. La Sastrería abre el vestuario del courier.
+   Casas abren la app en overlay. Sastrería = vestuario. My Hell = tu cuarto.
    Three r128 (global THREE, vendoreado).
    =========================================================================== */
 (function () {
@@ -99,6 +99,9 @@ function instAt(mesh,i,dir,scaleV,yaw,lift){
   _s.copy(scaleV);
   _m.compose(_p,_q,_s); mesh.setMatrixAt(i,_m);
 }
+function meshAt(geo,mat,x,y,z){ var m=new T.Mesh(geo,mat); m.position.set(x,y,z); return m; }
+function coneGeo(r,h,seg){ return new T.ConeGeometry(r,h,seg||7); }
+function cylGeo(r1,r2,h,seg){ return new T.CylinderGeometry(r1,r2,h,seg||6); }
 
 /* ----------------------------------------------------------- renderer/scene */
 var canvas=document.getElementById('c');
@@ -121,7 +124,7 @@ var rim=new T.DirectionalLight(0x4fd6c2,0.2); rim.position.set(-60,10,-40); scen
 
 var world=new T.Group(); scene.add(world);
 
-/* ----------------------------------------------------------- POST: render PS1 a baja resolución */
+/* ----------------------------------------------------------- POST PS1 (sin scanlines) */
 var rt=new T.WebGLRenderTarget(2,2,{minFilter:T.NearestFilter,magFilter:T.NearestFilter,depthBuffer:true});
 var postScene=new T.Scene(), postCam=new T.OrthographicCamera(-1,1,1,-1,0,1);
 var POST_FRAG=[
@@ -139,10 +142,9 @@ var POST_FRAG=[
 '  float levels=22.0;',
 '  col=floor(col*levels+0.5+dth*0.9)/levels;',
 '  float gr=hash(vUv*uRes+tq*1.7)-0.5;',
-'  col+=gr*0.075;',
-'  col*=0.93+0.07*sin(vUv.y*uRes.y*3.14159);',
-'  float vig=smoothstep(1.05,0.38,length(vUv-0.5));',
-'  col*=mix(0.48,1.0,vig);',
+'  col+=gr*0.06;',
+'  float vig=smoothstep(1.05,0.4,length(vUv-0.5));',
+'  col*=mix(0.5,1.0,vig);',
 '  gl_FragColor=vec4(col,1.0);',
 '}'].join('\n');
 var postMat=new T.ShaderMaterial({
@@ -221,8 +223,6 @@ var GRASS_SHADER=null;
 })();
 
 /* ----------------------------------------------------------- FORESTS + PROPS */
-function coneGeo(r,h,seg){ return new T.ConeGeometry(r,h,seg||7); }
-function cylGeo(r1,r2,h,seg){ return new T.CylinderGeometry(r1,r2,h,seg||6); }
 function mtx(x,y,z,sx,sy,sz,ry){ var m=new T.Matrix4(); var q=new T.Quaternion().setFromAxisAngle(UP_Y,ry||0);
   m.compose(new T.Vector3(x,y,z),q,new T.Vector3(sx||1,sy||1,sz||1)); return m; }
 function rotZ(m,a){ return m.multiply(new T.Matrix4().makeRotationZ(a)); }
@@ -273,7 +273,6 @@ var crysGeo=new T.IcosahedronGeometry(0.4,0);
 var crysMat=emat(0x123a44,0x49d0ff,1.4,0.3);
 
 /* ----------------------------------------------------------- HERO houses */
-function meshAt(geo,mat,x,y,z){ var m=new T.Mesh(geo,mat); m.position.set(x,y,z); return m; }
 function houseShadow(){ return new T.Mesh(new T.CircleGeometry(2.4,22), new T.MeshBasicMaterial({map:TEX_SHADOW,transparent:true,opacity:0.55,depthWrite:false})); }
 
 function buildCafe(){
@@ -335,12 +334,23 @@ function buildArcade(){
   g.add(makeSprite(TEX_TEAL,0x8af0ff,3.2).translateY(1.0).translateZ(1.2));
   return {group:g,anim:function(t){ marq.children.forEach(function(s,i){ s.material.emissiveIntensity=1.4+1.4*(0.5+0.5*Math.sin(t*6-i*0.7)); }); top.material.emissiveIntensity=1.2+Math.sin(t*4)*0.6; }};
 }
+function buildHouse2(){ // exterior de My Hell
+  var g=new T.Group();
+  g.add(meshAt(new T.BoxGeometry(1.9,1.5,1.7),emat(0x262232),0,0.75,0));
+  var roof=meshAt(coneGeo(1.6,1.15,4),emat(0x342d3c),0,1.95,0); roof.rotation.y=Math.PI/4; g.add(roof);
+  g.add(meshAt(new T.PlaneGeometry(0.5,0.55),emat(0xffcf8f,0xffb86b,1.7,0.4),0.45,0.8,0.861));   // ventana cálida
+  g.add(meshAt(new T.PlaneGeometry(0.55,1.0),emat(0x140e16,0x8f4fff,0.7,0.5),-0.35,0.55,0.861));  // puerta glow
+  g.add(meshAt(new T.BoxGeometry(0.3,0.6,0.3),emat(0x201b28),0.5,1.95,0));
+  var glow=makeSprite(TEX_PURP,0xb59cff,2.2); glow.position.set(-0.35,0.7,1.1); g.add(glow);
+  var pl=new T.PointLight(0xffcf8f,0.6,8); pl.position.set(0.45,0.9,1.1); g.add(pl);
+  return {group:g,anim:function(t){ glow.scale.setScalar(2.0+Math.sin(t*2.2)*0.25); }};
+}
 function buildShop(){
   var g=new T.Group();
   g.add(meshAt(new T.BoxGeometry(2.2,1.5,1.7),emat(0x2a2330),0,0.75,0));
   g.add(meshAt(new T.BoxGeometry(2.35,0.18,1.85),emat(0x1c1622),0,1.6,0));
-  g.add(meshAt(new T.PlaneGeometry(1.5,1.0),emat(0xead8b0,0xe6c98a,1.1,0.4),0,0.75,0.861));    // vidriera
-  var man=new T.Group(); man.position.set(0,0.32,0.5);                                          // maniquí
+  g.add(meshAt(new T.PlaneGeometry(1.5,1.0),emat(0xead8b0,0xe6c98a,1.1,0.4),0,0.75,0.861));
+  var man=new T.Group(); man.position.set(0,0.32,0.5);
   man.add(meshAt(cylGeo(0.18,0.24,0.6,8),emat(0x3a4655),0,0.4,0));
   man.add(meshAt(new T.SphereGeometry(0.14,10,10),emat(0x4a5666),0,0.82,0));
   man.add(meshAt(new T.BoxGeometry(0.28,0.06,0.05),emat(0x59f0d8,0x59f0d8,1.2,0.3),0,0.86,0.1)); g.add(man);
@@ -356,7 +366,7 @@ function buildShop(){
 var HOUSES_DEF=[
   {key:'feed',label:'Café',sub:'Feed',emoji:'☕',url:'/yata?embed=1&sec=feed',build:buildCafe},
   {key:'chat',label:'Cybercafé',sub:'Chat Global',emoji:'🖥️',url:'/yata?embed=1&sec=chat',build:buildCyber},
-  {key:'perfil',label:'Mi casa',sub:'My Hell',emoji:'🏠',url:'/yata?embed=1&sec=perfil',build:buildHell},
+  {key:'perfil',label:'Mi casa',sub:'My Hell',emoji:'🏠',room:true,build:buildHouse2},
   {key:'tristonicos',label:'El Club',sub:'Tristónicos',emoji:'🎷',url:'/yata?embed=1&sec=tristonicos',build:buildClub},
   {key:'juegos',label:'Arcade',sub:'Juegos',emoji:'🕹️',url:'/tristos',build:buildArcade},
   {key:'tienda',label:'Sastrería',sub:'Vestuario',emoji:'🧥',shop:true,build:buildShop}
@@ -469,7 +479,6 @@ var courier=new T.Group(), visor, lanternPivot, lanternGlow, courierLight;
   var lantMat=emat(0xffe6b0,0xffce80,2.4,0.3); lanternPivot.add(meshAt(new T.IcosahedronGeometry(0.2,0),lantMat,0,-0.72,0));
   lanternGlow=makeSprite(TEX_WARM,0xffd98f,2.6); lanternGlow.position.set(0,-0.72,0); lanternPivot.add(lanternGlow);
   courierLight=new T.PointLight(0xffd28a,1.5,12); courierLight.position.set(0,-0.7,0); lanternPivot.add(courierLight);
-  // sombreros (ocultos; el vestuario los muestra)
   var hats={};
   function addHat(name,obj){ obj.visible=false; courier.add(obj); hats[name]=obj; }
   var gorro=new T.Group(); gorro.add(meshAt(cylGeo(0.32,0.35,0.3,10),emat(0x2a2f38),0,2.02,0)); gorro.add(meshAt(new T.SphereGeometry(0.1,8,8),emat(0xff5ad0,0xff5ad0,0.7),0,2.22,0)); addHat('gorro',gorro);
@@ -484,10 +493,12 @@ var shadow=new T.Mesh(new T.CircleGeometry(1.0,20),new T.MeshBasicMaterial({map:
 function setAvatar(url){ if(!url)return; var l=new T.TextureLoader(); l.setCrossOrigin('anonymous');
   l.load(url,function(tex){ tex.encoding=T.sRGBEncoding; courier.userData.faceMat.map=tex; courier.userData.faceMat.needsUpdate=true; courier.userData.face.visible=true; if(visor)visor.visible=false; },undefined,function(){}); }
 
-// --- vestuario: estado + aplicar + persistir ---
 var DEFAULT_FIT={coat:'#1d2a3a',accent:'#59f0d8',lantern:'#ffce80',hat:'none'};
 function loadFit(){ try{ var f=JSON.parse(localStorage.getItem('yata_fit')); return f&&f.coat?f:null; }catch(e){ return null; } }
-function saveFit(f){ try{ localStorage.setItem('yata_fit',JSON.stringify(f)); }catch(e){} }
+var saveTimer=null;
+function saveFit(f){ try{ localStorage.setItem('yata_fit',JSON.stringify(f)); }catch(e){}
+  if(saveTimer)clearTimeout(saveTimer);
+  saveTimer=setTimeout(function(){ try{ fetch('/api/world/save',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({data:{fit:f}})}).catch(function(){}); }catch(e){} },600); }
 var FIT=loadFit()||Object.assign({},DEFAULT_FIT);
 function applyFit(f){ var u=courier.userData;
   if(u.matCoat) u.matCoat.color.set(f.coat);
@@ -499,6 +510,88 @@ function applyFit(f){ var u=courier.userData;
   if(u.hats){ for(var k in u.hats) u.hats[k].visible=false; if(f.hat&&f.hat!=='none'&&u.hats[f.hat]) u.hats[f.hat].visible=true; }
 }
 applyFit(FIT);
+
+/* ----------------------------------------------------------- MY HELL: dormitorio interior */
+var interiorScene=new T.Scene();
+var roomCam=new T.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.05, 200);
+var monitorScreen=null, roomDust=null, roomPickables=[];
+(function buildRoom(){
+  interiorScene.add(new T.AmbientLight(0x40384a,0.55));
+  var ceil=new T.PointLight(0xffd6a0,0.7,18); ceil.position.set(0,3.7,0.5); interiorScene.add(ceil);
+  var HW=4, HD=4, H=4.2;
+  var wall=emat(0x1f262e,0,0,1), wood=emat(0x2a2018,0,0,1);
+  interiorScene.add(meshAt(new T.BoxGeometry(HW*2,0.3,HD*2),wood,0,-0.15,0));
+  interiorScene.add(meshAt(new T.BoxGeometry(HW*2,H,0.2),wall,0,H/2,-HD));
+  interiorScene.add(meshAt(new T.BoxGeometry(0.2,H,HD*2),wall,-HW,H/2,0));
+  interiorScene.add(meshAt(new T.BoxGeometry(0.2,H,HD*2),wall,HW,H/2,0));
+  interiorScene.add(meshAt(new T.BoxGeometry(HW*2,0.2,HD*2),emat(0x161b20),0,H,0));
+  interiorScene.add(meshAt(new T.BoxGeometry(3.2,0.04,2.2),emat(0x3a1822,0x5a1828,0.2,0.9),0,0.03,0.6));   // alfombra
+  // escritorio + monitor (pared del fondo)
+  var desk=new T.Group(); desk.position.set(0,0,-HD+0.55);
+  desk.add(meshAt(new T.BoxGeometry(2.4,0.1,0.95),wood,0,1.0,0));
+  [[-1.1,-0.4],[1.1,-0.4],[-1.1,0.4],[1.1,0.4]].forEach(function(p){ desk.add(meshAt(new T.BoxGeometry(0.08,1.0,0.08),wood,p[0],0.5,p[1])); });
+  desk.add(meshAt(new T.BoxGeometry(1.2,0.95,0.6),emat(0x14181e),0,1.62,-0.15));
+  monitorScreen=meshAt(new T.PlaneGeometry(0.92,0.66),ps1v(new T.MeshStandardMaterial({color:0x9fd0ff,emissive:0x4a90d0,emissiveIntensity:1.5,roughness:0.4})),0,1.64,0.16);
+  monitorScreen.userData.action='pc'; desk.add(monitorScreen); roomPickables.push(monitorScreen);
+  [[-0.3,0.12,0xffe23a],[-0.3,-0.06,0xff5ad0],[-0.12,0.12,0x5cff9e]].forEach(function(p){ desk.add(meshAt(new T.PlaneGeometry(0.1,0.1),emat(p[2],p[2],1.2,0.4),p[0],1.64+p[1],0.162)); });
+  desk.add(meshAt(new T.BoxGeometry(0.7,0.05,0.24),emat(0x20262e),0,1.06,0.28));
+  desk.add(meshAt(cylGeo(0.07,0.07,0.14,8),emat(0x59f0d8,0x1d8a7d,0.5),0.7,1.12,0.2));
+  var dlamp=new T.PointLight(0x6fb0ff,0.5,7); dlamp.position.set(0,1.7,0.3); desk.add(dlamp);
+  interiorScene.add(desk);
+  // silla
+  var chair=new T.Group(); chair.position.set(0,0,-HD+1.5);
+  chair.add(meshAt(new T.BoxGeometry(0.7,0.1,0.7),emat(0x241c2a),0,0.55,0)); chair.add(meshAt(new T.BoxGeometry(0.7,0.7,0.1),emat(0x241c2a),0,0.9,-0.3));
+  interiorScene.add(chair);
+  // cama
+  var bed=new T.Group(); bed.position.set(HW-1.0,0,0.4);
+  bed.add(meshAt(new T.BoxGeometry(1.6,0.4,2.6),wood,0,0.3,0));
+  bed.add(meshAt(new T.BoxGeometry(1.5,0.25,2.5),emat(0x2a2f38),0,0.6,0));
+  bed.add(meshAt(new T.BoxGeometry(1.4,0.2,1.0),emat(0x59f0d8,0x1d8a7d,0.2,0.8),0,0.72,0.7));
+  bed.add(meshAt(new T.BoxGeometry(1.2,0.25,0.5),emat(0xd9dde2),0,0.78,-0.9));
+  bed.add(meshAt(new T.BoxGeometry(1.7,1.2,0.15),wood,0,0.9,-1.32));
+  interiorScene.add(bed);
+  // ventana (pared izq) a la noche
+  var win=new T.Group(); win.position.set(-HW+0.12,2.1,-0.6); win.rotation.y=Math.PI/2;
+  win.add(meshAt(new T.PlaneGeometry(2.0,1.5),emat(0x1a2740,0x223a66,0.8,0.5),0,0,0));
+  win.add(meshAt(new T.CircleGeometry(0.28,18),emat(0xcfcad6,0xbfc4e0,0.9),0.5,0.4,0.02));
+  [[0,0.78,2.1,0.08],[0,-0.78,2.1,0.08],[-1.04,0,0.08,1.5],[1.04,0,0.08,1.5],[0,0,2.1,0.06]].forEach(function(p){ win.add(meshAt(new T.BoxGeometry(p[2],p[3],0.06),wood,p[0],p[1],0.03)); });
+  interiorScene.add(win);
+  // posters
+  interiorScene.add(meshAt(new T.PlaneGeometry(0.9,1.2),emat(0x2a1030,0xff5ad0,0.7,0.5),-1.7,2.4,-HD+0.11));
+  interiorScene.add(meshAt(new T.PlaneGeometry(1.1,0.8),emat(0x102a2a,0x39e0ff,0.6,0.5),1.6,2.6,-HD+0.11));
+  // estante con cositas
+  interiorScene.add(meshAt(new T.BoxGeometry(1.4,0.08,0.4),wood,HW-0.4,2.4,-1.5));
+  [[-0.4,0xff5ad0],[0,0x59f0d8],[0.4,0xffe23a]].forEach(function(p){ interiorScene.add(meshAt(new T.BoxGeometry(0.2,0.3,0.2),emat(0x20242b,p[1],0.5),HW-0.4+p[0],2.6,-1.5)); });
+  // planta
+  var plant=new T.Group(); plant.position.set(-HW+0.7,0,HD-0.8);
+  plant.add(meshAt(cylGeo(0.22,0.18,0.4,8),emat(0x3a2a22),0,0.2,0));
+  for(var li=0;li<5;li++){ var lc=meshAt(coneGeo(0.12,0.7,5),emat(0x1f5a3a),0,0.7,0); lc.rotation.z=rand(-0.4,0.4); lc.rotation.x=rand(-0.4,0.4); plant.add(lc); }
+  interiorScene.add(plant);
+  // lámpara de techo
+  interiorScene.add(meshAt(coneGeo(0.3,0.3,10),emat(0x2a2410,0xffd9a0,1.2),0,3.6,0.5));
+  // polvo
+  var dn=80, dg=new T.BufferGeometry(), da=new Float32Array(dn*3);
+  for(var i=0;i<dn;i++){ da[i*3]=rand(-HW+0.4,HW-0.4); da[i*3+1]=rand(0.4,H-0.4); da[i*3+2]=rand(-HD+0.4,HD-0.4); }
+  dg.setAttribute('position',new T.Float32BufferAttribute(da,3));
+  roomDust=new T.Points(dg,new T.PointsMaterial({color:0x9fb0c0,size:0.04,transparent:true,opacity:0.5,depthWrite:false}));
+  interiorScene.add(roomDust);
+})();
+var inRoom=false, roomDrag=false, roomDragMoved=false, roomLastX=0, roomLastY=0, roomYaw=0, roomPitch=-0.05;
+function fadeFlash(){ var f=document.getElementById('fade'); if(!f)return; f.style.transition='none'; f.style.opacity='1';
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){ f.style.transition='opacity .45s ease'; f.style.opacity='0'; }); }); }
+function enterRoom(){ inRoom=true; roomYaw=0; roomPitch=-0.04; currentHouse=null; interiorScene.add(courier);
+  document.body.classList.add('inroom'); document.getElementById('roomui').classList.add('show'); prompt.classList.remove('show'); fadeFlash(); blip(300,0.18,'sine',0.07); }
+function exitRoom(){ inRoom=false; world.add(courier); document.body.classList.remove('inroom'); document.getElementById('roomui').classList.remove('show'); fadeFlash(); }
+function openEscritorio(){ var nick=(me&&me.nick)?me.nick:''; if(nick) openURL('/demon/'+encodeURIComponent(nick)+'/escritorio?embed=1','🖥️','Escritorio','tu PC'); else openURL('/yata?embed=1&sec=perfil','🖥️','My Hell','perfil'); }
+function updateRoom(dt,t){
+  courier.position.set(0.0,Math.sin(t*1.5)*0.02,-1.6); courier.rotation.set(0,Math.PI,0);
+  if(monitorScreen) monitorScreen.material.emissiveIntensity=1.35+Math.sin(t*22)*0.06+Math.random()*0.05;
+  if(roomDust) roomDust.rotation.y+=dt*0.04;
+  var yaw=roomYaw+Math.sin(t*0.4)*0.025, pit=roomPitch+Math.sin(t*0.32)*0.02;
+  roomCam.position.set(0,1.75,2.9);
+  var dir=new T.Vector3(Math.sin(yaw)*Math.cos(pit),Math.sin(pit),-Math.cos(yaw)*Math.cos(pit));
+  roomCam.up.set(0,1,0); roomCam.lookAt(roomCam.position.clone().add(dir));
+}
 
 /* ----------------------------------------------------------- NPCs */
 var npcNames=['Nochi','osaaran','z_Juan','EXO','fabrx','Polizzeh','dilan','n!co','Soo','justdag','Haze'];
@@ -552,13 +645,13 @@ function turn(a){ fwd.applyAxisAngle(posN,a); orthonormalize(); }
 var keys={}, started=false, paused=false, currentHouse=null, shopOpen=false, shopSpin=0;
 addEventListener('keydown',function(e){ var k=e.key.toLowerCase(); keys[k]=true;
   if(['arrowup','arrowdown','arrowleft','arrowright',' '].indexOf(k)>=0) e.preventDefault();
-  if(k==='e'&&started&&!paused&&currentHouse) enter(currentHouse);
-  if(k==='escape'){ if(overlay.classList.contains('show')) closeOverlay(); else if(shopOpen) closeShop(); } });
+  if(k==='e'&&started&&!paused&&!inRoom&&!shopOpen&&currentHouse) enter(currentHouse);
+  if(k==='escape'){ if(overlay.classList.contains('show')) closeOverlay(); else if(inRoom) exitRoom(); else if(shopOpen) closeShop(); } });
 addEventListener('keyup',function(e){ keys[e.key.toLowerCase()]=false; });
 
 var joyVec={x:0,y:0}, joyActive=false, joy=document.getElementById('joy'), joyStick=document.getElementById('joyStick');
 var isTouch=matchMedia('(pointer:coarse)').matches; if(isTouch) document.body.classList.add('touch');
-function joyStart(e){ joyActive=true; joyMove(e); if(e.preventDefault)e.preventDefault(); }
+function joyStart(e){ if(inRoom)return; joyActive=true; joyMove(e); if(e.preventDefault)e.preventDefault(); }
 function joyMove(e){ if(!joyActive)return; var t=e.touches?e.touches[0]:e, r=joy.getBoundingClientRect();
   var dx=t.clientX-(r.left+r.width/2), dy=t.clientY-(r.top+r.height/2), max=r.width/2, len=Math.hypot(dx,dy)||1, cl=Math.min(len,max);
   dx=dx/len*cl; dy=dy/len*cl; joyStick.style.transform='translate('+dx+'px,'+dy+'px)'; joyVec.x=dx/max; joyVec.y=dy/max; }
@@ -570,35 +663,39 @@ var mobileEnter=document.getElementById('mobileEnter');
 if(mobileEnter) mobileEnter.addEventListener('click',function(){ if(currentHouse) enter(currentHouse); });
 
 var pointerV=new T.Vector2(), rc=new T.Raycaster();
-canvas.addEventListener('pointerdown',function(e){ if(!started||paused)return;
+canvas.addEventListener('pointerdown',function(e){
+  if(inRoom){ roomDrag=true; roomDragMoved=false; roomLastX=e.clientX; roomLastY=e.clientY; return; }
+  if(!started||paused)return;
   pointerV.x=(e.clientX/window.innerWidth)*2-1; pointerV.y=-(e.clientY/window.innerHeight)*2+1;
   rc.setFromCamera(pointerV,camera); var hit=rc.intersectObjects(pickables,false);
   if(hit.length&&hit[0].object.userData.house) enter(hit[0].object.userData.house); });
+addEventListener('pointermove',function(e){ if(inRoom&&roomDrag){ var dx=e.clientX-roomLastX,dy=e.clientY-roomLastY; roomLastX=e.clientX; roomLastY=e.clientY;
+  if(Math.abs(dx)+Math.abs(dy)>3)roomDragMoved=true; roomYaw=clamp(roomYaw-dx*0.005,-1.25,1.25); roomPitch=clamp(roomPitch+dy*0.004,-0.5,0.35); } });
+addEventListener('pointerup',function(e){ if(inRoom&&roomDrag){ roomDrag=false; if(!roomDragMoved){
+  pointerV.x=(e.clientX/window.innerWidth)*2-1; pointerV.y=-(e.clientY/window.innerHeight)*2+1; rc.setFromCamera(pointerV,roomCam);
+  var hit=rc.intersectObjects(roomPickables,false); if(hit.length) openEscritorio(); } } });
 
-/* ----------------------------------------------------------- audio */
-var actx=null,muted=false,pad=null;
+/* ----------------------------------------------------------- audio (solo blips, sin música) */
+var actx=null,muted=false;
 function audioInit(){ if(actx)return; try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ actx=null; } }
 function blip(f,d,ty,g){ if(!actx||muted)return; var o=actx.createOscillator(),gn=actx.createGain(); o.type=ty||'sine'; o.frequency.value=f;
   gn.gain.setValueAtTime(0,actx.currentTime); gn.gain.linearRampToValueAtTime(g||0.1,actx.currentTime+0.01); gn.gain.exponentialRampToValueAtTime(0.0001,actx.currentTime+(d||0.2));
   o.connect(gn).connect(actx.destination); o.start(); o.stop(actx.currentTime+(d||0.2)+0.02); }
-function startPad(){ if(!actx||muted||pad)return; var o1=actx.createOscillator(),o2=actx.createOscillator(),gn=actx.createGain(),f=actx.createBiquadFilter();
-  o1.type='sawtooth';o2.type='sawtooth';o1.frequency.value=70;o2.frequency.value=70*1.007;f.type='lowpass';f.frequency.value=360;gn.gain.value=0.055;
-  o1.connect(f);o2.connect(f);f.connect(gn).connect(actx.destination);o1.start();o2.start();pad={o1:o1,o2:o2}; }
-function stopPad(){ if(pad){ try{pad.o1.stop();pad.o2.stop();}catch(e){} pad=null; } }
 
 /* ----------------------------------------------------------- overlay + HUD + vestuario */
-var overlay=document.getElementById('overlay'), ovFrame=document.getElementById('ovFrame'), ovTitle=document.getElementById('ovTitle'), ovLoad=document.getElementById('ovLoad');
+var overlay=document.getElementById('overlay'), ovFrame=document.getElementById('ovFrame'), ovTitle=document.getElementById('ovTitle'), ovLoad=document.getElementById('ovLoad'), ovBackLabel=document.getElementById('ovBackLabel');
 function openURL(url,emoji,label,sub){ ovTitle.innerHTML='<span class="em">'+(emoji||'✨')+'</span> <span>'+label+'</span>'+(sub?'<small>'+sub+'</small>':'');
-  ovLoad.style.display='block'; ovFrame.src=url; overlay.classList.add('show'); paused=true; stopPad(); blip(523,0.12,'sine',0.08); }
+  if(ovBackLabel) ovBackLabel.textContent=inRoom?'Volver al cuarto':'Volver al mundo';
+  ovLoad.style.display='block'; ovFrame.src=url; overlay.classList.add('show'); paused=true; blip(523,0.12,'sine',0.08); }
 ovFrame.addEventListener('load',function(){ ovLoad.style.display='none'; });
-function enter(h){ if(h.def.shop){ openShop(); } else openURL(h.def.url,h.def.emoji,h.def.label,h.def.sub); }
+function enter(h){ if(h.def.room){ enterRoom(); } else if(h.def.shop){ openShop(); } else openURL(h.def.url,h.def.emoji,h.def.label,h.def.sub); }
 function openSection(sec,emoji,label){ openURL('/yata?embed=1&sec='+sec,emoji,label,label); }
-function closeOverlay(){ overlay.classList.remove('show'); paused=false; setTimeout(function(){ if(!overlay.classList.contains('show')) ovFrame.src='about:blank'; },320); if(!muted){ audioInit(); startPad(); } }
+function closeOverlay(){ overlay.classList.remove('show'); paused=false; setTimeout(function(){ if(!overlay.classList.contains('show')) ovFrame.src='about:blank'; },320); }
 document.getElementById('ovBack').addEventListener('click',closeOverlay);
 var prompt=document.getElementById('prompt'), promptRing=document.getElementById('promptRing');
 prompt.addEventListener('click',function(){ if(currentHouse) enter(currentHouse); });
+var roomBackBtn=document.getElementById('roomBack'); if(roomBackBtn) roomBackBtn.addEventListener('click',exitRoom);
 
-// --- panel vestuario ---
 var PAL={
   coat:['#1d2a3a','#20242b','#133a34','#3a1822','#15301f','#241830','#121418','#5a4632'],
   accent:['#59f0d8','#ff5ad0','#ffca6a','#49d0ff','#5cff9e','#ff5a4a','#b59cff','#e8eef2'],
@@ -621,24 +718,27 @@ function buildSwatches(){
 function openShop(){ buildSwatches(); shopEl.classList.add('show'); paused=true; shopOpen=true; blip(523,0.12,'sine',0.08); }
 function closeShop(){ shopEl.classList.remove('show'); paused=false; shopOpen=false; }
 if(shopEl){
-  var sd=document.getElementById('shopDone'); if(sd) sd.addEventListener('click',closeShop);
+  var sdn=document.getElementById('shopDone'); if(sdn) sdn.addEventListener('click',closeShop);
   var srnd=document.getElementById('shopRandom'); if(srnd) srnd.addEventListener('click',function(){ FIT.coat=pick(PAL.coat); FIT.accent=pick(PAL.accent); FIT.lantern=pick(PAL.lantern); FIT.hat=pick(HATS)[0]; applyFit(FIT); saveFit(FIT); buildSwatches(); blip(660,0.08,'square',0.06); });
 }
 
 function chipSec(id,sec,emoji,label){ var el=document.getElementById(id); if(el) el.addEventListener('click',function(){ openSection(sec,emoji,label); }); }
 chipSec('chipNotif','notifs','🔔','Notificaciones'); chipSec('chipMsg','mensajes','✉️','Mensajes'); chipSec('chipFriends','amigos','👥','Amigos'); chipSec('chipAdmin','admin','🛡️','Admin');
 document.getElementById('chipClassic').addEventListener('click',function(){ location.href='/yata?clasico=1'; });
-document.getElementById('chipSound').addEventListener('click',function(){ muted=!muted; document.getElementById('soundIco').style.opacity=muted?0.4:1; if(muted)stopPad(); else if(started){ audioInit(); startPad(); } });
+document.getElementById('chipSound').addEventListener('click',function(){ muted=!muted; document.getElementById('soundIco').style.opacity=muted?0.4:1; });
 
 var me=null;
 fetch('/api/hub/me',{headers:{'accept':'application/json'}}).then(function(r){return r.json();}).then(function(d){
   if(d&&d.ok&&d.logged){ me=d; if(d.avatar) setAvatar(d.avatar);
     if(d.admin){ document.getElementById('chipAdmin').classList.remove('is-hidden'); document.getElementById('chipClassic').classList.remove('is-hidden'); } }
 }).catch(function(){});
+fetch('/api/world/me',{headers:{'accept':'application/json'}}).then(function(r){return r.json();}).then(function(d){
+  if(d&&d.logged&&d.data&&d.data.fit){ FIT=Object.assign({},DEFAULT_FIT,d.data.fit); applyFit(FIT); try{ localStorage.setItem('yata_fit',JSON.stringify(FIT)); }catch(e){} }
+}).catch(function(){});
 
 /* ----------------------------------------------------------- resize + loop */
 function onResize(){ var w=window.innerWidth,h=window.innerHeight;
-  camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h);
+  camera.aspect=w/h; camera.updateProjectionMatrix(); roomCam.aspect=w/h; roomCam.updateProjectionMatrix(); renderer.setSize(w,h);
   var lw=Math.max(2,Math.floor(w/PIXEL)), lh=Math.max(2,Math.floor(h/PIXEL));
   rt.setSize(lw,lh); postMat.uniforms.uRes.value.set(lw,lh); }
 addEventListener('resize',onResize); onResize();
@@ -654,6 +754,15 @@ function projectToScreen(v){ _proj.copy(v).project(camera); return {x:(_proj.x*0
 function animate(){
   requestAnimationFrame(animate);
   var dt=Math.min(clock.getDelta(),0.05), t=clock.elapsedTime;
+
+  if(inRoom){
+    updateRoom(dt,t);
+    postMat.uniforms.uTime.value=t;
+    renderer.setRenderTarget(rt); renderer.render(interiorScene,roomCam);
+    renderer.setRenderTarget(null); renderer.render(postScene,postCam);
+    return;
+  }
+
   var steer=0,go=0;
   if(started&&!paused){
     if(keys['a']||keys['arrowleft'])steer+=1; if(keys['d']||keys['arrowright'])steer-=1;
@@ -709,7 +818,7 @@ function animate(){
 
 /* ----------------------------------------------------------- start */
 document.getElementById('enterBtn').addEventListener('click',function(){ if(started)return; started=true;
-  audioInit(); if(actx&&actx.state==='suspended')actx.resume(); startPad();
+  audioInit(); if(actx&&actx.state==='suspended')actx.resume();
   document.getElementById('intro').classList.add('hide'); document.getElementById('hud').classList.add('show'); });
 setTimeout(function(){ document.getElementById('loader').classList.add('hide'); },800);
 animate();

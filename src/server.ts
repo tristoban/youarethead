@@ -156,6 +156,7 @@ export async function initDb(db: Db): Promise<void> {
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS links JSONB NOT NULL DEFAULT '[]'::jsonb;`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS pinned BIGINT;`);
   await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS admin BOOLEAN NOT NULL DEFAULT false;`);
+  await db.query(`ALTER TABLE hub_users ADD COLUMN IF NOT EXISTS world_data JSONB;`);
   await db.query(`CREATE TABLE IF NOT EXISTS site_config (key TEXT PRIMARY KEY, value TEXT);`);
   await db.query(`ALTER TABLE hub_users ALTER COLUMN email DROP NOT NULL;`);
   await db.query(`ALTER TABLE hub_users ALTER COLUMN email_norm DROP NOT NULL;`);
@@ -1388,6 +1389,23 @@ export function buildApp(db: Db): FastifyInstance {
     return reply.code(200).send({ ok: true, logged: true, nick: (row.nick as string | null) ?? null });
   });
 
+  app.get('/api/world/me', async (req, reply) => {
+    reply.header('cache-control', 'no-store');
+    const u = await hubUserBySession(db, req);
+    if (!u) return { ok: true, logged: false, data: null };
+    const r = await db.query('SELECT world_data FROM hub_users WHERE id = $1', [u.id]);
+    return { ok: true, logged: true, data: (r.rows[0]?.world_data as unknown) ?? null };
+  });
+  app.post('/api/world/save', async (req, reply) => {
+    const u = await hubUserBySession(db, req);
+    if (!u) return reply.code(401).send({ ok: false, error: 'login' });
+    const b = (req.body ?? {}) as { data?: unknown };
+    if (!b.data || typeof b.data !== 'object') return reply.code(400).send({ ok: false, error: 'data' });
+    const json = JSON.stringify(b.data);
+    if (json.length > 8000) return reply.code(400).send({ ok: false, error: 'too_big' });
+    await db.query('UPDATE hub_users SET world_data = $2::jsonb WHERE id = $1', [u.id, json]);
+    return { ok: true };
+  });
   app.get('/api/hub/me', async (req, reply) => {
     reply.header('cache-control', 'no-store');
     const u = await hubUserBySession(db, req);
