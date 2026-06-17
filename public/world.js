@@ -709,6 +709,21 @@ for(ni=0;ni<3;ni++){ var sg=new T.Group(); var sm=ps1v(new T.MeshStandardMateria
   sg.add(meshAt(coneGeo(0.5,1.4,8),sm,0,0,0)); sg.add(meshAt(new T.SphereGeometry(0.3,10,10),sm,0,0.6,0));
   sg.add(makeSprite(TEX_SOFT,0x9fd0ff,2.0)); var sd=randDir(); sg.userData={dir:sd,ph:rand(0,TAU)}; world.add(sg); spirits.push(sg); }
 
+/* ----------------------------------------------------------- entidades nocturnas (acechadores) */
+var weirdTex=new T.TextureLoader().load('/weirdman.png'); try{ weirdTex.encoding=T.sRGBEncoding; }catch(e){}
+var stalkers=[], STALK_MAX=4, abducting=false, stalkSpawnT=2;
+function makeStalker(){ var m=new T.SpriteMaterial({map:weirdTex,transparent:true,depthWrite:false,fog:false,opacity:0}); var s=new T.Sprite(m); s.scale.set(1.7,2.3,1); world.add(s); var d=randDir(),tries=0; while(d.angleTo(posN)<0.85&&tries++<8) d=randDir(); return {sprite:s,mat:m,posN:d,spd:rand(0.10,0.16),op:0}; }
+function clearStalkers(){ for(var i=0;i<stalkers.length;i++) world.remove(stalkers[i].sprite); stalkers=[]; }
+function stepStalker(s,dt){ var axis=new T.Vector3().crossVectors(s.posN,posN); if(axis.lengthSq()>1e-9){ axis.normalize(); var ang=s.posN.angleTo(posN); s.posN.applyAxisAngle(axis,Math.min(ang,s.spd*dt)).normalize(); } var ps=surfacePoint(s.posN); s.sprite.position.copy(ps).addScaledVector(s.posN,1.15); s.op=Math.min(1,s.op+dt*0.5); s.mat.opacity=s.op*0.95; }
+function updateStalkers(dt){
+  if(abducting) return;
+  var nf=(typeof nightFactor==='function')?nightFactor():0;
+  var hunting=started&&!inRoom&&!(overlay&&overlay.classList.contains('show'))&&nf>0.5;
+  if(!hunting){ for(var j=0;j<stalkers.length;j++){ stalkers[j].op-=dt*0.8; stalkers[j].mat.opacity=Math.max(0,stalkers[j].op*0.95); } if(stalkers.length&&stalkers[0].op<=0) clearStalkers(); return; }
+  if(stalkers.length<STALK_MAX){ stalkSpawnT-=dt; if(stalkSpawnT<=0){ stalkers.push(makeStalker()); stalkSpawnT=rand(2.5,5.5); } }
+  for(var i=0;i<stalkers.length;i++){ var s=stalkers[i]; stepStalker(s,dt); if(posN.angleTo(s.posN)<0.085){ abduct(); return; } }
+}
+function abduct(){ if(abducting)return; abducting=true; paused=true; try{ blip(90,0.5,'sawtooth',0.22); }catch(e){} var f=document.getElementById('fade'); if(f){ f.style.transition='opacity .7s ease'; f.style.opacity='1'; } setTimeout(function(){ location.href='/laberinto.html?trapped=1'; },760); }
 function npcStep(n,dt){
   var up=n.posN; n.fwd.addScaledVector(up,-n.fwd.dot(up)).normalize();
   var toT=n.target.clone().addScaledVector(up,-n.target.dot(up)); if(toT.lengthSq()<1e-5){ n.target=randDir(); return; }
@@ -841,6 +856,9 @@ var me=null;
 function showEl(id,show){ var e=document.getElementById(id); if(e) e.style.display=show?'':'none'; }
 function gateMsg(code){ var m={error:'No se pudo entrar con Google. Proba de nuevo.',off:'El ingreso con Google todavia no esta activo. Volve en un rato.',banned:'Tu cuenta esta suspendida.'}; var el=document.getElementById('authMsg'); if(el) el.textContent=m[code]||''; }
 var OAUTH=null; try{ OAUTH=new URLSearchParams(location.search).get('oauth'); }catch(e){}
+var MAZE_RET=null; try{ var _qp=new URLSearchParams(location.search); MAZE_RET=_qp.get('escaped')?'escaped':(_qp.get('caught')?'caught':null); }catch(e){}
+function worldToast(msg,kind){ var d=document.createElement('div'); d.textContent=msg; d.style.cssText='position:fixed;left:50%;top:60px;transform:translateX(-50%);z-index:60;max-width:86vw;padding:12px 20px;border-radius:999px;font-weight:800;font-size:14px;text-align:center;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);background:rgba(0,0,0,.74);border:1px solid '+(kind==='bad'?'rgba(255,90,74,.6)':'rgba(116,224,208,.6)')+';color:'+(kind==='bad'?'#ff9a8a':'#9af0e0')+';box-shadow:0 14px 40px rgba(0,0,0,.5);opacity:0;transition:opacity .4s ease,top .4s ease'; document.body.appendChild(d); requestAnimationFrame(function(){ d.style.opacity='1'; d.style.top='72px'; }); setTimeout(function(){ d.style.opacity='0'; setTimeout(function(){ if(d.parentNode)d.parentNode.removeChild(d); },500); },5400); }
+if(MAZE_RET) setTimeout(function(){ worldToast(MAZE_RET==='escaped'?'Escapaste del laberinto. Tu racha sigue en pie.':'Te atraparon. Tu racha se reinició.', MAZE_RET==='escaped'?'good':'bad'); },1100);
 if(VISIT){ try{ localStorage.setItem('yata_pending_casa',VISIT); }catch(e){} }
 function gateLogged(){ showEl('gateLoad',false); showEl('gateAuth',false); showEl('gateSetup',false); showEl('enterBtn',true);
   if(!VISIT){ try{ var pc=localStorage.getItem('yata_pending_casa'); if(pc){ VISIT=pc.replace(/[^A-Za-z0-9_.-]/g,'').slice(0,40)||null; } }catch(e){} }
@@ -937,6 +955,7 @@ function animate(){
   for(i=0;i<spirits.length;i++){ var s2=spirits[i], dd=s2.userData; dd.dir.applyAxisAngle(UP_Y,dt*0.06);
     var ps=surfacePoint(dd.dir).addScaledVector(dd.dir,2.2+Math.sin(t*0.8+dd.ph)*0.6); s2.position.copy(ps); orientToDir(s2,dd.dir); s2.children[2].material.opacity=0.5+0.3*Math.sin(t*2+dd.ph); }
 
+  updateStalkers(dt);
   if(GRASS_SHADER) GRASS_SHADER.uniforms.uTime.value=t;
   for(i=0;i<lamps.length;i++){ var L=lamps[i]; var lf=0.75+Math.sin(t*8+L.ph)*0.1+Math.random()*0.12; L.lampMat.emissiveIntensity=2.0*lf; L.glow.scale.setScalar(1.8*lf); if(L.pl)L.pl.intensity=0.8*lf; }
 

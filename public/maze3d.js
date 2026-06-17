@@ -61,6 +61,24 @@ import * as THREE from "https://esm.sh/three@0.160.0";
   function curScore() { return depth * 1000 + Math.floor(activeTime) + bonus - spent; }
   function flashCd() { return (FLASH_CD_BASE + depth * 2) * flashCdMul; }
   const isTouch = matchMedia("(pointer: coarse)").matches || ("ontouchstart" in window);
+  const TRAPPED = /[?&]trapped=1/.test(location.search);
+  function escapeWorld() {
+    alive = false; running = false; try { music.pause(); rainSnd.pause(); } catch (_) {}
+    if (document.pointerLockElement) document.exitPointerLock();
+    if (deadTitle) deadTitle.textContent = "ESCAPASTE";
+    const ds = $("dscore"); if (ds) ds.textContent = ""; const dr = $("drank"); if (dr) dr.textContent = "Sobreviviste. Tu racha sigue en pie.";
+    if (dead) dead.classList.remove("hidden");
+    setTimeout(function () { try { document.body.style.transition = "opacity .7s"; document.body.style.opacity = "0"; } catch (_) {} setTimeout(function () { location.href = "/yata?escaped=1"; }, 700); }, 1500);
+  }
+  async function caughtWorld() {
+    if (!alive) return; alive = false; running = false; try { music.pause(); rainSnd.pause(); } catch (_) {} try { sfx(monster); } catch (_) {}
+    if (document.pointerLockElement) document.exitPointerLock();
+    if (deadTitle) deadTitle.textContent = "TE ATRAPARON";
+    const ds = $("dscore"); if (ds) ds.textContent = ""; const dr = $("drank"); if (dr) dr.textContent = "Tu racha se reinició. Volviendo al mundo…";
+    if (dead) dead.classList.remove("hidden");
+    try { await fetch("/api/world/fell", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); } catch (_) {}
+    setTimeout(function () { location.href = "/yata?caught=1"; }, 2600);
+  }
   let touchF = 0, touchS = 0, moveId = null, lookId = null, mLastX = 0, mLastY = 0, stickCX = 0, stickCY = 0;
   const tbHide = $("tb-hide");
 
@@ -315,6 +333,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
     doorLight.position.set(safeExitCell[0] * CELL + CELL / 2, 1.6, safeExitCell[1] * CELL + CELL / 2); doorLight.visible = true;
   }
   function enterSafe() {
+    if (TRAPPED && depth >= 1) { escapeWorld(); return; }
     inSafe = true; inRefuge = false; hasKey = false; hidden = false; energizerT = 0; shopOpen = false; nearNpc = null; nearExit = false;
     scrap += 10 + depth * 5;
     ents.forEach((e) => { e.sprite.visible = false; });
@@ -679,7 +698,7 @@ import * as THREE from "https://esm.sh/three@0.160.0";
       $("drank").textContent = (rk && rk.ok) ? base + " · Puesto #" + rk.rank + " de " + rk.total : base;
     } catch (_) {}
   }
-  function die() { submitScore("TE ALCANZÓ"); }
+  function die() { if (TRAPPED) { caughtWorld(); return; } submitScore("TE ALCANZÓ"); }
 
   /* ---------- Loop ---------- */
   function frame(now) {
@@ -847,6 +866,13 @@ import * as THREE from "https://esm.sh/three@0.160.0";
       box.innerHTML = '<div class="mtops-h">TOP LABERINTO</div>' + (sc.length
         ? '<ol class="mtops-l">' + sc.slice(0, 5).map((s, i) => "<li><span>" + (i + 1) + ". " + esc(s.alias) + "</span><b>" + Number(s.score | 0).toLocaleString("es-AR") + "</b></li>").join("") + "</ol>"
         : '<p class="mtops-e">Nadie llegó lejos todavía. Sé el primero.</p>');
+    } catch (_) {}
+  }
+  if (TRAPPED) {
+    if ($("rg-quit")) $("rg-quit").style.display = "none";
+    try {
+      const pb = $("play"); if (pb) pb.textContent = "Entrar al laberinto";
+      if (intro) { const note = document.createElement("div"); note.style.cssText = "margin:10px auto;max-width:340px;padding:10px 14px;border:1px solid rgba(210,59,71,.55);border-radius:12px;background:rgba(20,8,10,.55);color:#ff9a8a;font-weight:700;font-size:13px;line-height:1.45;text-align:center"; note.innerHTML = "Una entidad te arrastró al laberinto.<br><b>Escapá 2 niveles</b> para volver al mundo.<br>Si te alcanza, perdés tu racha."; intro.insertBefore(note, intro.firstChild); }
     } catch (_) {}
   }
   loadIntroTops();
